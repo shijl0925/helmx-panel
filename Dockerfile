@@ -24,10 +24,10 @@ LABEL authors="shijl0925"
 WORKDIR /app
 
 # Copy built JAR from backend stage
-COPY --from=backend /backend-build/vben-system/target/*.jar ./app.jar
+COPY --from=backend /backend-build/helmx-system/target/*.jar ./app.jar
 
 # Create config directory
-RUN mkdir -p /home/conf/vben-system
+RUN mkdir -p /home/conf/helmx-system
 
 # Expose port
 EXPOSE 8080
