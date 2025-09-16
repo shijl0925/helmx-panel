@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
  * 用于配置MybatisPlus的相关插件和功能
  */
 @Configuration
-@MapperScan({"com.helmx.tutorial.mapper", "com.helmx.tutorial.*.mapper"})
+@MapperScan({"com.helmx.tutorial.*.mapper"})
 public class MybatisPlusConfig {
 
     /**
