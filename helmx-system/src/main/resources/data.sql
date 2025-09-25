@@ -16,3 +16,11 @@ INSERT IGNORE INTO tb_rbac_user_roles (user_id, role_id) VALUES
  (1, 1),
  (2, 2),
  (3, 3);
+
+-- 插入容器环境数据
+INSERT IGNORE INTO tb_docker_env (id, name, remark, host, status, created_at, updated_at) VALUES
+  (1, 'local', '', 'unix:///var/run/docker.sock', 1, NOW(), NOW());
+
+-- 插入 DockerHub 初始化数据
+INSERT IGNORE INTO tb_docker_registry (id, name, url, username, password, auth, created_at, updated_at) VALUES
+  (1, 'DockerHub', 'https://registry.hub.docker.com', NULL, NULL, FALSE, NOW(), NOW());

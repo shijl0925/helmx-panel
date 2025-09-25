@@ -25,7 +25,6 @@ import java.util.Set;
 public class User extends BaseEntity implements Serializable {
 
     @Serial
-    @TableField()
     private static final long serialVersionUID = 1L;
 
     @TableId(type = IdType.AUTO, value = "id")

@@ -53,3 +53,38 @@ CREATE TABLE IF NOT EXISTS tb_rbac_user_roles (
     FOREIGN KEY (user_id) REFERENCES tb_users(id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES tb_rbac_roles(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS tb_docker_env (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    remark VARCHAR(255),
+    status INTEGER DEFAULT 1,
+    host VARCHAR(255) UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_docker_env 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_docker_env_updated_at ON tb_docker_env;
+CREATE TRIGGER update_tb_docker_env_updated_at
+    BEFORE UPDATE ON tb_docker_env
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_docker_registry (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    url VARCHAR(255) NOT NULL,
+    username VARCHAR(50),
+    password VARCHAR(50),
+    auth BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_docker_registry 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_docker_registry_updated_at ON tb_docker_registry;
+CREATE TRIGGER update_tb_docker_registry_updated_at
+    BEFORE UPDATE ON tb_docker_registry
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();

@@ -22,7 +22,6 @@ import com.helmx.tutorial.entity.BaseEntity;
 public class Role extends BaseEntity implements Serializable {
 
     @Serial
-    @TableField()
     private static final long serialVersionUID = 1L;
 
     @TableId(type = IdType.AUTO, value = "id")
