@@ -139,9 +139,13 @@ public class ContainerController {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
-        InspectContainerResponse containerResponse = dockerClientUtil.inspectContainer(criteria.getContainerId());
-        ContainerOperate result = new ContainerOperate(containerResponse);
-        return ResponseUtil.success(result);
+        try {
+            InspectContainerResponse containerResponse = dockerClientUtil.inspectContainer(criteria.getContainerId());
+            ContainerOperate result = new ContainerOperate(containerResponse);
+            return ResponseUtil.success(result);
+        } catch (Exception e) {
+            return ResponseUtil.failed(500, null, e.getMessage());
+        }
     }
 
     @Operation(summary = "Get Docker Container stats")
@@ -246,7 +250,7 @@ public class ContainerController {
         String status = (String) result.get("status");
         String message = (String) result.get("message");
         if ("success".equals(status)) {
-            String newContainerId = (String) result.get("containerId");
+            String newContainerId = (String) result.get("newContainerId");
             log.info("Update container with ID: {}, new container ID: {}", criteria.getContainerId(), newContainerId);
             return ResponseUtil.success(message, result);
         } else {
