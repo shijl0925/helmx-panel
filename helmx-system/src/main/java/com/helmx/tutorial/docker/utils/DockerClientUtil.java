@@ -697,7 +697,11 @@ public class DockerClientUtil {
         if (exposedPortsArray != null && exposedPortsArray.length > 0) {
             Ports portBindings = new Ports();
             for (PortHelper ph : exposedPortsArray) {
-                Ports.Binding binding = Ports.Binding.bindPort(Integer.parseInt(ph.getHostPort()));
+                // 获取主机端口(默认为空)
+                Ports.Binding binding = Ports.Binding.empty();
+                if (ph.getHostPort() != null && !ph.getHostPort().isEmpty()) {
+                    binding = Ports.Binding.bindPort(Integer.parseInt(ph.getHostPort()));
+                }
 
                 // 获取容器端口
                 int containerPort = Integer.parseInt(ph.getContainerPort());
