@@ -11,4 +11,7 @@ public class ContainerInfoRequest {
 
     @ApiModelProperty(value = "容器ID")
     private String containerId;
+
+    @ApiModelProperty(value = "简约")
+    private boolean simple = true;
 }

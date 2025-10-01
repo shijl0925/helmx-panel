@@ -14,4 +14,8 @@ public class DockerEnvCreateRequest {
 
     @ApiModelProperty(value = "地址")
     private String host;
+
+    // 新增TLS相关字段
+    @ApiModelProperty(value = "是否启用TLS验证")
+    private Boolean tlsVerify = false;
 }

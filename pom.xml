@@ -123,6 +123,11 @@
 			<artifactId>springdoc-openapi-security</artifactId>
 			<version>1.7.0</version>
 		</dependency>
+		<!-- 添加websocket依赖 -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket</artifactId>
+		</dependency>
 		<!-- 添加swagger-annotations依赖 -->
 		<dependency>
 			<groupId>io.swagger</groupId>

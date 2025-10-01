@@ -1,15 +1,20 @@
 package com.helmx.tutorial.docker.utils;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientImpl;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import com.github.dockerjava.transport.DockerHttpClient;
+import com.helmx.tutorial.docker.entity.DockerEnv;
+import com.helmx.tutorial.docker.mapper.DockerEnvMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -28,6 +33,12 @@ public class DockerConnectionManager {
     @Value("${docker.response.timeout:10}")
     private int responseTimeout;
 
+    @Value("${docker.cert.upload.path}")
+    private String dockerCertPath;
+
+    @Autowired
+    private DockerEnvMapper dockerEnvMapper;
+
     private final Map<String, DockerClient> clientCache = new ConcurrentHashMap<>();
 
 //    // 健康状态缓存 (host -> (lastCheckTime, isHealthy))
@@ -36,23 +47,45 @@ public class DockerConnectionManager {
 //    // 健康检查缓存时间 (10秒)
 //    private static final long HEALTH_CACHE_TTL = 10000;
 
+    private boolean getTlsVerify(String host) {
+        LambdaQueryWrapper<DockerEnv> queryWrapper = new LambdaQueryWrapper<>();
+        DockerEnv dockerEnv = dockerEnvMapper.selectOne(queryWrapper.eq(DockerEnv::getHost, host));
+        return dockerEnv != null ? dockerEnv.getTlsVerify() : false;
+    }
+
     public DockerClient getDockerClient(String host) {
-        return clientCache.computeIfAbsent(host, this::createDockerClient);
+        String key = host + "_" + this.getTlsVerify(host);
+        return clientCache.computeIfAbsent(key, k -> createDockerClient(host));
     }
 
     private DockerClient createDockerClient(String host) {
         try {
-            DefaultDockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder()
+            DefaultDockerClientConfig.Builder configBuilder = DefaultDockerClientConfig.createDefaultConfigBuilder()
                     .withDockerHost(host)
-                    .withApiVersion(apiVersion)
-                    .withDockerTlsVerify(false)
-                    .build();
+                    .withApiVersion(apiVersion);
+
+            LambdaQueryWrapper<DockerEnv> queryWrapper = new LambdaQueryWrapper<>();
+            DockerEnv dockerEnv = dockerEnvMapper.selectOne(queryWrapper.eq(DockerEnv::getHost, host));
+            boolean tlsVerify = dockerEnv.getTlsVerify();
+
+            // 配置TLS
+            if (tlsVerify) {
+                String envName = dockerEnv.getName().replaceAll("[/\\\\]", "");
+                String certPath = Paths.get(dockerCertPath, envName, "certs").toString();
+                configBuilder.withDockerTlsVerify(true)
+                        .withDockerCertPath(certPath);
+            } else {
+                configBuilder.withDockerTlsVerify(false);
+            }
+
+            DefaultDockerClientConfig config = configBuilder.build();
 
             DockerHttpClient httpClient = new ApacheDockerHttpClient.Builder()
                     .dockerHost(URI.create(host))
                     .maxConnections(100)
                     .connectionTimeout(Duration.ofSeconds(connectionTimeout))
                     .responseTimeout(Duration.ofSeconds(responseTimeout))
+                    .sslConfig(config.getSSLConfig())
                     .build();
 
             DockerClient dockerClient = DockerClientImpl.getInstance(config, httpClient);
@@ -74,14 +107,17 @@ public class DockerConnectionManager {
     }
 
     public void removeClient(String host) {
-        clientCache.remove(host);
-//        healthCache.remove(host);
+        String key = host + "_" + this.getTlsVerify(host);
+        clientCache.remove(key);
+//        healthCache.remove(key);
     }
 
     // 添加连接健康检查方法
     public boolean checkConnectionHealth(String host) {
+        String key = host + "_" + this.getTlsVerify(host);
+
         try {
-            DockerClient client = clientCache.get(host);
+            DockerClient client = clientCache.get(key);
             if (client != null) {
                 // 使用 ping 命令，比 infoCmd 更轻量
                 client.pingCmd().exec();

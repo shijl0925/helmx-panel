@@ -73,7 +73,7 @@ public class SpringSecurityConfig {
                         // 用户登录/注册/退出
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/logout").permitAll()
                         // 获取环境信息
-                        .requestMatchers("/api/v1/ops/envs/all").permitAll()
+                        .requestMatchers("/api/v1/ops/envs/all", "/api/v1/ops/containers/terminal/**").permitAll()
                         // swagger 文档
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         // 静态资源等等

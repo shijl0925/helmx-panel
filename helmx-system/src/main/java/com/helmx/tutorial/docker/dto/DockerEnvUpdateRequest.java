@@ -17,4 +17,8 @@ public class DockerEnvUpdateRequest {
 
     @ApiModelProperty(value = "状态")
     private Integer status;
+
+    // TLS相关字段
+    @ApiModelProperty(value = "是否启用TLS验证")
+    private Boolean tlsVerify;
 }

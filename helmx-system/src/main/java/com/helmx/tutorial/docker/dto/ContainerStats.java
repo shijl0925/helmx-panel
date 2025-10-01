@@ -41,12 +41,12 @@ public class ContainerStats {
         long totalUsage = cpuUsage.getLongValue("total_usage") - preCpuUsage.getLongValue("total_usage");
         this.cpuTotalUsage = TimeUtils.formatNanosecondsDetailed(totalUsage);
 
-        long systemCpuUsage = cpuStats.getLongValue("system_cpu_usage");
+        long systemCpuUsage = cpuStats.getLongValue("system_cpu_usage") - preCpuStats.getLongValue("system_cpu_usage");
         this.cpuSystemUsage = TimeUtils.formatNanosecondsDetailed(systemCpuUsage);
 
         this.onlineCPUs = cpuStats.getInteger("online_cpus");
         if (systemCpuUsage != 0) {
-            this.cpuPercent = (totalUsage * 100.0f / systemCpuUsage);
+            this.cpuPercent = (totalUsage / systemCpuUsage) * onlineCPUs * 100.0f;
         } else {
             this.cpuPercent = 0.0f;
         }

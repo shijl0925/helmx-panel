@@ -82,6 +82,8 @@ public class DockerEnvController {
         env.setName(request.getName());
         env.setRemark(request.getRemark() == null ? "" : request.getRemark());
         env.setHost(request.getHost());
+        // TLS设置
+        env.setTlsVerify(request.getTlsVerify());
         dockerEnvMapper.insert(env);
 
         return ResponseUtil.success(env);
@@ -105,6 +107,9 @@ public class DockerEnvController {
         }
         if (request.getStatus() != null) {
             env.setStatus(request.getStatus());
+        }
+        if (request.getTlsVerify() != null) {
+            env.setTlsVerify(request.getTlsVerify());
         }
 
         dockerEnvMapper.updateById(env);

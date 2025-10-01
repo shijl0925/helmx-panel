@@ -158,13 +158,80 @@ public class ContainerController {
             dockerClientUtil.setCurrentHost(host);
 
             JSONObject stats = dockerClientUtil.getContainerStats(containerId, false);
-            ContainerStats containerStats = new ContainerStats(stats);
-            return ResponseUtil.success(containerStats);
+            if (criteria.isSimple()) {
+                ContainerStats containerStats = new ContainerStats(stats);
+                return ResponseUtil.success(containerStats);
+            } else {
+                return ResponseUtil.success(stats);
+            }
         } catch (Exception e) {
             log.warn("Failed to get stats for container: {}", containerId, e);
             return ResponseUtil.failed(500, null, "Failed to get stats for container: " + containerId);
         }
     }
+
+    @Operation(summary = "Get Docker Container top")
+    @PostMapping("/top")
+    public ResponseEntity<Result> GetDockerContainerTop(@RequestBody ContainerInfoRequest criteria) {
+        String containerId = criteria.getContainerId();
+
+        try {
+            String host = criteria.getHost();
+            dockerClientUtil.setCurrentHost(host);
+
+            JSONObject top = dockerClientUtil.getContainerTop(containerId);
+            return ResponseUtil.success(top);
+        } catch (Exception e) {
+            log.warn("Failed to get top for container: {}", containerId, e);
+            return ResponseUtil.failed(500, null, "Failed to get top for container: " + containerId);
+        }
+    }
+
+    // @Operation(summary = "Copy file from container")
+    // @PostMapping("/copy/from")
+    // public ResponseEntity<Result> copyFileFromContainer(@RequestBody ContainerCopyRequest request) {
+    //     try {
+    //         String host = request.getHost();
+    //         dockerClientUtil.setCurrentHost(host);
+
+    //         String containerId = request.getContainerId();
+    //         String containerPath = request.getContainerPath();
+    //         String localPath = request.getLocalPath();
+
+    //         if (localPath == null || localPath.isEmpty()) {
+    //             return ResponseUtil.failed(500, null, "Local path is required");
+    //         }
+
+    //         dockerClientUtil.copyFileFromContainer(containerId, containerPath, localPath);
+    //         return ResponseUtil.success("File copied successfully from container");
+    //     } catch (Exception e) {
+    //         log.error("Failed to copy file from container: {}", request.getContainerId(), e);
+    //         return ResponseUtil.failed(500, null, "Failed to copy file from container: " + e.getMessage());
+    //     }
+    // }
+
+    // @Operation(summary = "Copy file to container")
+    // @PostMapping("/copy/to")
+    // public ResponseEntity<Result> copyFileToContainer(@RequestBody ContainerCopyRequest request) {
+    //     try {
+    //         String host = request.getHost();
+    //         dockerClientUtil.setCurrentHost(host);
+
+    //         String containerId = request.getContainerId();
+    //         String containerPath = request.getContainerPath();
+    //         String localPath = request.getLocalPath();
+
+    //         if (localPath == null || localPath.isEmpty()) {
+    //             return ResponseUtil.failed(500, null, "Local path is required");
+    //         }
+
+    //         dockerClientUtil.copyFileToContainer(containerId, localPath, containerPath);
+    //         return ResponseUtil.success("File copied successfully to container");
+    //     } catch (Exception e) {
+    //         log.error("Failed to copy file to container: {}", request.getContainerId(), e);
+    //         return ResponseUtil.failed(500, null, "Failed to copy file to container: " + e.getMessage());
+    //     }
+    // }
 
     @Operation(summary = "Operate Docker Container")
     @PostMapping("/operate")
@@ -301,5 +368,22 @@ public class ContainerController {
         }
 
         return ResponseUtil.success("Networks updated successfully");
+    }
+
+    @Operation(summary = "Execute command in Docker Container")
+    @PostMapping("/exec")
+    public ResponseEntity<Result> ExecuteCommandInContainer(@RequestBody ContainerExecRequest request) {
+        try {
+            ContainerExecResponse response = dockerClientUtil.execCommand(request);
+
+            if ("success".equals(response.getStatus())) {
+                return ResponseUtil.success("Command executed successfully", response);
+            } else {
+                return ResponseUtil.failed(500, response, response.getError());
+            }
+        } catch (Exception e) {
+            log.error("Failed to execute command in container: {}", request.getContainerId(), e);
+            return ResponseUtil.failed(500, null, "Failed to execute command: " + e.getMessage());
+        }
     }
 }

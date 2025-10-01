@@ -23,11 +23,16 @@ public class DockerEnvDTO {
     @ApiModelProperty(value = "状态")
     private Integer status;
 
+    // 新增TLS相关字段
+    @ApiModelProperty(value = "是否启用TLS验证")
+    private Boolean tlsVerify;
+
     public DockerEnvDTO(DockerEnv dockerEnv) {
         this.id = dockerEnv.getId();
         this.name = dockerEnv.getName();
         this.remark = dockerEnv.getRemark();
         this.host = dockerEnv.getHost();
         this.status = dockerEnv.getStatus();
+        this.tlsVerify = dockerEnv.getTlsVerify();
     }
 }

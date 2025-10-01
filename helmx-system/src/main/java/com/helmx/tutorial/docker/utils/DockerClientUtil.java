@@ -16,14 +16,13 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -50,14 +49,13 @@ public class DockerClientUtil {
     @Autowired
     private RegistryMapper registryMapper;
 
-
     // 设置当前操作的服务器
     public void setCurrentHost(String host) {
         currentHost.set(host);
     }
 
     // 获取当前DockerClient
-    private DockerClient getCurrentDockerClient() {
+    public DockerClient getCurrentDockerClient() {
         String host = currentHost.get();
         if (host == null) {
             throw new IllegalStateException("No Docker host specified. Please call setCurrentHost() first.");
@@ -152,6 +150,15 @@ public class DockerClientUtil {
             ).awaitResult();
 
             return toJSON(stats);
+        }
+    }
+
+    /**
+     * 获取容器进程列表
+     */
+    public JSONObject getContainerTop(String containerId) {
+        try (TopContainerCmd cmd = getCurrentDockerClient().topContainerCmd(containerId)) {
+            return toJSON(cmd.exec());
         }
     }
 
@@ -1690,43 +1697,62 @@ public class DockerClientUtil {
     /**
      * 执行命令
      */
-    public void execCmd(String containerId, InputStream stdin, Charset charset) {
-        if (containerId == null || containerId.isEmpty()) {
-            log.error("Container ID must not be null or empty.");
-            return;
-        }
-        try {
-            ExecCreateCmd execCreateCmd = getCurrentDockerClient().execCreateCmd(containerId);
-            execCreateCmd.withAttachStdout(true)
-                    .withAttachStdin(true)
-                    .withAttachStderr(true)
-                    .withTty(true)
-                    .withCmd("/bin/bash");
-            ExecCreateCmdResponse exec = execCreateCmd.exec();
+    public ContainerExecResponse execCommand(ContainerExecRequest request) {
+        ContainerExecResponse response = new ContainerExecResponse();
 
-            String execId = exec.getId();
-            if (execId == null || execId.isEmpty()) {
-                log.error("Failed to create exec command for container: {}", containerId);
-                return;
+        try {
+            String host = request.getHost();
+            setCurrentHost(host);
+
+            String containerId = request.getContainerId();
+            String[] command = request.getCommand();
+
+            // 创建执行命令
+            try (ExecCreateCmd execCreateCmd = getCurrentDockerClient().execCreateCmd(containerId)) {
+                execCreateCmd
+                        .withAttachStdin(request.getAttachStdin() != null ? request.getAttachStdin() : true)
+                        .withAttachStdout(request.getAttachStdout() != null ? request.getAttachStdout() : true)
+                        .withAttachStderr(request.getAttachStderr() != null ? request.getAttachStderr() : true)
+                        .withTty(request.getTty() != null ? request.getTty() : true);
+
+                // 设置要执行的命令
+                if (command != null && command.length > 0) {
+                    execCreateCmd.withCmd(command);
+                } else {
+                    execCreateCmd.withCmd("/bin/bash");
+                }
+
+                ExecCreateCmdResponse execResponse = execCreateCmd.exec();
+                String execId = execResponse.getId();
+                response.setExecId(execId);
+
+                // 启动执行命令
+                try (ExecStartCmd execStartCmd = getCurrentDockerClient().execStartCmd(execId)) {
+                    execStartCmd
+                            .withDetach(false)
+                            .withTty(request.getTty() != null ? request.getTty() : true);
+
+                    StringBuilder output = new StringBuilder();
+                    execStartCmd.exec(new ResultCallback.Adapter<Frame>() {
+                        @Override
+                        public void onNext(Frame object) {
+                            if (object != null && object.getPayload() != null) {
+                                output.append(new String(object.getPayload()));
+                            }
+                        }
+                    }).awaitCompletion();
+
+                    response.setOutput(output.toString());
+                    response.setStatus("success");
+                }
             }
-            ExecStartCmd execStartCmd = getCurrentDockerClient().execStartCmd(execId);
-            execStartCmd.withDetach(false).withTty(true).withStdIn(stdin);
-            try (InvocationBuilder.AsyncResultCallback<Frame> callback =
-                         execStartCmd.exec(new InvocationBuilder.AsyncResultCallback<Frame>() {
-                             @Override
-                             public void onNext(Frame object) {
-                                 String s = new String(object.getPayload(), charset);
-                                 System.out.print(s);
-                             }
-            })) {
-                callback.awaitCompletion();
-            }
-        } catch (InterruptedException e) {
-            log.error("Interrupted while executing command: {}", e.getMessage());
-            Thread.currentThread().interrupt(); // 保留中断状态
         } catch (Exception e){
-            log.error("Error executing command: {}", e.getMessage());
+            log.error("Failed to execute command in container: {}", request.getContainerId(), e);
+            response.setStatus("failed");
+            response.setError(e.getMessage());
         }
+
+        return response;
     }
 
     /**
@@ -1770,8 +1796,43 @@ public class DockerClientUtil {
         }
     }
 
-    // copyArchiveFromContainerCmd
-    // copyArchiveToContainerCmd
+    /**
+     * 从容器复制文件到本地
+     */
+    public void copyFileFromContainer(String containerId, String containerPath, String localFilePath) {
+        try (CopyArchiveFromContainerCmd cmd = getCurrentDockerClient().copyArchiveFromContainerCmd(containerId, containerPath);
+             InputStream inputStream = cmd.exec();
+             FileOutputStream outputStream = new FileOutputStream(localFilePath)) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+        } catch (IOException e) {
+            log.error("Failed to copy archive from container: {}", containerId, e);
+            throw new RuntimeException("Failed to copy archive from container: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Unexpected error when copying archive from container: {}", containerId, e);
+            throw new RuntimeException("Failed to copy archive from container: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 将文件或目录复制到容器中
+     */
+    public void copyFileToContainer(String containerId, String localFilePath, String containerPath) {
+        try (CopyArchiveToContainerCmd cmd = getCurrentDockerClient().copyArchiveToContainerCmd(containerId)) {
+            Path path = Paths.get(localFilePath);
+            try (FileInputStream fileInputStream = new FileInputStream(path.toFile())) {
+                cmd.withTarInputStream(fileInputStream)
+                        .withRemotePath(containerPath)
+                        .exec();
+            }
+        } catch (Exception e) {
+            log.error("Failed to copy archive to container: {}", containerId, e);
+            throw new RuntimeException("Failed to copy archive to container: " + e.getMessage(), e);
+        }
+    }
 
     // createImageCmd
     // saveImageCmd
