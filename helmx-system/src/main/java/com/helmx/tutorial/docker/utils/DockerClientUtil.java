@@ -14,6 +14,8 @@ import com.helmx.tutorial.docker.entity.Registry;
 import com.helmx.tutorial.docker.mapper.RegistryMapper;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -1797,23 +1799,45 @@ public class DockerClientUtil {
     }
 
     /**
+     * 从tar输入流中提取文件内容
+     */
+    private byte[] extractFileFromTar(InputStream tarInputStream) throws IOException {
+        try (TarArchiveInputStream tarInput = new TarArchiveInputStream(tarInputStream)) {
+            TarArchiveEntry entry;
+            while ((entry = tarInput.getNextTarEntry()) != null) {
+                // 跳过目录条目
+                if (entry.isDirectory()) {
+                    continue;
+                }
+
+                // 读取文件内容
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+
+                while ((bytesRead = tarInput.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+
+                return outputStream.toByteArray();
+            }
+        }
+
+        // 如果没有找到文件条目，返回空字节数组
+        return new byte[0];
+    }
+
+    /**
      * 从容器复制文件到本地
      */
-    public void copyFileFromContainer(String containerId, String containerPath, String localFilePath) {
-        try (CopyArchiveFromContainerCmd cmd = getCurrentDockerClient().copyArchiveFromContainerCmd(containerId, containerPath);
-             InputStream inputStream = cmd.exec();
-             FileOutputStream outputStream = new FileOutputStream(localFilePath)) {
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, bytesRead);
-            }
-        } catch (IOException e) {
-            log.error("Failed to copy archive from container: {}", containerId, e);
-            throw new RuntimeException("Failed to copy archive from container: " + e.getMessage(), e);
+    public byte[] copyFileFromContainer(String containerId, String containerPath) {
+        try (CopyArchiveFromContainerCmd cmd = getCurrentDockerClient().copyArchiveFromContainerCmd(containerId, containerPath)) {
+            InputStream inputStream = cmd.exec();
+            // 解压tar文件获取实际文件内容
+            return extractFileFromTar(inputStream);
         } catch (Exception e) {
             log.error("Unexpected error when copying archive from container: {}", containerId, e);
-            throw new RuntimeException("Failed to copy archive from container: " + e.getMessage(), e);
+            throw new RuntimeException(e.getMessage(), e);
         }
     }
 

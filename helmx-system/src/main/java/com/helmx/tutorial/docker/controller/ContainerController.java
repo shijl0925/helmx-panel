@@ -9,6 +9,9 @@ import com.github.dockerjava.api.model.Container;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -187,28 +190,33 @@ public class ContainerController {
         }
     }
 
-    // @Operation(summary = "Copy file from container")
-    // @PostMapping("/copy/from")
-    // public ResponseEntity<Result> copyFileFromContainer(@RequestBody ContainerCopyRequest request) {
-    //     try {
-    //         String host = request.getHost();
-    //         dockerClientUtil.setCurrentHost(host);
+     @Operation(summary = "Copy file from container")
+     @PostMapping("/copy/from")
+     public ResponseEntity<?> copyFileFromContainer(@RequestBody ContainerCopyRequest request) {
+         try {
+             String host = request.getHost();
+             dockerClientUtil.setCurrentHost(host);
 
-    //         String containerId = request.getContainerId();
-    //         String containerPath = request.getContainerPath();
-    //         String localPath = request.getLocalPath();
+             String containerId = request.getContainerId();
+             String containerPath = request.getContainerPath();
 
-    //         if (localPath == null || localPath.isEmpty()) {
-    //             return ResponseUtil.failed(500, null, "Local path is required");
-    //         }
+             byte[] fileContent = dockerClientUtil.copyFileFromContainer(containerId, containerPath);
 
-    //         dockerClientUtil.copyFileFromContainer(containerId, containerPath, localPath);
-    //         return ResponseUtil.success("File copied successfully from container");
-    //     } catch (Exception e) {
-    //         log.error("Failed to copy file from container: {}", request.getContainerId(), e);
-    //         return ResponseUtil.failed(500, null, "Failed to copy file from container: " + e.getMessage());
-    //     }
-    // }
+             // 提取文件名
+             String fileName = containerPath.substring(containerPath.lastIndexOf("/") + 1);
+
+             // 设置响应头，使浏览器能够下载文件
+             HttpHeaders headers = new HttpHeaders();
+             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+             headers.setContentDispositionFormData("attachment", fileName);
+             headers.setContentLength(fileContent.length);
+
+             return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
+         } catch (Exception e) {
+             log.error("Failed to copy file from container: {}", request.getContainerId(), e);
+             return ResponseUtil.failed(500, null, e.getMessage());
+         }
+     }
 
     // @Operation(summary = "Copy file to container")
     // @PostMapping("/copy/to")

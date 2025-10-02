@@ -15,7 +15,4 @@ public class ContainerCopyRequest {
 
     @ApiModelProperty(value = "容器内路径", required = true)
     private String containerPath;
-
-    @ApiModelProperty(value = "本地文件路径")
-    private String localPath;
 }
