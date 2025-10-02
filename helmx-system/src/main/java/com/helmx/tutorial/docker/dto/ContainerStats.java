@@ -46,7 +46,7 @@ public class ContainerStats {
 
         this.onlineCPUs = cpuStats.getInteger("online_cpus");
         if (systemCpuUsage != 0) {
-            this.cpuPercent = (totalUsage / systemCpuUsage) * onlineCPUs * 100.0f;
+            this.cpuPercent = ((float) totalUsage / systemCpuUsage) * onlineCPUs * 100.0f;
         } else {
             this.cpuPercent = 0.0f;
         }
