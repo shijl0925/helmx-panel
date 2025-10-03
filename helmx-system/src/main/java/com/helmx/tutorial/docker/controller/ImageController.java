@@ -227,24 +227,19 @@ public class ImageController {
     @Operation(summary = "Build Docker Image")
     @PostMapping(value = "/build")
     public ResponseEntity<Result> buildDockerImage(
-            @RequestBody ImageBuildRequest payload
-//            @RequestPart(value = "file", required = false) MultipartFile contextFile
+            @RequestParam() String host,
+            @RequestParam() String dockerfile,
+            @RequestParam(required = false) String buildArgs,
+            @RequestParam(required = false) Boolean pull,
+            @RequestParam(required = false) Boolean noCache,
+            @RequestParam(required = false) String labels,
+            @RequestParam() String[] tags,
+            @RequestParam(value = "files", required = false) MultipartFile[] files
     ) {
-        // consumes = MediaType.MULTIPART_FORM_DATA_VALUE
-        String host = payload.getHost();
         dockerClientUtil.setCurrentHost(host);
 
-        String dockerfile = payload.getDockerfile();
-        String[] tags = payload.getTags();
         Set<String> tagSet = new HashSet<>(Arrays.asList(tags));
-        String buildArgs = payload.getBuildArgs();
-        Boolean pull = payload.getPull();
-        Boolean noCache = payload.getNoCache();
-        String labels = payload.getLabels();
-
-//        MultipartFile fileToUpload = contextFile != null ? contextFile : criteria.getContextFile();
-//        MultipartFile fileToUpload = criteria.getContextFile();
-        Map<String, String> result = dockerClientUtil.buildImage(dockerfile, tagSet, buildArgs, pull, noCache, labels);
+        Map<String, String> result = dockerClientUtil.buildImage(dockerfile, tagSet, buildArgs, pull, noCache, labels, files);
         return ResponseUtil.success(result);
     }
 

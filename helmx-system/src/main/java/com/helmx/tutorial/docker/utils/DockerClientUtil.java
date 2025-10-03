@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -1523,9 +1524,9 @@ public class DockerClientUtil {
     /**
      * 构建镜像
      */
-    public Map<String, String> buildImage(String dockerfileContent, Set<String> tags, String buildArgs, Boolean pull, Boolean noCache, String labels) {
-        // String baseDirectory Map<String, String> envs
-        log.info("Building image with Dockerfile content: {}", dockerfileContent);
+    public Map<String, String> buildImage(String dockerfileContent, Set<String> tags, String buildArgs, Boolean pull, Boolean noCache, String labels, MultipartFile[] filesToUpload) {
+        // Map<String, String> envs
+        log.info("Starting image build process");
         Map<String, String> result = new HashMap<>();
         String taskId = UUID.randomUUID().toString();
         result.put("taskId", taskId);
@@ -1541,22 +1542,26 @@ public class DockerClientUtil {
         DockerClient client = getCurrentDockerClient();
 
         CompletableFuture.runAsync(() -> {
+            Path tempDir = null;
             try {
                 // 创建临时目录和 Dockerfile
-                Path tempDir = Files.createTempDirectory("docker-build-");
+                tempDir = Files.createTempDirectory("docker-build-");
                 Path dockerfilePath = tempDir.resolve("Dockerfile");
                 Files.writeString(dockerfilePath, dockerfileContent, StandardCharsets.UTF_8);
 
-//                // 存储文件
-//                if (fileToUpload != null && !fileToUpload.isEmpty()) {
-//                    Files.copy(fileToUpload.getInputStream(), tempDir.resolve(Objects.requireNonNull(fileToUpload.getOriginalFilename())), StandardCopyOption.REPLACE_EXISTING);
-//                }
+                // 存储文件
+                if (filesToUpload != null && filesToUpload.length > 0) {
+                    for (MultipartFile fileToUpload : filesToUpload) {
+                        String safeFileName = Paths.get(Objects.requireNonNull(fileToUpload.getOriginalFilename())).getFileName().toString();
+                        Files.copy(fileToUpload.getInputStream(), tempDir.resolve(safeFileName), StandardCopyOption.REPLACE_EXISTING);
+                    }
+                }
 
                 try (BuildImageCmd cmd = client.buildImageCmd().withDockerfile(dockerfilePath.toFile()).withTags(tags)) {
-                    if (pull != null && pull) {
+                    if (Boolean.TRUE.equals(pull)) {
                         cmd.withPull(true);
                     }
-                    if (noCache != null && noCache) {
+                    if (Boolean.TRUE.equals(noCache)) {
                         cmd.withNoCache(true);
                     }
                     // 安全处理 labels
@@ -1622,10 +1627,31 @@ public class DockerClientUtil {
                 task.setMessage("镜像构建失败：" + e.getMessage());
 
                 log.error("Error building image: {}", e.getMessage());
+            } finally {
+                // 清理临时目录
+                if (tempDir != null) {
+                    try {
+                        deleteTempDirectory(tempDir);
+                    } catch (IOException e) {
+                        log.warn("Failed to delete temp directory: {}", tempDir, e);
+                    }
+                }
             }
         });
 
         return result;
+    }
+
+    /**
+     * 删除临时目录及其内容
+     */
+    private void deleteTempDirectory(Path tempDir) throws IOException {
+        if (tempDir != null && Files.exists(tempDir)) {
+            Files.walk(tempDir)
+                    .sorted(Comparator.reverseOrder())
+                    .map(Path::toFile)
+                    .forEach(File::delete);
+        }
     }
 
     /**
