@@ -16,8 +16,10 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.nio.charset.Charset;
@@ -1841,17 +1843,39 @@ public class DockerClientUtil {
         }
     }
 
+    private InputStream createTarInputStream(MultipartFile file) throws IOException {
+        ByteArrayOutputStream tarOutput = new ByteArrayOutputStream();
+        try (TarArchiveOutputStream tarOutputStream = new TarArchiveOutputStream(tarOutput)) {
+            tarOutputStream.setBigNumberMode(TarArchiveOutputStream.BIGNUMBER_POSIX);
+            tarOutputStream.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+
+            TarArchiveEntry entry = new TarArchiveEntry(file.getOriginalFilename());
+            entry.setSize(file.getSize());
+            tarOutputStream.putArchiveEntry(entry);
+
+            InputStream inputStream = file.getInputStream();
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                tarOutputStream.write(buffer, 0, bytesRead);
+            }
+
+            tarOutputStream.closeArchiveEntry();
+            tarOutputStream.finish();
+        }
+
+        return new ByteArrayInputStream(tarOutput.toByteArray());
+    }
+
     /**
      * 将文件或目录复制到容器中
      */
-    public void copyFileToContainer(String containerId, String localFilePath, String containerPath) {
-        try (CopyArchiveToContainerCmd cmd = getCurrentDockerClient().copyArchiveToContainerCmd(containerId)) {
-            Path path = Paths.get(localFilePath);
-            try (FileInputStream fileInputStream = new FileInputStream(path.toFile())) {
-                cmd.withTarInputStream(fileInputStream)
-                        .withRemotePath(containerPath)
-                        .exec();
-            }
+    public void copyFileToContainer(String containerId, String containerPath, MultipartFile file) {
+        try (InputStream tarInputStream = createTarInputStream(file);
+             CopyArchiveToContainerCmd cmd = getCurrentDockerClient().copyArchiveToContainerCmd(containerId)) {
+            cmd.withTarInputStream(tarInputStream)
+                    .withRemotePath(containerPath)
+                    .exec();
         } catch (Exception e) {
             log.error("Failed to copy archive to container: {}", containerId, e);
             throw new RuntimeException("Failed to copy archive to container: " + e.getMessage(), e);

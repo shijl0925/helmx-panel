@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
 
@@ -218,28 +219,23 @@ public class ContainerController {
          }
      }
 
-    // @Operation(summary = "Copy file to container")
-    // @PostMapping("/copy/to")
-    // public ResponseEntity<Result> copyFileToContainer(@RequestBody ContainerCopyRequest request) {
-    //     try {
-    //         String host = request.getHost();
-    //         dockerClientUtil.setCurrentHost(host);
-
-    //         String containerId = request.getContainerId();
-    //         String containerPath = request.getContainerPath();
-    //         String localPath = request.getLocalPath();
-
-    //         if (localPath == null || localPath.isEmpty()) {
-    //             return ResponseUtil.failed(500, null, "Local path is required");
-    //         }
-
-    //         dockerClientUtil.copyFileToContainer(containerId, localPath, containerPath);
-    //         return ResponseUtil.success("File copied successfully to container");
-    //     } catch (Exception e) {
-    //         log.error("Failed to copy file to container: {}", request.getContainerId(), e);
-    //         return ResponseUtil.failed(500, null, "Failed to copy file to container: " + e.getMessage());
-    //     }
-    // }
+     @Operation(summary = "Copy file to container")
+     @PostMapping("/copy/to")
+     public ResponseEntity<Result> copyFileToContainer(
+             @RequestParam("file") MultipartFile file,
+             @RequestParam() String host,
+             @RequestParam() String containerId,
+             @RequestParam() String containerPath
+     ) {
+         try {
+             dockerClientUtil.setCurrentHost(host);
+             dockerClientUtil.copyFileToContainer(containerId, containerPath, file);
+             return ResponseUtil.success("File copied successfully to container");
+         } catch (Exception e) {
+             log.error("Failed to copy file to container: {}", containerId, e);
+             return ResponseUtil.failed(500, null, "Failed to copy file to container: " + e.getMessage());
+         }
+     }
 
     @Operation(summary = "Operate Docker Container")
     @PostMapping("/operate")
