@@ -230,6 +230,7 @@ public class ImageController {
             @RequestParam() String host,
             @RequestParam() String dockerfile,
             @RequestParam(required = false) String buildArgs,
+            @RequestParam(required = false) String envs,
             @RequestParam(required = false) Boolean pull,
             @RequestParam(required = false) Boolean noCache,
             @RequestParam(required = false) String labels,
@@ -239,7 +240,7 @@ public class ImageController {
         dockerClientUtil.setCurrentHost(host);
 
         Set<String> tagSet = new HashSet<>(Arrays.asList(tags));
-        Map<String, String> result = dockerClientUtil.buildImage(dockerfile, tagSet, buildArgs, pull, noCache, labels, files);
+        Map<String, String> result = dockerClientUtil.buildImage(dockerfile, tagSet, buildArgs, pull, noCache, labels, envs, files);
         return ResponseUtil.success(result);
     }
 

@@ -29,7 +29,4 @@ public class ImageBuildRequest {
     private String[] tags;
 
     public ImageBuildRequest() {}
-
-//    @ApiModelProperty(value = "附件）")
-//    private MultipartFile contextFile;
 }

@@ -1524,8 +1524,7 @@ public class DockerClientUtil {
     /**
      * 构建镜像
      */
-    public Map<String, String> buildImage(String dockerfileContent, Set<String> tags, String buildArgs, Boolean pull, Boolean noCache, String labels, MultipartFile[] filesToUpload) {
-        // Map<String, String> envs
+    public Map<String, String> buildImage(String dockerfileContent, Set<String> tags, String buildArgs, Boolean pull, Boolean noCache, String labels, String envs, MultipartFile[] filesToUpload) {
         log.info("Starting image build process");
         Map<String, String> result = new HashMap<>();
         String taskId = UUID.randomUUID().toString();
@@ -1566,17 +1565,29 @@ public class DockerClientUtil {
                     }
                     // 安全处理 labels
                     if (labels != null && !labels.isEmpty()) {
-                        cmd.withLabels(DockerClientUtil.stringsToMap(labels.split(",")));
+                        cmd.withLabels(DockerClientUtil.stringsToMap(labels.split("\n")));
                     }
 
                     // 添加构建参数
                     if (buildArgs != null && !buildArgs.isEmpty()) {
-                        for (String arg : buildArgs.split(",")) {
+                        for (String arg : buildArgs.split("\n")) {
                             String[] keyValue = arg.split("=", 2);
                             if (keyValue.length == 2) {
                                 cmd.withBuildArg(keyValue[0], keyValue[1]);
                             } else {
                                 log.warn("Invalid build arg format: {}", arg);
+                            }
+                        }
+                    }
+
+                    // 添加环境变量作为构建参数
+                    if (envs != null && !envs.isEmpty()) {
+                        for (String env : envs.split("\n")) {
+                            String[] keyValue = env.split("=", 2);
+                            if (keyValue.length == 2) {
+                                cmd.withBuildArg(keyValue[0], keyValue[1]);
+                            } else {
+                                log.warn("Invalid env format: {}", env);
                             }
                         }
                     }
