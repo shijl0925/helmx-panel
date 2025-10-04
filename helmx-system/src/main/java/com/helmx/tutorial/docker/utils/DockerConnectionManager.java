@@ -27,10 +27,10 @@ public class DockerConnectionManager {
     @Value("${docker.apiVersion:1.41}")
     private String apiVersion;
 
-    @Value("${docker.connection.timeout:5}")
+    @Value("${docker.connection.timeout:30}")
     private int connectionTimeout;
 
-    @Value("${docker.response.timeout:10}")
+    @Value("${docker.response.timeout:60}")
     private int responseTimeout;
 
     @Value("${docker.cert.upload.path}")

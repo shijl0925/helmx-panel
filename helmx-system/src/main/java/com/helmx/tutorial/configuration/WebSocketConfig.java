@@ -1,5 +1,6 @@
 package com.helmx.tutorial.configuration;
 
+import com.helmx.tutorial.docker.websocket.ContainerLogsWebSocket;
 import com.helmx.tutorial.docker.websocket.ContainerTerminalWebSocket;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
@@ -15,9 +16,13 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Autowired
     private ContainerTerminalWebSocket containerTerminalWebSocket;
 
+    @Autowired
+    private ContainerLogsWebSocket containerLogsWebSocket;
+
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(containerTerminalWebSocket, "/api/v1/ops/containers/terminal/{containerId}")
+                .addHandler(containerLogsWebSocket, "/api/v1/ops/containers/logs/stream")
                 .setAllowedOrigins("*")
                 .addInterceptors(new HttpSessionHandshakeInterceptor());
     }

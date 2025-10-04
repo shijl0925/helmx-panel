@@ -1,7 +1,5 @@
 package com.helmx.tutorial.docker.websocket;
 
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
