@@ -1,6 +1,9 @@
 package com.helmx.tutorial.docker.controller;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.github.dockerjava.api.async.ResultCallback;
+import com.github.dockerjava.api.command.LogContainerCmd;
+import com.github.dockerjava.api.model.Frame;
 import com.helmx.tutorial.docker.dto.*;
 import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.*;
 
@@ -278,6 +282,83 @@ public class ContainerController {
 
         String logs = dockerClientUtil.getContainerLogs(containerId, tail);
         return ResponseUtil.success("Get container logs successfully!", logs);
+    }
+
+    @Operation(summary = "Stream container logs via SSE")
+    @GetMapping(value = "/logs/stream/{containerId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamContainerLogs(
+            @RequestParam String host,
+            @PathVariable String containerId,
+            @RequestParam(defaultValue = "0") int tail) {
+        SseEmitter emitter = new SseEmitter(1800000L); // 设置30分钟超时时间
+        dockerClientUtil.setCurrentHost(host);
+
+        // 注册超时和错误回调
+        emitter.onTimeout(() -> {
+            log.info("SSE emitter timeout for container: {}", containerId);
+            emitter.complete();
+        });
+
+        emitter.onError((Throwable t) -> {
+            log.error("SSE emitter error for container: {}", containerId, t);
+            emitter.complete();
+        });
+
+        try {
+            LogContainerCmd cmd = dockerClientUtil.getCurrentDockerClient()
+                    .logContainerCmd(containerId)
+                    .withStdOut(true)
+                    .withStdErr(true)
+                    .withFollowStream(true);
+
+            if (tail != 0) {
+                cmd.withTail(tail);
+            }
+
+            cmd.exec(new ResultCallback.Adapter<Frame>() {
+                @Override
+                public void onNext(Frame item) {
+                    try {
+                        emitter.send(SseEmitter.event().data(new String(item.getPayload())));
+                    } catch (Exception e) {
+                        log.error("Error sending log message via SSE", e);
+                        try {
+                            close(); // 出错时关闭命令
+                        } catch (Exception closeException) {
+                            log.error("Error closing command", closeException);
+                        }
+                    }
+                }
+
+                @Override
+                public void onComplete() {
+                    emitter.complete();
+                }
+
+                @Override
+                public void onError(Throwable throwable) {
+                    log.error("Error streaming container logs", throwable);
+                    emitter.completeWithError(throwable);
+                }
+            });
+
+            // 当客户端断开连接时清理资源
+            emitter.onCompletion(() -> {
+                try {
+                    // 这里可能需要额外的清理逻辑
+                    log.info("SSE connection completed for container: {}", containerId);
+                } catch (Exception e) {
+                    log.error("Error during SSE completion cleanup", e);
+                }
+            });
+
+        } catch (Exception e) {
+            log.error("Failed to start log streaming for container: {}", containerId, e);
+            emitter.completeWithError(e);
+            return emitter;
+        }
+
+        return emitter;
     }
 
     @Operation(summary = "Rename Docker Container")
