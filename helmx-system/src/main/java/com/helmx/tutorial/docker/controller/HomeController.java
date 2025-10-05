@@ -24,9 +24,9 @@ public class HomeController {
     @Autowired
     private DockerClientUtil dockerClientUtil;
 
-    @Operation(summary = "Get Docker Container status")
-    @PostMapping("/status")
-    public ResponseEntity<Result> GetDockerContainerStatus(@RequestBody StatusRequest criteria) {
+    @Operation(summary = "Get Docker status")
+    @PostMapping("/docker_status")
+    public ResponseEntity<Result> GetDockerStatus(@RequestBody StatusRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -39,7 +39,7 @@ public class HomeController {
             result.put("online", online);
             if (!online) {
                 log.warn("Docker connection failed for host: {}", host);
-                return ResponseUtil.failed(500, result, "Docker connection failed");
+                return ResponseUtil.success( "Docker connection failed", result);
             }
         } catch (Exception e) {
             log.error("Docker connection failed for host: {}", host, e);

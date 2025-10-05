@@ -90,7 +90,7 @@ public class DockerClientUtil {
             client.pingCmd().exec();
             return true;
         } catch (Exception e) {
-//            log.debug("Connection health check failed for host: {}", host, e);
+            log.debug("Connection health check failed for host: {}", host, e);
             return false;
         }
     }

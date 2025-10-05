@@ -21,7 +21,7 @@ import java.util.Map;
 @RequestMapping("/api/v1/ops/certs")
 public class CertUploadController {
 
-    @Value("${docker.cert.upload.path:/tmp/docker-certs}")
+    @Value("${docker.cert.upload.path:docker-certs/}")
     private String certUploadPath;
 
     @Operation(summary = "Upload Docker TLS certificates")
