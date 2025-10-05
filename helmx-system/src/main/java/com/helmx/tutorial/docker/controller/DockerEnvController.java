@@ -1,5 +1,6 @@
 package com.helmx.tutorial.docker.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.helmx.tutorial.docker.dto.DockerEnvCreateRequest;
@@ -77,6 +78,20 @@ public class DockerEnvController {
     @Operation(summary = "Create a new env")
     @PostMapping("")
     public ResponseEntity<Result> CreateDockerEnv(@RequestBody DockerEnvCreateRequest request) {
+        // 检查名称是否重复
+        LambdaQueryWrapper<DockerEnv> nameQuery = new LambdaQueryWrapper<>();
+        nameQuery.eq(DockerEnv::getName, request.getName());
+        if (dockerEnvMapper.selectCount(nameQuery) > 0) {
+            return ResponseUtil.failed(400, null, "The name already exists");
+        }
+
+        // 检查主机地址是否重复
+        LambdaQueryWrapper<DockerEnv> hostQuery = new LambdaQueryWrapper<>();
+        hostQuery.eq(DockerEnv::getHost, request.getHost());
+        if (dockerEnvMapper.selectCount(hostQuery) > 0) {
+            return ResponseUtil.failed(400, null, "The url already exists");
+        }
+
         DockerEnv env = new DockerEnv();
 
         env.setName(request.getName());

@@ -1,6 +1,7 @@
 package com.helmx.tutorial.docker.dto;
 
 import io.swagger.annotations.ApiModelProperty;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 @Data
@@ -13,6 +14,7 @@ public class ContainerCreateRequest {
     private String containerId;
 
     @ApiModelProperty(value = "名称")
+    @Pattern(regexp = "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$", message = "Container names can only contain letters, numbers, underscores, dots, and hyphens, and must start with a letter or number.")
     private String name;
 
     @ApiModelProperty(value = "命令")

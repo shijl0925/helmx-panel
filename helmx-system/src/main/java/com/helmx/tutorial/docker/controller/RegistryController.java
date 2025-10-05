@@ -1,5 +1,6 @@
 package com.helmx.tutorial.docker.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.helmx.tutorial.docker.dto.RegistryCreateRequest;
 import com.helmx.tutorial.docker.entity.Registry;
@@ -39,6 +40,20 @@ public class RegistryController {
     @Operation(summary = "Create a new registry")
     @PostMapping("")
     public ResponseEntity<Result> CreateRegistry(@RequestBody RegistryCreateRequest request) {
+        // 检查名称是否重复
+        LambdaQueryWrapper<Registry> nameQuery = new LambdaQueryWrapper<>();
+        nameQuery.eq(Registry::getName, request.getName());
+        if (registryMapper.selectCount(nameQuery) > 0) {
+            return ResponseUtil.failed(400, null, "Registry name already exists");
+        }
+
+        // 检查URL是否重复
+        LambdaQueryWrapper<Registry> urlQuery = new LambdaQueryWrapper<>();
+        urlQuery.eq(Registry::getUrl, request.getUrl());
+        if (registryMapper.selectCount(urlQuery) > 0) {
+            return ResponseUtil.failed(400, null, "Registry url already exists");
+        }
+
         Registry registry = new Registry();
 
         registry.setName(request.getName());

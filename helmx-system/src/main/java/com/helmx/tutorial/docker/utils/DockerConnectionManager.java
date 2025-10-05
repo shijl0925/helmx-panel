@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import java.net.URI;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -49,7 +50,14 @@ public class DockerConnectionManager {
 
     private boolean getTlsVerify(String host) {
         LambdaQueryWrapper<DockerEnv> queryWrapper = new LambdaQueryWrapper<>();
-        DockerEnv dockerEnv = dockerEnvMapper.selectOne(queryWrapper.eq(DockerEnv::getHost, host));
+        queryWrapper.eq(DockerEnv::getHost, host);
+        List<DockerEnv> dockerEnvs = dockerEnvMapper.selectList(queryWrapper);
+
+        if (dockerEnvs.size() > 1) {
+            log.warn("Multiple DockerEnv records found for host: {}, using the first one", host);
+        }
+
+        DockerEnv dockerEnv = dockerEnvs.isEmpty() ? null : dockerEnvs.get(0);
         return dockerEnv != null ? dockerEnv.getTlsVerify() : false;
     }
 
@@ -65,8 +73,15 @@ public class DockerConnectionManager {
                     .withApiVersion(apiVersion);
 
             LambdaQueryWrapper<DockerEnv> queryWrapper = new LambdaQueryWrapper<>();
-            DockerEnv dockerEnv = dockerEnvMapper.selectOne(queryWrapper.eq(DockerEnv::getHost, host));
-            boolean tlsVerify = dockerEnv.getTlsVerify();
+            queryWrapper.eq(DockerEnv::getHost, host);
+            List<DockerEnv> dockerEnvs = dockerEnvMapper.selectList(queryWrapper);
+
+            if (dockerEnvs.size() > 1) {
+                log.warn("Multiple DockerEnv records found for host: {}, using the first one", host);
+            }
+
+            DockerEnv dockerEnv = dockerEnvs.isEmpty() ? null : dockerEnvs.get(0);
+            boolean tlsVerify = dockerEnv != null ? dockerEnv.getTlsVerify() : false;
 
             // 配置TLS
             if (tlsVerify) {

@@ -465,7 +465,12 @@ public class DockerClientUtil {
             // 从数据库获取注册表信息
             QueryWrapper<Registry> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("url", registryUrl);
-            Registry registry = registryMapper.selectOne(queryWrapper);
+            List<Registry> registries = registryMapper.selectList(queryWrapper);
+
+            if (registries.size() > 1) {
+                log.warn("Multiple registries found for URL: {}", registryUrl);
+            }
+            Registry registry = registries.isEmpty() ? null : registries.get(0);
 
             if (registry != null && registry.getAuth() != null && registry.getAuth()) {
                 return new AuthConfig()

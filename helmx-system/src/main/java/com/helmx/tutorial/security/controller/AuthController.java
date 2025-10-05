@@ -108,6 +108,7 @@ public class AuthController {
             userInfo.put("userName", username);
 
             User user = userMapper.selectOne(new QueryWrapper<User>()
+                    .last("LIMIT 1") // 仅返回一条记录
                     .eq("username", username)
                     .eq("status", 1) // 只查找启用状态的用户
             );

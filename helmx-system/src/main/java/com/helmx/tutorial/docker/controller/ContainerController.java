@@ -10,6 +10,7 @@ import com.helmx.tutorial.utils.ResponseUtil;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.Container;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -34,7 +35,7 @@ public class ContainerController {
 
     @Operation(summary = "Create Docker Container")
     @PostMapping("")
-    public ResponseEntity<Result> CreateDockerContainer(@RequestBody ContainerCreateRequest criteria) {
+    public ResponseEntity<Result> CreateDockerContainer(@Valid @RequestBody ContainerCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -393,7 +394,7 @@ public class ContainerController {
 
     @Operation(summary = "Update Docker Container")
     @PostMapping("/update")
-    public ResponseEntity<Result> UpdateDockerContainer(@RequestBody ContainerCreateRequest criteria) {
+    public ResponseEntity<Result> UpdateDockerContainer(@Valid @RequestBody ContainerCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
