@@ -10,6 +10,7 @@ import com.helmx.tutorial.system.mapper.UserMapper;
 import com.helmx.tutorial.system.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -151,5 +152,38 @@ public class AuthController {
         SecurityContextHolder.clearContext();
         logger.info("User logged out successfully!");
         return ResponseEntity.ok(null);
+    }
+
+    @Operation(summary = "Refresh JWT token", description = "This operation refreshes an expired JWT token.")
+    @PostMapping("/refresh-token")
+    public ResponseEntity<Result> refreshToken(HttpServletRequest request) {
+        try {
+            // 从请求头中获取过期的token
+            String expiredToken = extractTokenFromRequest(request);
+            if (expiredToken == null) {
+                return ResponseUtil.failed(400, null, "Missing token");
+            }
+
+            // 验证并刷新token
+            String newToken = jwtService.refreshToken(expiredToken);
+            if (newToken != null) {
+                Map<String, Object> jwtInfo = new HashMap<>();
+                jwtInfo.put("accessToken", newToken);
+                return ResponseUtil.success("Token refreshed successfully", jwtInfo);
+            } else {
+                return ResponseUtil.failed(401, null, "Unable to refresh token");
+            }
+        } catch (Exception e) {
+            logger.error("Token refresh failed: {}", e.getMessage());
+            return ResponseUtil.failed(500, null, "Token refresh failed");
+        }
+    }
+
+    private String extractTokenFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (StringUtils.isNotBlank(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
     }
 }

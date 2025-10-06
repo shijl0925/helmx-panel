@@ -2,13 +2,16 @@ package com.helmx.tutorial.security.security.service;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +24,12 @@ public class JWTService {
 
     @Autowired
     private JwtEncoder jwtEncoder;
+
+    @Autowired
+    private JwtDecoder jwtDecoder;
+
+    @Autowired
+    private UserDetailsServiceImpl userDetailsService;
 
     @Value("${app.jwt.expiration-hours:24}") // JWT 令牌有效期，默认为 24 小时(注解和@Data注解类似, 区别在于配置文件读取的属性，@Value注解会自动将属性值注入到变量中)
     private long expirationHours;
@@ -92,6 +101,27 @@ public class JWTService {
         } catch (Exception e) {
             logger.error("Failed to generate JWT token for user: {}", username, e);
             throw new RuntimeException("Failed to generate JWT token", e);
+        }
+    }
+
+    public String refreshToken(String expiredToken) {
+        try {
+            // 解析过期的token获取用户信息
+            Jwt decodedJwt = this.jwtDecoder.decode(expiredToken);
+
+            String username = decodedJwt.getSubject();
+            //List<String> roles = decodedJwt.getClaimAsStringList("scope");
+
+            // 创建新的认证对象
+            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+
+            // 生成新的token
+            return generateToken(authentication);
+        } catch (Exception e) {
+            logger.error("Failed to refresh token: {}", e.getMessage());
+            return null;
         }
     }
 }
