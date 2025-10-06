@@ -691,6 +691,24 @@ public class DockerClientUtil {
             createContainerCmd.withTty(criteria.getTty());
         }
 
+
+        // 设置主机名
+        if (criteria.getHostName() != null && !criteria.getHostName().isEmpty()) {
+            createContainerCmd.withHostName(criteria.getHostName());
+        }
+
+        // 设置Domain Name
+        String domainName = criteria.getDomainName();
+        if (domainName != null && !domainName.isEmpty()) {
+            createContainerCmd.withDomainName(domainName);
+        }
+
+        // 设置MAC 地址
+        String macAddress = criteria.getMacAddress();
+        if (macAddress != null && !macAddress.isEmpty()) {
+            createContainerCmd.withMacAddress(macAddress);
+        }
+
         // 设置标签
         String[] labels = criteria.getLabels();
         if (labels != null && labels.length > 0) {
@@ -768,8 +786,14 @@ public class DockerClientUtil {
 
         // 设置容器的网络模式
         String networkMode = criteria.getNetworkMode();
-        if (criteria.getNetworkMode() != null && !networkMode.isEmpty()) {
+        if (networkMode != null && !networkMode.isEmpty()) {
             hostConfig.withNetworkMode(networkMode);
+        }
+
+        // 设置 DNS 服务器
+        String[] dns = criteria.getDns();
+        if (dns != null && dns.length > 0) {
+            hostConfig.withDns(dns);
         }
 
         // 设置重启策略

@@ -73,4 +73,13 @@ public class ContainerCreateRequest {
 
     @ApiModelProperty(value = "用户")
     private String user;
+
+    @ApiModelProperty(value = "Hostname")
+    private String hostName;
+
+    private String domainName;
+
+    private String macAddress;
+
+    private String[] dns;
 }
