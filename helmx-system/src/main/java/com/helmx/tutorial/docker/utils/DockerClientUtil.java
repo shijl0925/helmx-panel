@@ -691,6 +691,19 @@ public class DockerClientUtil {
             createContainerCmd.withTty(criteria.getTty());
         }
 
+        if (criteria.getDevices() != null) {
+            List<Device> devices = new ArrayList<>();
+            for (Map.Entry<String, String> entry : criteria.getDevices().entrySet()) {
+                String pathOnHost = entry.getKey();
+                String[] parts = entry.getValue().split(":");
+                String pathInContainer = parts[0];
+//                cGroupPermissions 参数控制容器对设备的访问权限：r: 读权限, w: 写权限, m: 创建设备节点权限（mknod）
+                String cGroupPermissions = parts.length > 1 ? parts[1] : "rwm";
+                Device device = new Device(cGroupPermissions, pathInContainer, pathOnHost);
+                devices.add(device);
+            }
+            createContainerCmd.withDevices(devices);
+        }
 
         // 设置主机名
         if (criteria.getHostName() != null && !criteria.getHostName().isEmpty()) {

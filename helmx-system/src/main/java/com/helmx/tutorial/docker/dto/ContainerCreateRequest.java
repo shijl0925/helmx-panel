@@ -4,6 +4,8 @@ import io.swagger.annotations.ApiModelProperty;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
+import java.util.Map;
+
 @Data
 public class ContainerCreateRequest {
 
@@ -82,4 +84,7 @@ public class ContainerCreateRequest {
     private String macAddress;
 
     private String[] dns;
+
+    @ApiModelProperty(value = "Devices")
+    private Map<String, String> devices;
 }
