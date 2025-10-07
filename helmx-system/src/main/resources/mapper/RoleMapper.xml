@@ -23,6 +23,21 @@
         WHERE ur.user_id = #{userId}
     </select>
 
+    <!-- 根据角色ID查询菜单ID -->
+    <select id="findMenuIdsByRoleId" parameterType="long" resultType="long">
+        SELECT m.id
+        FROM tb_rbac_menus m
+                 INNER JOIN tb_rbac_role_menus rm ON m.id = rm.menu_id
+        WHERE rm.role_id = #{roleId}
+    </select>
+
+    <!-- 根据角色ID查询菜单 -->
+    <select id="findMenusByRoleId" parameterType="long" resultType="com.helmx.tutorial.system.entity.Menu">
+        SELECT m.*
+        FROM tb_rbac_menus m
+                 INNER JOIN tb_rbac_role_menus rm ON m.id = rm.menu_id
+        WHERE rm.role_id = #{roleId}
+    </select>
     <!-- 带条件的角色查询（使用 RoleQueryRequest 对象） -->
     <select id="findRolesByConditions" parameterType="com.helmx.tutorial.system.dto.RoleQueryRequest" resultMap="RoleResultMap">
         SELECT * FROM tb_rbac_roles

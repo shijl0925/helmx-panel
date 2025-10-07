@@ -5,8 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-import java.util.Set;
-
 @Data
 public class SignupRequest {
 
@@ -19,8 +17,6 @@ public class SignupRequest {
     @Email
     private String email;
 
-    private Set<Integer> role;
-
     @NotBlank
     @Size(min = 6, max = 40)
     private String password;
@@ -29,5 +25,5 @@ public class SignupRequest {
     private String phone;
 
     @Size(min = 3, max = 20)
-    private String nickName;
+    private String nickname;
 }

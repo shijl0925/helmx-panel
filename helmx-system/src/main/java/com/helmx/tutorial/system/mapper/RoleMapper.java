@@ -2,6 +2,7 @@ package com.helmx.tutorial.system.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.helmx.tutorial.system.dto.RoleQueryRequest;
+import com.helmx.tutorial.system.entity.Menu;
 import com.helmx.tutorial.system.entity.Role;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -18,6 +19,8 @@ public interface RoleMapper extends BaseMapper<Role> {
 
     /* 方法2：使用 XML 映射文件 */
     Set<Role> findRolesByUserId(Long userId);
+    Set<Long> findMenuIdsByRoleId(Long roleId);
+    Set<Menu> findMenusByRoleId(Long roleId);
 
     /*
      * 根据条件查询角色列表

@@ -1,7 +1,10 @@
 package com.helmx.tutorial.system.controller;
 
-//import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.helmx.tutorial.system.mapper.RoleMapper;
+import com.helmx.tutorial.system.mapper.RoleMenuMapper;
+import com.helmx.tutorial.system.service.MenuService;
+import com.helmx.tutorial.system.dto.RoleCreateRequest;
 import com.helmx.tutorial.system.dto.RoleUpdateRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,12 +19,13 @@ import com.helmx.tutorial.utils.ResponseUtil;
 
 import com.helmx.tutorial.system.entity.Role;
 import com.helmx.tutorial.system.dto.RoleQueryRequest;
+import com.helmx.tutorial.system.entity.RoleMenu;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Date;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Tag(name = "角色管理")
 @RestController
@@ -31,7 +35,13 @@ public class RoleController {
     @Autowired
     private RoleMapper roleMapper;
 
+    @Autowired
+    private RoleMenuMapper roleMenuMapper;
+
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
+    @Autowired
+    private MenuService menuService;
 
     @Operation(summary = "Get all roles")
     @GetMapping("")
@@ -83,14 +93,48 @@ public class RoleController {
         criteria.setEndTime(endTime);
         List<Role> roles = roleMapper.findRolesByConditions(criteria);
 
+        // 获取角色的菜单权限和接口权限
+        roles.forEach(role -> {
+            role.setPermissions(roleMapper.findMenuIdsByRoleId(role.getId()));
+        });
         return ResponseUtil.success(roles);
     }
 
     @Operation(summary = "Create a new role")
     @PostMapping("")
     @PreAuthorize("@va.check('System:Role:Create')")
-    public ResponseEntity<Result> CreateRole(@RequestBody Role role) {
+    public ResponseEntity<Result> CreateRole(@RequestBody RoleCreateRequest roleRequest) {
+        Role role = new Role();
+
+        role.setName(roleRequest.getName());
+        role.setRemark(roleRequest.getRemark());
+        role.setStatus(roleRequest.getStatus());
+        role.setCode(roleRequest.getCode());
+
         roleMapper.insert(role);
+
+        // 创建角色的菜单权限
+        if (roleRequest.getPermissions() != null) {
+            // 先删除原有权限
+            roleMenuMapper.delete(new QueryWrapper<RoleMenu>().eq("role_id", role.getId()));
+
+            Set<Integer> menuIds = roleRequest.getPermissions().stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+            List<RoleMenu> roleMenus = menuIds.stream()
+                    .filter(Objects::nonNull)  // 过滤空值
+                    .map(Integer::longValue)   // 类型安全转换
+                    .filter(menuService::existsById)   // 验证菜单是否存在
+                    .map(menuId -> new RoleMenu(role.getId(), menuId))
+                    .toList();
+
+            // 批量插入新权限
+            if (!roleMenus.isEmpty()) {
+                roleMenus.forEach(roleMenu -> roleMenuMapper.insert(roleMenu));
+            }
+        }
+
         return ResponseUtil.success(role);
     }
 
@@ -115,6 +159,21 @@ public class RoleController {
             role.setCode(roleRequest.getCode());
         }
         roleMapper.updateById(role);
+
+        // 更新角色的菜单权限
+        if (roleRequest.getPermissions() != null) {
+            roleMenuMapper.delete(new QueryWrapper<RoleMenu>().eq("role_id", role.getId()));
+
+            List<Integer> menuIds = roleRequest.getPermissions();
+            menuIds.forEach(mid -> {
+                Long menuId = Long.valueOf(mid);
+                // 验证菜单ID是否存在
+                if (menuService.existsById(menuId)) {
+                    RoleMenu roleMenu = new RoleMenu(role.getId(), menuId);
+                    roleMenuMapper.insert(roleMenu);
+                }
+            });
+        }
 
         return ResponseUtil.success(role);
     }

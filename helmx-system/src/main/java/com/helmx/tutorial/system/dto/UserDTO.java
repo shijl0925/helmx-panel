@@ -49,6 +49,10 @@ public class UserDTO {
     @ApiModelProperty(value = "角色ID集合")
     private Set<Long> role;
 
+
+    @ApiModelProperty(value = "是否在线")
+    private Boolean online;
+
     public UserDTO(User user) {
         this.id = user.getId();
         this.username = user.getUsername();

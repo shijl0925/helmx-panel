@@ -2,9 +2,11 @@ package com.helmx.tutorial.system.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.helmx.tutorial.security.security.UserSessionManager;
 import com.helmx.tutorial.system.dto.UserCreateRequest;
 import com.helmx.tutorial.system.dto.UserUpdateRequest;
 import com.helmx.tutorial.system.dto.ResetPasswordRequest;
+import com.helmx.tutorial.utils.SecurityUtils;
 import io.swagger.annotations.ApiParam;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,6 +39,9 @@ public class UserController {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private UserSessionManager userSessionManager;
 
     @Autowired
     private PasswordEncoder encoder;
@@ -91,6 +96,11 @@ public class UserController {
                 UserDTO userDTO = new UserDTO(user);
 
                 Long userId = user.getId();
+
+                // 判断用户是否在线
+                boolean online = userSessionManager.isUserOnline(user.getUsername());
+                logger.info("用户{}是否在线：{}", user.getUsername(), online);
+                userDTO.setOnline(online);
 
                 Set<String> roleNames = roleNamesMap.getOrDefault(userId, new HashSet<>());
                 userDTO.setRoles(roleNames);
@@ -205,6 +215,14 @@ public class UserController {
         // 基本输入验证
         if (resetPasswordRequest.getOldPassword() == null || resetPasswordRequest.getNewPassword() == null) {
             return ResponseUtil.failed(400, null, "密码不能为空");
+        }
+
+        // 获取当前已认证用户
+        Long userId = SecurityUtils.getCurrentUserId();
+
+        // 只允许用户自身或超级管理员重置密码
+        if (!userId.equals(id) && !userService.isSuperAdmin(userId)) {
+            return ResponseUtil.failed(403, null, "无权限重置他人密码");
         }
 
         User user = userMapper.selectById(id);

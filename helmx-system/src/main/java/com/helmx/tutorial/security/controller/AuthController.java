@@ -4,13 +4,19 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.helmx.tutorial.security.dto.LoginRequest;
 import com.helmx.tutorial.security.dto.SignupRequest;
+import com.helmx.tutorial.security.security.UserSessionManager;
 import com.helmx.tutorial.security.security.service.JWTService;
+import com.helmx.tutorial.system.entity.Menu;
 import com.helmx.tutorial.system.entity.User;
 import com.helmx.tutorial.system.mapper.UserMapper;
+import com.helmx.tutorial.system.service.MenuService;
 import com.helmx.tutorial.system.service.UserService;
+import com.helmx.tutorial.utils.RequestHolder;
+import com.helmx.tutorial.utils.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,10 +48,19 @@ public class AuthController {
     private UserService userService;
 
     @Autowired
+    private MenuService menuService;
+
+    @Autowired
     private UserMapper userMapper;
 
     @Autowired
     private JWTService jwtService;
+
+    @Autowired
+    private HttpSession session;
+
+    @Autowired
+    private UserSessionManager userSessionManager;
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
@@ -62,8 +77,20 @@ public class AuthController {
             SecurityContextHolder.getContext().setAuthentication(authentication);
             String jwt = jwtService.generateToken(authentication);
 
+            // 记录登录状态到 Session
+            session.setAttribute("username", username);
+            session.setAttribute("loginTime", new Date());
+
+            // 获取request
+            HttpServletRequest request = RequestHolder.getHttpServletRequest();
+            // 获取IP地址并记录到 Session
+            session.setAttribute("ipAddress", request.getRemoteAddr());
+
             Map<String, Object> jwtInfo = new HashMap<>();
             jwtInfo.put("accessToken", jwt);
+
+            userSessionManager.addUserSession(username, jwt);
+
             return ResponseUtil.success( jwtInfo);
         } catch (org.springframework.security.authentication.DisabledException e) {
             logger.warn("登录失败：账户已被禁用 - {}", username);
@@ -93,7 +120,11 @@ public class AuthController {
         }
 
         userService.registerUser(signUpRequest);
-        return ResponseUtil.success("User registered successfully!", null);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("status", "success");
+
+        return ResponseUtil.success("User registered successfully!", result);
     }
 
     @Operation(summary = "Get user information", description = "This operation returns the user information.")
@@ -134,6 +165,21 @@ public class AuthController {
                 userInfo.put("roles", Arrays.asList(scope.split(" ")));
             }
 
+            // 从数据库中查询用户菜单权限
+            Set<Menu> menuSets = userService.getUserMenus(user.getId());
+
+            if (user.isSuperAdmin()) {
+                userInfo.put("permissions", List.of("*"));
+            } else {
+                Set<String> authCodes = menuSets.stream().map(Menu::getAuthCode)
+                        .filter(StringUtils::isNotBlank)
+                        .collect(Collectors.toSet());
+                userInfo.put("permissions", authCodes);
+            }
+
+            List<Menu> menus = menuSets.stream().filter(menu -> !Objects.equals(menu.getType(), "button")).toList();
+            userInfo.put("menus", menuService.buildMenuTree(menus));
+
             return ResponseUtil.success(userInfo);
         }
 
@@ -149,9 +195,35 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logoutUser() {
+        String username;
+
+        // 尝试从 JWT token 中提取用户名
+        username = SecurityUtils.getCurrentUsername();
+
+        // 如果没有从 JWT token 中提取到用户名，尝试从 SecurityContext 中获取
+        if (username == null) {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null) {
+                username = authentication.getName();
+            }
+        }
+
+        // 清除安全上下文
         SecurityContextHolder.clearContext();
+
+        // 移除用户会话
+        if (username != null) {
+            logger.info("Removing user session for: {}", username);
+            userSessionManager.removeUserSession(username);
+        } else {
+            logger.info("No user to logout");
+        }
         logger.info("User logged out successfully!");
-        return ResponseEntity.ok(null);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("status", "success");
+
+        return ResponseUtil.success("User logged out successfully!", result);
     }
 
     @Operation(summary = "Refresh JWT token", description = "This operation refreshes an expired JWT token.")
@@ -180,7 +252,13 @@ public class AuthController {
     }
 
     private String extractTokenFromRequest(HttpServletRequest request) {
-        String bearerToken = request.getHeader("Authorization");
+        // 优先从自定义 header 获取
+        String bearerToken = request.getHeader("X-Refresh-Token");
+        if (StringUtils.isNotBlank(bearerToken)) {
+            return bearerToken.substring(7); // 移除 "Bearer " 前缀
+        }
+
+        bearerToken = request.getHeader("Authorization");
         if (StringUtils.isNotBlank(bearerToken) && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
         }

@@ -53,7 +53,7 @@ public class AuthorityConfig {
         log.info("roleNames：{}", roleNames);
 
         // 超级管理员直接返回true
-        if (roleNames.contains("Super")) {
+        if (userService.isSuperAdmin(userId)) {
             return true;
         }
 

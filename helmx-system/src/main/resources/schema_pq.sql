@@ -54,6 +54,38 @@ CREATE TABLE IF NOT EXISTS tb_rbac_user_roles (
     FOREIGN KEY (role_id) REFERENCES tb_rbac_roles(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS tb_rbac_menus (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(64) NOT NULL,
+    parent_id BIGINT,
+    type VARCHAR(32) NOT NULL,
+    auth_code VARCHAR(64),
+    path VARCHAR(64),
+    component VARCHAR(64),
+    status INTEGER DEFAULT 1,
+    active_path VARCHAR(64),
+    icon VARCHAR(64),
+    sort INTEGER,
+    title VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_rbac_menus 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_rbac_menus_updated_at ON tb_rbac_menus;
+CREATE TRIGGER update_tb_rbac_menus_updated_at 
+    BEFORE UPDATE ON tb_rbac_menus 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_rbac_role_menus (
+    role_id BIGINT,
+    menu_id BIGINT,
+    PRIMARY KEY (role_id, menu_id),
+    FOREIGN KEY (role_id) REFERENCES tb_rbac_roles(id) ON DELETE CASCADE,
+    FOREIGN KEY (menu_id) REFERENCES tb_rbac_menus(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS tb_docker_env (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL,

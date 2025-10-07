@@ -49,14 +49,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setPhone(signUpRequest.getPhone());
         user.setStatus(1);
         user.setSuperAdmin(false);
-        user.setNickname(signUpRequest.getNickName());
+        user.setNickname(signUpRequest.getNickname());
 
         // 保存用户到数据库，获取生成的用户ID
         userMapper.insert(user);
         Long userId = user.getId();
 
-        Set<Integer> strRoles = signUpRequest.getRole();
-        this.updateUserRoles(userId, strRoles);
+        this.updateUserRoles(userId, null);
     }
 
     @Override
@@ -203,6 +202,42 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
 
         return result;
+    }
+
+    @Override
+    public Set<Menu> getUserMenus(Long userId) {
+        Set<Menu> result = new HashSet<>();
+
+        // 添加空值检查
+        if (userId == null) {
+            return result;
+        }
+
+        Set<Long> roleIds = getUserRoleIds(userId);
+        if (roleIds == null || roleIds.isEmpty()) {
+            return result;
+        }
+
+        // 批量查询所有角色，避免N+1查询问题
+        List<Role> roles = roleMapper.selectBatchIds(roleIds);
+        if (roles == null || roles.isEmpty()) {
+            return result;
+        }
+
+        for (Role role : roles) {
+            Set<Menu> menus = roleMapper.findMenusByRoleId(role.getId());
+            // 避免不必要的addAll操作
+            if (menus != null && !menus.isEmpty()) {
+                result.addAll(menus);
+            }
+        }
+
+        return result;
+    }
+
+    @Override
+    public boolean isSuperAdmin(Long userId) {
+        return userMapper.isSuperAdmin(userId);
     }
 
     /**

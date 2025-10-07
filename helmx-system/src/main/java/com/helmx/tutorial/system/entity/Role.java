@@ -41,6 +41,14 @@ public class Role extends BaseEntity implements Serializable {
     @ApiModelProperty(value = "角色编码")
     private String code;
 
+    @TableField(exist = false)
+    @ApiModelProperty(value = "角色菜单")
+    private Set<Menu> menus;
+
+    @TableField(exist = false)
+    @ApiModelProperty(value = "菜单权限")
+    private Set<Long> permissions;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

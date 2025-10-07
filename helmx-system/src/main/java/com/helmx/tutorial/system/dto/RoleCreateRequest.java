@@ -7,8 +7,8 @@ import lombok.Data;
 import java.util.List;
 
 @Data
-@ApiModel(description = "角色更新请求")
-public class RoleUpdateRequest {
+@ApiModel(description = "角色创建请求")
+public class RoleCreateRequest {
     @ApiModelProperty(value = "角色名称")
     private String name;
 
@@ -23,4 +23,7 @@ public class RoleUpdateRequest {
 
     @ApiModelProperty(value = "菜单权限")
     private List<Integer> permissions;
+
+    @ApiModelProperty(value = "接口权限")
+    private List<Integer> resources;
 }
