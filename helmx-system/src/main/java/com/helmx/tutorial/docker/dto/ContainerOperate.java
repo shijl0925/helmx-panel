@@ -1,8 +1,10 @@
 package com.helmx.tutorial.docker.dto;
 
+import com.github.dockerjava.api.command.HealthState;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.ContainerNetwork;
+import com.github.dockerjava.api.model.HealthCheck;
 import com.github.dockerjava.api.model.Ports;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
@@ -23,6 +25,9 @@ public class ContainerOperate {
 
     @ApiModelProperty(value = "状态")
     private String status;
+
+    @ApiModelProperty(value = "健康检查")
+    private String health;
 
     @ApiModelProperty(value = "镜像名称")
     private String image;
@@ -78,6 +83,20 @@ public class ContainerOperate {
     @ApiModelProperty(value = "工作目录")
     private String workingDir;
 
+    @ApiModelProperty(value = "主机名")
+    private String hostName;
+
+    @ApiModelProperty(value = "域名")
+    private String domainName;
+
+    @ApiModelProperty(value = "MAC地址")
+    private String macAddress;
+
+//    @ApiModelProperty(value = "IPv4地址")
+//    private String ipv4Address;
+
+    private Map<String, Object> healthCheck;
+
     @ApiModelProperty(value = "创建时间")
     private String created;
 
@@ -90,7 +109,53 @@ public class ContainerOperate {
     public ContainerOperate(InspectContainerResponse cr) {
         this.id = cr.getId();
         this.name = cr.getName().substring(1);
-        this.status = cr.getState().getStatus();
+        this.status = cr.getState() != null ? cr.getState().getStatus(): "";
+
+        HealthState hs = cr.getState() != null ? cr.getState().getHealth() : null;
+        if (hs != null) {
+            this.health = hs.getStatus() != null ? hs.getStatus() : "";
+        }
+
+        this.hostName = cr.getConfig().getHostName();
+        this.domainName = cr.getConfig().getDomainName();
+        this.macAddress = cr.getNetworkSettings().getMacAddress();
+//        this.ipv4Address = cr.getNetworkSettings().getIpAddress();
+
+        Map<String, Object> hcMapping = new HashMap<>();
+        HealthCheck hc = cr.getConfig() != null ? cr.getConfig().getHealthcheck() : null;
+        if (hc != null) {
+            if (hc.getTest() != null) {
+                hcMapping.put("test", hc.getTest());
+            } else {
+                hcMapping.put("test", null);
+            }
+            if (hc.getInterval() != null) {
+                hcMapping.put("interval", (hc.getInterval() / 1000000000) + "s"); // 纳秒转秒
+            } else {
+                hcMapping.put("interval", null);
+            }
+            if (hc.getTimeout() != null) {
+                hcMapping.put("timeout", (hc.getTimeout() / 1000000000) + "s"); // 纳秒转秒
+            } else {
+                hcMapping.put("timeout", null);
+            }
+            if (hc.getRetries() != null) {
+                hcMapping.put("retries", hc.getRetries());
+            } else {
+                hcMapping.put("retries", 0);
+            }
+            if (hc.getStartInterval() != null) {
+                hcMapping.put("startInterval", (hc.getStartInterval() / 1000000000) + "s");
+            } else {
+                hcMapping.put("startInterval", null);
+            }
+            if (hc.getStartPeriod() != null) {
+                hcMapping.put("startPeriod", (hc.getStartPeriod() / 1000000000) + "s");
+            } else {
+                hcMapping.put("startPeriod", null);
+            }
+        }
+        this.healthCheck = hcMapping;
 
         this.image = cr.getConfig().getImage() + "@" + cr.getImageId();
         if (cr.getNetworkSettings() != null) {

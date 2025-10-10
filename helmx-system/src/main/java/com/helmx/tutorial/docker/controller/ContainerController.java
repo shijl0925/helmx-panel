@@ -456,6 +456,22 @@ public class ContainerController {
         return ResponseUtil.success("Networks updated successfully");
     }
 
+    @Operation(summary = "Disconnect container network")
+    @PostMapping("/disconnect")
+    public ResponseEntity<Result> disconnectContainerNetwork(@RequestBody ContainerNetworkDisconnectRequest request) {
+        String containerId = request.getContainerId();
+        String networkName = request.getNetwork();
+
+        String host = request.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        Map<String, Object> result = dockerClientUtil.disconnectNetwork(networkName, containerId);
+        if ("failed".equals(result.get("status"))) {
+            return ResponseUtil.failed(500, result, (String) result.get("message"));
+        }
+        return ResponseUtil.success("Network disconnected successfully");
+    }
+
     @Operation(summary = "Execute command in Docker Container")
     @PostMapping("/exec")
     public ResponseEntity<Result> ExecuteCommandInContainer(@RequestBody ContainerExecRequest request) {

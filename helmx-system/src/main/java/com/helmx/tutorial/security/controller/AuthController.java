@@ -252,13 +252,7 @@ public class AuthController {
     }
 
     private String extractTokenFromRequest(HttpServletRequest request) {
-        // 优先从自定义 header 获取
-        String bearerToken = request.getHeader("X-Refresh-Token");
-        if (StringUtils.isNotBlank(bearerToken)) {
-            return bearerToken.substring(7); // 移除 "Bearer " 前缀
-        }
-
-        bearerToken = request.getHeader("Authorization");
+        String bearerToken = request.getHeader("Authorization");
         if (StringUtils.isNotBlank(bearerToken) && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
         }

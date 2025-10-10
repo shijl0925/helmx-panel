@@ -682,6 +682,54 @@ public class DockerClientUtil {
             createContainerCmd.withExposedPorts(exposedPorts);
         }
 
+//        // 配置容器是否自动发布所有端口
+//        if (criteria.getPublishAllPorts() != null) {
+//            createContainerCmd.withPublishAllPorts(criteria.getPublishAllPorts());
+//        }
+
+        // 配置容器健康检查
+        Map<String, Object> hc = criteria.getHealthCheck();
+        if (hc != null) {
+            HealthCheck healthCheck = new HealthCheck();
+
+            if (hc.get("test") != null && hc.get("test") instanceof List) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    List<String> testList = (List<String>) hc.get("test");
+                    healthCheck.withTest(testList);
+                } catch (ClassCastException e) {
+                    // 处理类型转换异常
+                    throw new IllegalArgumentException("Health check test parameter must be a List<String>", e);
+                }
+            }
+            if (hc.get("interval") != null && hc.get("interval") instanceof Long interval) {
+                if (interval > 0) {
+                    healthCheck.withInterval(interval);
+                }
+            }
+            if (hc.get("timeout") != null && hc.get("timeout") instanceof Long timeout) {
+                if (timeout > 0) {
+                    healthCheck.withTimeout(timeout);
+                }
+            }
+            if (hc.get("retries") != null && hc.get("retries") instanceof Integer retries) {
+                if (retries > 0) {
+                    healthCheck.withRetries(retries);
+                }
+            }
+            if (hc.get("startPeriod") != null && hc.get("startPeriod") instanceof Long startPeriod) {
+                if (startPeriod > 0) {
+                    healthCheck.withStartPeriod(startPeriod);
+                }
+            }
+            if (hc.get("startInterval") != null && hc.get("startInterval") instanceof Long startInterval) {
+                if (startInterval > 0) {
+                    healthCheck.withStartInterval(startInterval);
+                }
+            }
+            createContainerCmd.withHealthcheck(healthCheck);
+        }
+
         // 设置输入
         if (criteria.getStdinOpen() != null) {
             createContainerCmd.withStdinOpen(criteria.getStdinOpen());
@@ -720,6 +768,18 @@ public class DockerClientUtil {
         String macAddress = criteria.getMacAddress();
         if (macAddress != null && !macAddress.isEmpty()) {
             createContainerCmd.withMacAddress(macAddress);
+        }
+
+        // 配置IPv4 地址
+        String ipv4Address = criteria.getIpv4Address();
+        if (ipv4Address != null && !ipv4Address.isEmpty()) {
+            createContainerCmd.withIpv4Address(ipv4Address);
+        }
+
+        // 配置IPv6 地址
+        String ipv6Address = criteria.getIpv6Address();
+        if (ipv6Address != null && !ipv6Address.isEmpty()) {
+            createContainerCmd.withIpv6Address(ipv6Address);
         }
 
         // 设置标签
@@ -775,6 +835,11 @@ public class DockerClientUtil {
         // 设置特权模式
         if (criteria.getPrivileged() != null) {
             hostConfig.withPrivileged(criteria.getPrivileged());
+        }
+
+        // 删除容器时自动删除
+        if (criteria.getAutoRemove() != null) {
+            hostConfig.withAutoRemove(criteria.getAutoRemove());
         }
 
         // 设置 CPU 时间分配的相对权重, 取值范围：通常为 2-262144，默认值为 1024.
@@ -1339,28 +1404,43 @@ public class DockerClientUtil {
 
             List<Network.Ipam.Config> ipamConfigs = new ArrayList<>();
 
-            // 添加IPv4
+            // 添加IPv4配置
             if (criteria.getEnableIpv4() != null && criteria.getEnableIpv4()) {
                 Network.Ipam.Config ipamConfig = new Network.Ipam.Config();
-                ipamConfig.withGateway(criteria.getGateway());
-                ipamConfig.withIpRange(criteria.getIpRange());
-                ipamConfig.withSubnet(criteria.getSubnet());
+                if (criteria.getGateway() != null && !criteria.getGateway().isEmpty()) {
+                    ipamConfig.withGateway(criteria.getGateway());
+                }
+                if (criteria.getIpRange() != null && !criteria.getIpRange().isEmpty()) {
+                    ipamConfig.withIpRange(criteria.getIpRange());
+                }
+                if (criteria.getSubnet() != null && !criteria.getSubnet().isEmpty()) {
+                    ipamConfig.withSubnet(criteria.getSubnet());
+                }
                 ipamConfigs.add(ipamConfig);
             }
 
-            // 添加IPv6
+            // 添加IPv6配置
             if (criteria.getEnableIpv6() != null && criteria.getEnableIpv6()) {
                 Network.Ipam.Config ipamConfig = new Network.Ipam.Config();
-                ipamConfig.withGateway(criteria.getGatewayV6());
-                ipamConfig.withIpRange(criteria.getIpRangeV6());
-                ipamConfig.withSubnet(criteria.getSubnetV6());
+
+                if (criteria.getGatewayV6() != null && !criteria.getGatewayV6().isEmpty()) {
+                    ipamConfig.withGateway(criteria.getGatewayV6());
+                }
+                if (criteria.getIpRangeV6() != null && !criteria.getIpRangeV6().isEmpty()) {
+                    ipamConfig.withIpRange(criteria.getIpRangeV6());
+                }
+                if (criteria.getSubnetV6() != null && !criteria.getSubnetV6().isEmpty()) {
+                    ipamConfig.withSubnet(criteria.getSubnetV6());
+                }
                 ipamConfigs.add(ipamConfig);
             }
 
             // 设置 IPAM 配置
-            Network.Ipam ipam = new Network.Ipam();
-            ipam.withConfig(ipamConfigs);
-            cmd.withIpam(ipam);
+            if (!ipamConfigs.isEmpty()) {
+                Network.Ipam ipam = new Network.Ipam();
+                ipam.withConfig(ipamConfigs);
+                cmd.withIpam(ipam);
+            }
 
             // 执行创建命令
             cmd.exec();
@@ -1373,6 +1453,7 @@ public class DockerClientUtil {
             String errorMsg = "Create network failed!" + e.getMessage();
             result.put("message", errorMsg);
             result.put("status", "failed");
+            log.error("Failed to create network: {}", errorMsg, e);
         }
         return result;
     }

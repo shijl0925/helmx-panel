@@ -28,6 +28,12 @@ public class ContainerCreateRequest {
     @ApiModelProperty(value = "环境变量")
     private String[] env;
 
+//    @ApiModelProperty(value = "是否暴露端口")
+//    private Boolean publishAllPorts;
+
+    @ApiModelProperty(value = "健康检查")
+    private Map<String, Object> healthCheck;
+
     @ApiModelProperty(value = "端口映射")
     private PortHelper[] exposedPorts; // hostPort containerPort protocol
 
@@ -79,9 +85,17 @@ public class ContainerCreateRequest {
     @ApiModelProperty(value = "Hostname")
     private String hostName;
 
+    @ApiModelProperty(value = "DomainName")
     private String domainName;
 
+    @ApiModelProperty(value = "MacAddress")
     private String macAddress;
+
+    @ApiModelProperty(value = "IPv4Address")
+    private String ipv4Address;
+
+    @ApiModelProperty(value = "IPv6Address")
+    private String ipv6Address;
 
     private String[] dns;
 

@@ -41,10 +41,10 @@ public class JwtExceptionFilter extends OncePerRequestFilter {
         try {
             filterChain.doFilter(request, response);
         } catch (AuthenticationException e) {
-            logger.warn("111 认证失败: {}, 请求URL: {}", e.getMessage(), request.getRequestURL());
+            logger.warn("认证失败: {}, 请求URL: {}", e.getMessage(), request.getRequestURL());
             handleUnauthorizedResponse(response);
         } catch (Exception e) {
-            logger.error("111 处理请求时发生异常: {}", e.getMessage());
+            logger.error("处理请求时发生异常: {}", e.getMessage());
             handleInternalServerErrorResponse(response);
         }
     }
@@ -61,7 +61,7 @@ public class JwtExceptionFilter extends OncePerRequestFilter {
         response.setContentType("application/json;charset=UTF-8");
 
         Result result = new Result();
-        result.setMessage("111 Token已过期或无效，请重新登录");
+        result.setMessage("The token has expired or is invalid. Please login again.");
         result.setCode(HttpServletResponse.SC_UNAUTHORIZED);
         result.setData(null);
 
@@ -80,7 +80,7 @@ public class JwtExceptionFilter extends OncePerRequestFilter {
         response.setContentType("application/json;charset=UTF-8");
 
         Result result = new Result();
-        result.setMessage("111 服务器内部错误");
+        result.setMessage("Internal server error");
         result.setCode(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         result.setData(null);
 

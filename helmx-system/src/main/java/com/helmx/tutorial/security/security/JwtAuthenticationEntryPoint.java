@@ -41,7 +41,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
                          HttpServletResponse response,
                          AuthenticationException authException) throws IOException, ServletException {
 
-        logger.warn("222 JWT认证失败: {}, 请求URL: {}", authException.getMessage(), request.getRequestURL());
+        logger.warn("JWT认证失败: {}, 请求URL: {}", authException.getMessage(), request.getRequestURL());
 
         // 设置响应状态码为401
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -49,7 +49,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
         // 返回统一的错误格式
         Result result = new Result();
-        result.setMessage("222 Token已过期或无效，请重新登录");
+        result.setMessage("The token has expired or is invalid. Please login again.");
         result.setCode(HttpServletResponse.SC_UNAUTHORIZED);
         result.setData(null);
 
