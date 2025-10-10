@@ -1,3 +1,5 @@
+**English** | [中文](./README.zh-CN.md)
+
 # Helmx Panel - Enterprise Docker Container Management Platform
 
 Helmx Panel is a comprehensive container orchestration and management solution designed for DevOps teams and system administrators, providing full-stack container management capabilities from infrastructure to application layer.
