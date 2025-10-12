@@ -24,6 +24,13 @@ public class HomeController {
     @Autowired
     private DockerClientUtil dockerClientUtil;
 
+    // 添加健康检查端点
+    @Operation(summary = "Health check endpoint")
+    @GetMapping("/health")
+    public ResponseEntity<Result> healthCheck() {
+        return ResponseUtil.success("OK", Map.of("status", "healthy"));
+    }
+
     @Operation(summary = "Get Docker status")
     @PostMapping("/docker_status")
     public ResponseEntity<Result> GetDockerStatus(@RequestBody StatusRequest criteria) {

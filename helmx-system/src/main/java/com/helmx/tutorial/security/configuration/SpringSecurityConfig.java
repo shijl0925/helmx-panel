@@ -73,6 +73,8 @@ public class SpringSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 用户登录/注册/退出
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/logout").permitAll()
+                        // 获取健康检查
+                        .requestMatchers("/api/v1/ops/health").permitAll()
                         // 获取环境信息
                         .requestMatchers("/api/v1/ops/envs/all").permitAll()
                         // 容器终端
