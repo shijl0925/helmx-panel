@@ -50,8 +50,8 @@ Helmx Panel is a comprehensive container orchestration and management solution d
 
 <table>
     <tr>
-        <td><img alt="Login" src="https://raw.githubusercontent.com/shijl0925/helmx-panel/refs/heads/main/screenshot/Login.png"/></td>
-        <td><img alt="Docker-Overview" src="https://raw.githubusercontent.com/shijl0925/helmx-panel/refs/heads/main/screenshot/Docker-Overview.png"/></td>
+        <td><img alt="Login" src="https://github.com/shijl0925/helmx-panel/blob/main/screenshot/Login.png?raw=true"/></td>
+        <td><img alt="Docker-Overview" src="https://github.com/shijl0925/helmx-panel/blob/main/screenshot/Docker-Overview.png?raw=true"/></td>
     </tr>
 </table>
 
