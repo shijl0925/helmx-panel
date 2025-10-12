@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS tb_users (
                                      email VARCHAR(100) NOT NULL,
                                      status INT DEFAULT 1,
                                      is_super_admin BOOLEAN DEFAULT FALSE,
-                                     depart_id BIGINT COMMENT '所属部门ID',
                                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

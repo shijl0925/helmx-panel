@@ -8,7 +8,6 @@ CREATE TABLE IF NOT EXISTS tb_users (
     email VARCHAR(100) NOT NULL,
     status INTEGER DEFAULT 1,
     is_super_admin BOOLEAN DEFAULT FALSE,
-    depart_id BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
