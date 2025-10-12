@@ -1,5 +1,5 @@
 # Backend Build Stage
-FROM openjdk:21-jdk-bookworm AS backend
+FROM openjdk:21-jdk-bookworm AS build-stage
 
 RUN wget https://archive.apache.org/dist/maven/maven-3/3.8.2/binaries/apache-maven-3.8.2-bin.tar.gz && \
     tar -xzf apache-maven-3.8.2-bin.tar.gz && \
@@ -23,11 +23,11 @@ LABEL authors="shijl0925"
 # Create application directory
 WORKDIR /app
 
-# Copy built JAR from backend stage
-COPY --from=backend /backend-build/helmx-system/target/*.jar ./app.jar
+# Copy built JAR from build stage
+COPY --from=build-stage /backend-build/helmx-system/target/*.jar ./app.jar
 
 # Create config directory
-RUN mkdir -p /home/conf/helmx-system
+RUN mkdir -p /home/conf/helmx-panel
 
 # Expose port
 EXPOSE 8080
