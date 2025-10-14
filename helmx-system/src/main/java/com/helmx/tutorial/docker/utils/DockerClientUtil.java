@@ -8,6 +8,7 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.*;
 import com.github.dockerjava.api.model.*;
+import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.core.InvocationBuilder;
 import com.alibaba.fastjson2.JSONObject;
 import com.helmx.tutorial.docker.entity.Registry;
