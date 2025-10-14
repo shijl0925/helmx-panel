@@ -1644,6 +1644,115 @@ public class DockerClientUtil {
         return result;
     }
 
+    private List<String> extractBaseImageFromDockerfile(String dockerfileContent) {
+        List<String> baseImages = new ArrayList<>();
+
+        if (dockerfileContent == null || dockerfileContent.trim().isEmpty()) {
+            return baseImages;
+        }
+
+        String[] lines = dockerfileContent.split("\n");
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+
+            // 跳过注释和空行
+            if (trimmedLine.startsWith("#") || trimmedLine.isEmpty()) {
+                continue;
+            }
+
+            // 处理行内注释
+            int commentIndex = trimmedLine.indexOf(" #");
+            if (commentIndex != -1) {
+                trimmedLine = trimmedLine.substring(0, commentIndex).trim();
+            }
+
+            if (trimmedLine.toUpperCase().startsWith("FROM ")) {
+                String imagePart = trimmedLine.substring(5).trim();
+                // 提取基础镜像（处理多阶段构建的别名）
+                String[] parts = imagePart.split("\\s+AS\\s+", 2);
+                String baseImage = parts[0].trim();
+
+                if (!baseImage.isEmpty()) {
+                    baseImages.add(baseImage);
+                }
+            }
+        }
+        return baseImages;
+    }
+
+    /**
+     * 检查镜像是否存在
+     */
+    private boolean isImageExists(DockerClient client, String imageName) {
+        try (InspectImageCmd cmd = client.inspectImageCmd(imageName)) {
+            cmd.exec();
+            return true;
+        } catch (NotFoundException e) {
+            log.debug("Image {} does not exist.", imageName);
+            return false;
+        } catch (Exception e) {
+            log.warn("Failed to inspect image: {}", imageName, e);
+            throw new RuntimeException("Error occurred while inspecting image", e);
+        }
+    }
+
+    /**
+     * 拉取镜像
+     */
+    public void doPullImage(DockerClient client, String imageName) {
+        if (isImageExists(client, imageName)) {
+            log.info("Image {} already exists. Skipping pull.", imageName);
+            return;
+        }
+
+        AuthConfig authConfig = getAuthConfigForImage(imageName);
+
+        try (PullImageCmd cmd = client.pullImageCmd(imageName)) {
+            if (authConfig != null) {
+                cmd.withAuthConfig(authConfig);
+            }
+
+            cmd.exec(new PullImageResultCallback() {
+                @Override
+                public void onNext(PullResponseItem item) {
+                    log.info("Pull progress: {}", item.getStatus());
+                    super.onNext(item);
+                }
+            }).awaitCompletion();
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // 恢复中断状态
+            throw new RuntimeException("Interrupted during image pulling", e);
+        } catch (Exception e) {
+            log.error("Failed to pull image: {}", imageName, e);
+            throw new RuntimeException("Error occurred while pulling image", e);
+        }
+    }
+
+    /**
+     * 清理虚悬镜像（无tag的中间镜像）
+     */
+    private void cleanupDanglingImages(DockerClient client) {
+        try {
+            // 获取所有虚悬镜像（dangling images）
+            List<Image> danglingImages = client.listImagesCmd()
+                    .withDanglingFilter(true)
+                    .exec();
+
+            // 删除虚悬镜像
+            for (Image image : danglingImages) {
+                try {
+                    client.removeImageCmd(image.getId()).exec();
+                    log.info("Removed dangling image: {}", image.getId());
+                } catch (Exception e) {
+                    log.warn("Failed to remove dangling image {}: {}", image.getId(), e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to cleanup dangling images: {}", e.getMessage());
+        }
+    }
+
     /**
      * 构建镜像
      */
@@ -1664,6 +1773,21 @@ public class DockerClientUtil {
         DockerClient client = getCurrentDockerClient();
 
         CompletableFuture.runAsync(() -> {
+            task.setStatus("RUNNING");
+
+            // 预先拉取基础镜像
+            List<String> baseImages = extractBaseImageFromDockerfile(dockerfileContent);
+            if (!baseImages.isEmpty()) {
+                task.setMessage("基础镜像拉取中...");
+                for (String baseImage : baseImages) {
+                    try {
+                        doPullImage(client, baseImage);
+                    } catch (Exception e) {
+                        log.warn("Failed to pre-pull base image: {}", baseImage, e);
+                    }
+                }
+            }
+
             Path tempDir = null;
             try {
                 // 创建临时目录和 Dockerfile
@@ -1679,7 +1803,12 @@ public class DockerClientUtil {
                     }
                 }
 
-                try (BuildImageCmd cmd = client.buildImageCmd().withDockerfile(dockerfilePath.toFile()).withTags(tags)) {
+                try (BuildImageCmd cmd = client.buildImageCmd()
+                        .withRemove(true)
+                        .withForcerm(true)
+                        .withDockerfile(dockerfilePath.toFile())
+                        .withTags(tags)
+                ) {
                     if (Boolean.TRUE.equals(pull)) {
                         cmd.withPull(true);
                     }
@@ -1715,6 +1844,29 @@ public class DockerClientUtil {
                         }
                     }
 
+//                    // 构建镜像授权处理
+//                    try {
+//                        QueryWrapper<Registry> queryWrapper = new QueryWrapper<>();
+//                        List<Registry> registries = registryMapper.selectList(queryWrapper);
+//                        AuthConfigurations authConfigs = new AuthConfigurations();
+//
+//                        for (Registry registry : registries) {
+//                            if (registry.getAuth() != null && registry.getAuth()) {
+//                                AuthConfig authConfig = new AuthConfig()
+//                                        .withRegistryAddress(registry.getUrl())
+//                                        .withUsername(registry.getUsername())
+//                                        .withPassword(registry.getPassword());
+//                                authConfigs.addConfig(authConfig);
+//                            }
+//                        }
+//
+//                        if (!authConfigs.getConfigs().isEmpty()) {
+//                            cmd.withBuildAuthConfigs(authConfigs);
+//                        }
+//                    } catch (Exception e) {
+//                        log.warn("Failed to configure build auth, continuing without auth: {}", e.getMessage());
+//                    }
+
                     BuildImageResultCallback callback = new BuildImageResultCallback() {
                         @Override
                         public void onNext(BuildResponseItem item) {
@@ -1739,14 +1891,16 @@ public class DockerClientUtil {
                         }
                     };
 
-                    task.setStatus("RUNNING");
-                    task.setMessage("镜像构建中...");
+                    task.setMessage("镜像正在构建中...");
                     cmd.exec(callback).awaitCompletion();
 
                     // 镜像构建完成, 更新任务状态
                     task.setStatus("SUCCESS");
                     task.setMessage("镜像构建成功");
                     task.setEndTime(LocalDateTime.now());
+
+//                    // 清理虚悬镜像
+//                    cleanupDanglingImages(client);
 
                     log.info("Successfully built image: {}", tags);
                 }
