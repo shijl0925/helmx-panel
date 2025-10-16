@@ -120,3 +120,20 @@ CREATE TRIGGER update_tb_docker_registry_updated_at
     BEFORE UPDATE ON tb_docker_registry
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_template (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(64) NOT NULL,
+    remark VARCHAR(255),
+    content TEXT,
+    type VARCHAR(64) DEFAULT 'Dockerfile',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_template 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_template_updated_at ON tb_template;
+CREATE TRIGGER update_tb_template_updated_at
+    BEFORE UPDATE ON tb_template
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
