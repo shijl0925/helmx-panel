@@ -20,6 +20,12 @@ public class ImageInfo {
     @ApiModelProperty(value = "镜像ID")
     private String id;
 
+    @ApiModelProperty(value = "镜像作者")
+    private String author;
+
+    @ApiModelProperty(value = "镜像注释")
+    private String comment;
+
     @ApiModelProperty(value = "标签")
     private List<String> repoTags;
 
@@ -44,6 +50,8 @@ public class ImageInfo {
 
     public ImageInfo(InspectImageResponse image) {
         this.id = Objects.requireNonNull(image.getId()).split(":")[1];
+        this.author = image.getAuthor();
+        this.comment = image.getComment();
         this.repoTags = image.getRepoTags();
         this.size = image.getSize() != null ? ByteUtils.formatBytes(image.getSize()) : "";
         this.createdAt = image.getCreated();

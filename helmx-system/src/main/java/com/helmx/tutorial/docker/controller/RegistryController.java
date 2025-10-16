@@ -6,7 +6,6 @@ import com.helmx.tutorial.docker.dto.RegistryConnectRequest;
 import com.helmx.tutorial.docker.dto.RegistryCreateRequest;
 import com.helmx.tutorial.docker.entity.Registry;
 import com.helmx.tutorial.docker.mapper.RegistryMapper;
-import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 import io.swagger.v3.oas.annotations.Operation;

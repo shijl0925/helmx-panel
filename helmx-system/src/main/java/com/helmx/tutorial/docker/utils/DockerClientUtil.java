@@ -33,6 +33,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Component
@@ -114,27 +116,27 @@ public class DockerClientUtil {
     public List<Container> searchContainers(ContainerQueryRequest criteria) {
         try (ListContainersCmd cmd = getCurrentDockerClient().listContainersCmd().withShowAll(true)) {
 
-        // 容器ID
-        if (criteria.getContainerId() != null && !criteria.getContainerId().isEmpty()) {
-            cmd.withIdFilter(Collections.singletonList(criteria.getContainerId()));
-        }
-        // 容器名称
-        if (criteria.getName() != null && !criteria.getName().isEmpty()) {
-            cmd.withNameFilter(Collections.singletonList(criteria.getName()));
-        }
-        // 容器状态
-        if (criteria.getState() != null && !criteria.getState().isEmpty()) {
-            cmd.withStatusFilter(Collections.singletonList(criteria.getState()));
-        }
-        // 过滤器
-        if (criteria.getFilters() != null && !criteria.getFilters().isEmpty()) {
-            criteria.getFilters().entrySet().stream()
-                    .filter(entry -> entry.getKey() != null && !entry.getKey().isBlank())
-                    .filter(entry -> entry.getValue() != null && !entry.getValue().isBlank())
-                    .forEach(entry -> cmd.withFilter(entry.getKey(), Collections.singleton(entry.getValue())));
-        }
+            // 容器ID
+            if (criteria.getContainerId() != null && !criteria.getContainerId().isEmpty()) {
+                cmd.withIdFilter(Collections.singletonList(criteria.getContainerId()));
+            }
+            // 容器名称
+            if (criteria.getName() != null && !criteria.getName().isEmpty()) {
+                cmd.withNameFilter(Collections.singletonList(criteria.getName()));
+            }
+            // 容器状态
+            if (criteria.getState() != null && !criteria.getState().isEmpty()) {
+                cmd.withStatusFilter(Collections.singletonList(criteria.getState()));
+            }
+            // 过滤器
+            if (criteria.getFilters() != null && !criteria.getFilters().isEmpty()) {
+                criteria.getFilters().entrySet().stream()
+                        .filter(entry -> entry.getKey() != null && !entry.getKey().isBlank())
+                        .filter(entry -> entry.getValue() != null && !entry.getValue().isBlank())
+                        .forEach(entry -> cmd.withFilter(entry.getKey(), Collections.singleton(entry.getValue())));
+            }
 
-        return cmd.exec();
+            return cmd.exec();
         }
     }
 
@@ -740,20 +742,6 @@ public class DockerClientUtil {
             createContainerCmd.withTty(criteria.getTty());
         }
 
-        if (criteria.getDevices() != null) {
-            List<Device> devices = new ArrayList<>();
-            for (Map.Entry<String, String> entry : criteria.getDevices().entrySet()) {
-                String pathOnHost = entry.getKey();
-                String[] parts = entry.getValue().split(":");
-                String pathInContainer = parts[0];
-//                cGroupPermissions 参数控制容器对设备的访问权限：r: 读权限, w: 写权限, m: 创建设备节点权限（mknod）
-                String cGroupPermissions = parts.length > 1 ? parts[1] : "rwm";
-                Device device = new Device(cGroupPermissions, pathInContainer, pathOnHost);
-                devices.add(device);
-            }
-            createContainerCmd.withDevices(devices);
-        }
-
         // 设置主机名
         if (criteria.getHostName() != null && !criteria.getHostName().isEmpty()) {
             createContainerCmd.withHostName(criteria.getHostName());
@@ -821,6 +809,21 @@ public class DockerClientUtil {
             }
 
             hostConfig.withPortBindings(portBindings);
+        }
+
+        if (criteria.getDevices() != null) {
+            List<Device> devices = new ArrayList<>();
+            for (Map.Entry<String, String> entry : criteria.getDevices().entrySet()) {
+                String pathOnHost = entry.getKey();
+                String[] parts = entry.getValue().split(":");
+                String pathInContainer = parts[0];
+//                cGroupPermissions 参数控制容器对设备的访问权限：r: 读权限, w: 写权限, m: 创建设备节点权限（mknod）
+                String cGroupPermissions = parts.length > 1 ? parts[1] : "rwm";
+                Device device = new Device(cGroupPermissions, pathInContainer, pathOnHost);
+                devices.add(device);
+            }
+
+            hostConfig.withDevices(devices);
         }
 
         // 添加卷
@@ -1116,7 +1119,7 @@ public class DockerClientUtil {
     public Map<String, Object> loadStatus() {
         long imageSize = 0;
         List<Image> images;
-        try (ListImagesCmd cmd = getCurrentDockerClient().listImagesCmd().withShowAll(true)) {
+        try (ListImagesCmd cmd = getCurrentDockerClient().listImagesCmd()) {
             images = cmd.exec();
         }
 
@@ -1188,11 +1191,15 @@ public class DockerClientUtil {
     /**
      * Snapshot Container
      */
-    public Map<String, Object> commitContainer(String containerId, String repository) {
+    public Map<String, Object> commitContainer(String containerId, String repository, String author) {
         Map<String, Object> result = new HashMap<>();
 
         try (CommitCmd cmd = getCurrentDockerClient().commitCmd(containerId)) {
             cmd.withRepository(repository);
+            // 设置作者
+            if (author != null && !author.isEmpty()) {
+                cmd.withAuthor(author);
+            }
             String imageId = cmd.exec();
 
             // 成功响应
@@ -1533,7 +1540,7 @@ public class DockerClientUtil {
      * 获取镜像列表
      */
     public List<Image> listImages() {
-        try (ListImagesCmd cmd = getCurrentDockerClient().listImagesCmd().withShowAll(true)) {
+        try (ListImagesCmd cmd = getCurrentDockerClient().listImagesCmd()) {
             return cmd.exec();
         }
     }
@@ -1700,7 +1707,7 @@ public class DockerClientUtil {
     /**
      * 拉取镜像
      */
-    public void doPullImage(DockerClient client, String imageName) {
+    public void doPullImage(DockerClient client, ImageBuildTask task, String imageName) {
         if (isImageExists(client, imageName)) {
             log.info("Image {} already exists. Skipping pull.", imageName);
             return;
@@ -1717,6 +1724,21 @@ public class DockerClientUtil {
                 @Override
                 public void onNext(PullResponseItem item) {
                     log.info("Pull progress: {}", item.getStatus());
+
+                    // 使用同步块确保线程安全
+                    synchronized (task) {
+                        StringBuilder streamBuilder = task.getStreamBuilder();
+                        if (streamBuilder == null) {
+                            streamBuilder = new StringBuilder();
+                            task.setStreamBuilder(streamBuilder);
+                        }
+                        streamBuilder.append(item.getStatus()).append("\n");
+                        // 可选：限制最大长度防止内存溢出
+                        if (streamBuilder.length() > 100000) { // 限制100KB
+                            streamBuilder.delete(0, streamBuilder.length() - 80000); // 保留后80KB
+                        }
+                    }
+
                     super.onNext(item);
                 }
             }).awaitCompletion();
@@ -1773,6 +1795,21 @@ public class DockerClientUtil {
 
         DockerClient client = getCurrentDockerClient();
 
+        // 在主线程中预处理上传的文件
+        Map<String, byte[]> uploadedFiles = new HashMap<>();
+        if (filesToUpload != null) {
+            for (MultipartFile fileToUpload : filesToUpload) {
+                try {
+                    String fileName = Paths.get(Objects.requireNonNull(fileToUpload.getOriginalFilename())).getFileName().toString();
+                    uploadedFiles.put(fileName, fileToUpload.getBytes());
+                    log.info("Preloaded file: {} ({} bytes)", fileName, fileToUpload.getSize());
+                } catch (IOException e) {
+                    log.error("Failed to preload file: {}", fileToUpload.getOriginalFilename(), e);
+                    throw new RuntimeException("Failed to process uploaded file: " + fileToUpload.getOriginalFilename(), e);
+                }
+            }
+        }
+
         CompletableFuture.runAsync(() -> {
             task.setStatus("RUNNING");
 
@@ -1782,7 +1819,7 @@ public class DockerClientUtil {
                 task.setMessage("基础镜像拉取中...");
                 for (String baseImage : baseImages) {
                     try {
-                        doPullImage(client, baseImage);
+                        doPullImage(client, task, baseImage);
                     } catch (Exception e) {
                         log.warn("Failed to pre-pull base image: {}", baseImage, e);
                     }
@@ -1796,20 +1833,34 @@ public class DockerClientUtil {
                 Path dockerfilePath = tempDir.resolve("Dockerfile");
                 Files.writeString(dockerfilePath, dockerfileContent, StandardCharsets.UTF_8);
 
-                // 存储文件
-                if (filesToUpload != null && filesToUpload.length > 0) {
-                    for (MultipartFile fileToUpload : filesToUpload) {
-                        String safeFileName = Paths.get(Objects.requireNonNull(fileToUpload.getOriginalFilename())).getFileName().toString();
-                        Files.copy(fileToUpload.getInputStream(), tempDir.resolve(safeFileName), StandardCopyOption.REPLACE_EXISTING);
+                // 存储预处理的文件
+                log.info("Processing {} preloaded files", uploadedFiles.size());
+                for (Map.Entry<String, byte[]> entry : uploadedFiles.entrySet()) {
+                    try {
+                        String fileName = entry.getKey();
+                        byte[] fileContent = entry.getValue();
+                        Path targetPath = tempDir.resolve(fileName);
+                        log.info("Writing file: {} to {}", fileName, targetPath);
+                        Files.write(targetPath, fileContent);
+                    } catch (IOException e) {
+                        log.error("Failed to write file: {}", entry.getKey(), e);
+                        throw new RuntimeException("Failed to write file: " + entry.getKey(), e);
                     }
+                }
+
+                // 添加调试代码
+                try (Stream<Path> files = Files.list(tempDir)) {
+                    log.info("Files in build context: {}", files.collect(Collectors.toList()));
                 }
 
                 try (BuildImageCmd cmd = client.buildImageCmd()
                         .withRemove(true)
                         .withForcerm(true)
                         .withDockerfile(dockerfilePath.toFile())
-                        .withTags(tags)
                 ) {
+                    // 设置标签
+                    cmd.withTags(tags);
+
                     if (Boolean.TRUE.equals(pull)) {
                         cmd.withPull(true);
                     }
@@ -1844,29 +1895,6 @@ public class DockerClientUtil {
                             }
                         }
                     }
-
-//                    // 构建镜像授权处理
-//                    try {
-//                        QueryWrapper<Registry> queryWrapper = new QueryWrapper<>();
-//                        List<Registry> registries = registryMapper.selectList(queryWrapper);
-//                        AuthConfigurations authConfigs = new AuthConfigurations();
-//
-//                        for (Registry registry : registries) {
-//                            if (registry.getAuth() != null && registry.getAuth()) {
-//                                AuthConfig authConfig = new AuthConfig()
-//                                        .withRegistryAddress(registry.getUrl())
-//                                        .withUsername(registry.getUsername())
-//                                        .withPassword(registry.getPassword());
-//                                authConfigs.addConfig(authConfig);
-//                            }
-//                        }
-//
-//                        if (!authConfigs.getConfigs().isEmpty()) {
-//                            cmd.withBuildAuthConfigs(authConfigs);
-//                        }
-//                    } catch (Exception e) {
-//                        log.warn("Failed to configure build auth, continuing without auth: {}", e.getMessage());
-//                    }
 
                     BuildImageResultCallback callback = new BuildImageResultCallback() {
                         @Override
@@ -2199,5 +2227,4 @@ public class DockerClientUtil {
 
     // createImageCmd
     // saveImageCmd
-    // buildImageCmd
 }

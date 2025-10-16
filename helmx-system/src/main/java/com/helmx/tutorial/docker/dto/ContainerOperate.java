@@ -2,10 +2,7 @@ package com.helmx.tutorial.docker.dto;
 
 import com.github.dockerjava.api.command.HealthState;
 import com.github.dockerjava.api.command.InspectContainerResponse;
-import com.github.dockerjava.api.model.Bind;
-import com.github.dockerjava.api.model.ContainerNetwork;
-import com.github.dockerjava.api.model.HealthCheck;
-import com.github.dockerjava.api.model.Ports;
+import com.github.dockerjava.api.model.*;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 
@@ -95,7 +92,11 @@ public class ContainerOperate {
 //    @ApiModelProperty(value = "IPv4地址")
 //    private String ipv4Address;
 
+    private String[] dns;
+
     private Map<String, Object> healthCheck;
+
+    private List<Map<String, Object>> devices;
 
     @ApiModelProperty(value = "创建时间")
     private String created;
@@ -156,6 +157,21 @@ public class ContainerOperate {
             }
         }
         this.healthCheck = hcMapping;
+
+        this.dns = cr.getHostConfig().getDns() != null ? cr.getHostConfig().getDns() : null;
+
+        List<Map<String, Object>> devices = new ArrayList<>();
+        Device[] ds = cr.getHostConfig() != null ? cr.getHostConfig().getDevices() : null;
+        if (ds != null) {
+            for (Device device : ds) {
+                Map<String, Object> deviceMapping = new HashMap<>();
+                deviceMapping.put("pathOnHost", device.getPathOnHost());
+                deviceMapping.put("pathInContainer", device.getPathInContainer());
+                deviceMapping.put("cgroupPermissions", device.getcGroupPermissions());
+                devices.add(deviceMapping);
+            }
+            this.devices = devices;
+        }
 
         this.image = cr.getConfig().getImage() + "@" + cr.getImageId();
         if (cr.getNetworkSettings() != null) {
@@ -225,8 +241,8 @@ public class ContainerOperate {
         String restartPolicyName = cr.getHostConfig().getRestartPolicy().getName();
         Integer restartPolicyMaximumRetryCount = cr.getHostConfig().getRestartPolicy().getMaximumRetryCount();
         this.restartPolicy = new HashMap<>(Map.of(
-                        "name", restartPolicyName,
-                        "maximumRetryCount", restartPolicyMaximumRetryCount
+                "name", restartPolicyName,
+                "maximumRetryCount", restartPolicyMaximumRetryCount
         ));
         if (cr.getHostConfig().getNanoCPUs() != null) {
             this.nanoCPUs = (float) cr.getHostConfig().getNanoCPUs() / 1000000000;

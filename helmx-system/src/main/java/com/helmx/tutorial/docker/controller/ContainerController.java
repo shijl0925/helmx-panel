@@ -17,6 +17,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
@@ -196,51 +199,51 @@ public class ContainerController {
         }
     }
 
-     @Operation(summary = "Copy file from container")
-     @PostMapping("/copy/from")
-     public ResponseEntity<?> copyFileFromContainer(@RequestBody ContainerCopyRequest request) {
-         try {
-             String host = request.getHost();
-             dockerClientUtil.setCurrentHost(host);
+    @Operation(summary = "Copy file from container")
+    @PostMapping("/copy/from")
+    public ResponseEntity<?> copyFileFromContainer(@RequestBody ContainerCopyRequest request) {
+        try {
+            String host = request.getHost();
+            dockerClientUtil.setCurrentHost(host);
 
-             String containerId = request.getContainerId();
-             String containerPath = request.getContainerPath();
+            String containerId = request.getContainerId();
+            String containerPath = request.getContainerPath();
 
-             byte[] fileContent = dockerClientUtil.copyFileFromContainer(containerId, containerPath);
+            byte[] fileContent = dockerClientUtil.copyFileFromContainer(containerId, containerPath);
 
-             // 提取文件名
-             String fileName = containerPath.substring(containerPath.lastIndexOf("/") + 1);
+            // 提取文件名
+            String fileName = containerPath.substring(containerPath.lastIndexOf("/") + 1);
 
-             // 设置响应头，使浏览器能够下载文件
-             HttpHeaders headers = new HttpHeaders();
-             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-             headers.setContentDispositionFormData("attachment", fileName);
-             headers.setContentLength(fileContent.length);
+            // 设置响应头，使浏览器能够下载文件
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            headers.setContentDispositionFormData("attachment", fileName);
+            headers.setContentLength(fileContent.length);
 
-             return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
-         } catch (Exception e) {
-             log.error("Failed to copy file from container: {}", request.getContainerId(), e);
-             return ResponseUtil.failed(500, null, e.getMessage());
-         }
-     }
+            return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
+        } catch (Exception e) {
+            log.error("Failed to copy file from container: {}", request.getContainerId(), e);
+            return ResponseUtil.failed(500, null, e.getMessage());
+        }
+    }
 
-     @Operation(summary = "Copy file to container")
-     @PostMapping("/copy/to")
-     public ResponseEntity<Result> copyFileToContainer(
-             @RequestParam("file") MultipartFile file,
-             @RequestParam() String host,
-             @RequestParam() String containerId,
-             @RequestParam() String containerPath
-     ) {
-         try {
-             dockerClientUtil.setCurrentHost(host);
-             dockerClientUtil.copyFileToContainer(containerId, containerPath, file);
-             return ResponseUtil.success("File copied successfully to container");
-         } catch (Exception e) {
-             log.error("Failed to copy file to container: {}", containerId, e);
-             return ResponseUtil.failed(500, null, "Failed to copy file to container: " + e.getMessage());
-         }
-     }
+    @Operation(summary = "Copy file to container")
+    @PostMapping("/copy/to")
+    public ResponseEntity<Result> copyFileToContainer(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam() String host,
+            @RequestParam() String containerId,
+            @RequestParam() String containerPath
+    ) {
+        try {
+            dockerClientUtil.setCurrentHost(host);
+            dockerClientUtil.copyFileToContainer(containerId, containerPath, file);
+            return ResponseUtil.success("File copied successfully to container");
+        } catch (Exception e) {
+            log.error("Failed to copy file to container: {}", containerId, e);
+            return ResponseUtil.failed(500, null, "Failed to copy file to container: " + e.getMessage());
+        }
+    }
 
     @Operation(summary = "Operate Docker Container")
     @PostMapping("/operate")
@@ -418,7 +421,17 @@ public class ContainerController {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
-        Map<String, Object> result = dockerClientUtil.commitContainer(criteria.getContainerId(), criteria.getRepository());
+        // 获取当前用户名
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseUtil.failed(401, null, "Unauthorized");
+        }
+        String username = null;
+        if (authentication.getPrincipal() instanceof Jwt jwt) {
+            username = jwt.getSubject();
+        }
+
+        Map<String, Object> result = dockerClientUtil.commitContainer(criteria.getContainerId(), criteria.getRepository(), username);
         return ResponseUtil.success(result);
     }
 

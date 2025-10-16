@@ -5,15 +5,12 @@ import com.helmx.tutorial.docker.utils.*;
 import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 import com.github.dockerjava.api.command.InspectImageResponse;
-import com.github.dockerjava.api.command.InspectVolumeResponse;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.Image;
-import io.swagger.annotations.ApiParam;
 import io.swagger.v3.oas.annotations.Operation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -43,7 +40,9 @@ public class ImageController {
     public ResponseEntity<Result> GetAllDockerImages(@RequestBody ImageQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
-        List<Image> images = dockerClientUtil.listImages();
+        List<Image> images = dockerClientUtil.listImages().stream()
+                .filter(image -> image.getRepoTags() != null &&
+                        Arrays.stream(image.getRepoTags()).noneMatch("<none>:<none>"::equals)).toList();
 
         List<ImageDTO> imageDTOS = images.stream().map(ImageDTO::new).toList();
 
@@ -56,7 +55,10 @@ public class ImageController {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
-        List<Image> images = dockerClientUtil.listImages();
+        List<Image> images = dockerClientUtil.listImages().stream()
+                .filter(image -> image.getRepoTags() != null &&
+                        Arrays.stream(image.getRepoTags()).noneMatch("<none>:<none>"::equals)).toList();
+
         String name = criteria.getName();
         if (name != null && !name.isEmpty()) {
             images = images.stream().filter(
