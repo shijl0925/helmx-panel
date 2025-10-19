@@ -11,22 +11,8 @@ jobs:
   build-and-deploy:
     name: Build
     runs-on: ubuntu-latest
-    strategy:
-      max-parallel: 1 # 串行执行
-      matrix:
-        include:
-          - app_name: helmx-panel
-            service_port: 8080
-            log_dir: /home/app/helmx-panel/logs
-            config_dir: /home/conf/helmx-panel
-            jar_dir: ./helmx-system/target
     env:
       APP_NAME: helmx-panel
-      SERVICE_PORT: 8080
-      LOG_DIR: /home/app/helmx-panel/logs
-      CONFIG_DIR: /home/conf/helmx-panel
-      JAR_DIR: ./helmx-system/target
-
       ACR_DOMAIN: crpi-bm1g1jwyeecil28s.cn-hangzhou.personal.cr.aliyuncs.com
       ACR_ZONE: shijl0925
 
@@ -45,11 +31,15 @@ jobs:
       - name: Log in to Docker ACR
         run: echo "${{ secrets.ACR_PASSWORD }}" | docker login --username=${{ secrets.ACR_USERNAME }} ${{ env.ACR_DOMAIN }} --password-stdin
 
-      - name: Tag Docker image
-        run: docker tag ${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }} ${{ env.ACR_DOMAIN }}/${{ env.ACR_ZONE }}/${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }}
+      - name: Tag Docker image for ACR
+        run: |
+          docker tag ${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }} ${{ env.ACR_DOMAIN }}/${{ env.ACR_ZONE }}/${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }}
+          docker tag ${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }} ${{ env.ACR_DOMAIN }}/${{ env.ACR_ZONE }}/${{ env.APP_NAME }}:latest
 
-      - name: Push Docker image
-        run: docker push ${{ env.ACR_DOMAIN }}/${{ env.ACR_ZONE }}/${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }}
+      - name: Push Docker images to ACR
+        run: |
+          docker push ${{ env.ACR_DOMAIN }}/${{ env.ACR_ZONE }}/${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }}
+          docker push ${{ env.ACR_DOMAIN }}/${{ env.ACR_ZONE }}/${{ env.APP_NAME }}:latest
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -57,10 +47,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Tag the image
+      - name: Tag Docker image for Docker Hub
         run: |
           docker tag ${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }} ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }}
+          docker tag ${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }} ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.APP_NAME }}:latest
 
-      - name: Push Docker image
+      - name: Push Docker images to Docker Hub
         run: |
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.APP_NAME }}:latest

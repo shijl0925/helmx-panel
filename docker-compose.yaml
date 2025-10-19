@@ -2,7 +2,7 @@ version: '3.3'
 
 services:
   postgresql:
-    image: postgres:13
+    image: postgres:17.6
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres@123
@@ -21,7 +21,7 @@ services:
       - './postgresql/log:/var/log/postgresql'
 
   redis:
-    image: redis:5.0.14
+    image: redis:6.2.20-alpine
     ports:
       - '6379:6379'
     command: redis-server
@@ -31,11 +31,11 @@ services:
       timeout: 5s
       retries: 3
     restart: always
-     volumes:
-       - redis_data:/data
+    volumes:
+      - redis_data:/data
 
   helmx:
-    image: shijl0925/helmx-panel:20251012
+    image: shijl0925/helmx-panel:latest
     expose:
       - '8080'
     depends_on:
@@ -63,7 +63,7 @@ services:
       - './docker-certs:/app/docker-certs'
 
   helmx-web:
-    image: shijl0925/helmx-panel-web:20251012
+    image: shijl0925/helmx-panel-web:latest
     expose:
       - '80'
     depends_on:
