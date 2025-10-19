@@ -214,7 +214,7 @@ public class UserController {
     public ResponseEntity<Result> UpdateUserPassword(@PathVariable Long id, @RequestBody ResetPasswordRequest resetPasswordRequest) {
         // 基本输入验证
         if (resetPasswordRequest.getOldPassword() == null || resetPasswordRequest.getNewPassword() == null) {
-            return ResponseUtil.failed(400, null, "密码不能为空");
+            return ResponseUtil.failed(400, null, "Password cannot be empty");
         }
 
         // 获取当前已认证用户
@@ -222,31 +222,31 @@ public class UserController {
 
         // 只允许用户自身或超级管理员重置密码
         if (!userId.equals(id) && !userService.isSuperAdmin(userId)) {
-            return ResponseUtil.failed(403, null, "无权限重置他人密码");
+            return ResponseUtil.failed(403, null, "No permission to reset other user's password");
         }
 
         User user = userMapper.selectById(id);
         if (user == null) {
-            return ResponseUtil.failed(400, null, "密码更新失败: 用户不存在");
+            return ResponseUtil.failed(400, null, "Password update failed: User not found");
         }
 
         // 验证旧密码
         if (!encoder.matches(resetPasswordRequest.getOldPassword(), user.getPassword())) {
-            return ResponseUtil.failed(400, null,"密码更新失败: 旧密码错误");
+            return ResponseUtil.failed(400, null,"Password update failed: Old password is incorrect");
         }
 
         // 检查新旧密码是否相同
         if (encoder.matches(resetPasswordRequest.getNewPassword(), user.getPassword())) {
-            return ResponseUtil.failed(400, null, "新密码不能与旧密码相同");
+            return ResponseUtil.failed(400, null, "New password cannot be the same as old password");
         }
 
         try {
             user.setPassword(encoder.encode(resetPasswordRequest.getNewPassword()));
             userMapper.updateById(user);
-            return ResponseUtil.success("密码更新成功");
+            return ResponseUtil.success("Password updated successfully");
         } catch (Exception e) {
-            logger.error("密码更新失败：用户ID {}", id, e);
-            return ResponseUtil.failed(500, null, "密码更新失败");
+            logger.error("Password update failed: User ID {}", id, e);
+            return ResponseUtil.failed(500, null, "Password update failed");
         }
     }
 

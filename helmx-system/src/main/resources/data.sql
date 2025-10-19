@@ -1,8 +1,8 @@
 -- 插入角色数据
 INSERT IGNORE INTO tb_rbac_roles (id, name, remark, status, code, created_at, updated_at) VALUES
- (1, 'Super', '超级管理员', 1, 'super', NOW(), NOW()),
- (2, 'Admin', '管理员', 1, 'admin', NOW(), NOW()),
- (3, 'User', '用户', 1, 'user', NOW(), NOW());
+ (1, 'Super', 'Super Admin', 1, 'super', NOW(), NOW()),
+ (2, 'Admin', 'Admin', 1, 'admin', NOW(), NOW()),
+ (3, 'User', 'User', 1, 'user', NOW(), NOW());
 
 
 -- 插入用户数据

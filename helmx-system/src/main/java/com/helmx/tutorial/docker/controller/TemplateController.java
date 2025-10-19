@@ -72,7 +72,7 @@ public class TemplateController {
         LambdaQueryWrapper<Template> nameQuery = new LambdaQueryWrapper<>();
         nameQuery.eq(Template::getName, request.getName());
         if (templateMapper.selectCount(nameQuery) > 0) {
-            return ResponseUtil.failed(400, null, "模板名称已存在");
+            return ResponseUtil.failed(400, null, "Template name already exists");
         }
 
         Template template = new Template();
@@ -91,7 +91,7 @@ public class TemplateController {
     public ResponseEntity<Result> UpdateTemplateById(@PathVariable Long id, @RequestBody TemplateUpdateRequest request) {
         Template template = templateService.getById(id);
         if (template == null) {
-            return ResponseUtil.failed(404, null, "模板不存在");
+            return ResponseUtil.failed(404, null, "Template does not exist");
         }
 
         if (request.getName() != null) {
@@ -117,7 +117,7 @@ public class TemplateController {
     public ResponseEntity<Result> DeleteTemplateById(@PathVariable Long id) {
         Template template = templateService.getById(id);
         if (template == null) {
-            return ResponseUtil.failed(404, null, "模板不存在");
+            return ResponseUtil.failed(404, null, "Template does not exist");
         }
 
         templateMapper.deleteById(id);
@@ -130,7 +130,7 @@ public class TemplateController {
     public ResponseEntity<Result> GetTemplateById(@PathVariable Long id) {
         Template template = templateService.getById(id);
         if (template == null) {
-            return ResponseUtil.failed(404, null, "模板不存在");
+            return ResponseUtil.failed(404, null, "Template does not exist");
         }
 
         return ResponseUtil.success(new TemplateDTO(template));

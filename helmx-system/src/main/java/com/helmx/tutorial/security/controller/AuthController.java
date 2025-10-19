@@ -93,17 +93,17 @@ public class AuthController {
 
             return ResponseUtil.success( jwtInfo);
         } catch (org.springframework.security.authentication.DisabledException e) {
-            logger.warn("登录失败：账户已被禁用 - {}", username);
-            return ResponseUtil.failed(401, null, "账户已被禁用");
+            logger.warn("Login failed: Account is disabled - {}", username);
+            return ResponseUtil.failed(401, null, "Account is disabled");
         } catch (org.springframework.security.authentication.BadCredentialsException e) {
-            logger.warn("登录失败：用户名或密码错误 - {}", username);
-            return ResponseUtil.failed(401, null, "用户名或密码错误");
+            logger.warn("Login failed: Username or password is incorrect - {}", username);
+            return ResponseUtil.failed(401, null, "Username or password is incorrect");
         } catch (org.springframework.security.core.AuthenticationException e) {
-            logger.warn("登录失败：认证异常 - {}: {}", username, e.getMessage());
-            return ResponseUtil.failed(401, null, "登录失败: " + e.getMessage());
-        }catch (Exception e) {
-            logger.error("登录失败：{}", e.getMessage());
-            return ResponseUtil.failed(500, null, "登录失败");
+            logger.warn("Login failed: Authentication exception - {}: {}", username, e.getMessage());
+            return ResponseUtil.failed(401, null, "Login failed: " + e.getMessage());
+        } catch (Exception e) {
+            logger.error("Login failed: {}", e.getMessage());
+            return ResponseUtil.failed(500, null, "Login failed");
         }
     }
 
@@ -149,7 +149,7 @@ public class AuthController {
 
             // 检查用户是否存在且为启用状态
             if (user == null) {
-                return ResponseUtil.failed(401, null, "账户不存在或已被禁用");
+                return ResponseUtil.failed(401, null, "Account does not exist or has been disabled");
             }
 
             userInfo.put("userId", user.getId());
