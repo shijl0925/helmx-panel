@@ -22,6 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.helmx.tutorial.docker.utils.GitUtil;
+
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -1779,7 +1781,21 @@ public class DockerClientUtil {
     /**
      * 构建镜像
      */
-    public Map<String, String> buildImage(String dockerfileContent, Set<String> tags, String buildArgs, Boolean pull, Boolean noCache, String labels, String envs, MultipartFile[] filesToUpload) {
+    public Map<String, String> buildImage(
+            String dockerfileContent,
+            String dockerfilePath,
+            String gitUrl,
+            String branch,
+            String username,
+            String password,
+            Set<String> tags,
+            String buildArgs,
+            Boolean pull,
+            Boolean noCache,
+            String labels,
+            String envs,
+            MultipartFile[] filesToUpload
+    ) {
         log.info("Starting image build process");
         Map<String, String> result = new HashMap<>();
         String taskId = UUID.randomUUID().toString();
@@ -1813,150 +1829,224 @@ public class DockerClientUtil {
         CompletableFuture.runAsync(() -> {
             task.setStatus("RUNNING");
 
-            // 预先拉取基础镜像
-            List<String> baseImages = extractBaseImageFromDockerfile(dockerfileContent);
-            if (!baseImages.isEmpty()) {
-                task.setMessage("基础镜像拉取中...");
-                for (String baseImage : baseImages) {
-                    try {
-                        doPullImage(client, task, baseImage);
-                    } catch (Exception e) {
-                        log.warn("Failed to pre-pull base image: {}", baseImage, e);
-                    }
-                }
-            }
+            String finalDockerfileContent = dockerfileContent;
+            Path gitTempDir = null;
 
-            Path tempDir = null;
             try {
-                // 创建临时目录和 Dockerfile
-                tempDir = Files.createTempDirectory("docker-build-");
-                Path dockerfilePath = tempDir.resolve("Dockerfile");
-                Files.writeString(dockerfilePath, dockerfileContent, StandardCharsets.UTF_8);
-
-                // 存储预处理的文件
-                log.info("Processing {} preloaded files", uploadedFiles.size());
-                for (Map.Entry<String, byte[]> entry : uploadedFiles.entrySet()) {
+                // 如果提供了gitUrl，则从Git仓库获取Dockerfile
+                if (gitUrl != null && !gitUrl.isEmpty()) {
                     try {
-                        String fileName = entry.getKey();
-                        byte[] fileContent = entry.getValue();
-                        Path targetPath = tempDir.resolve(fileName);
-                        log.info("Writing file: {} to {}", fileName, targetPath);
-                        Files.write(targetPath, fileContent);
-                    } catch (IOException e) {
-                        log.error("Failed to write file: {}", entry.getKey(), e);
-                        throw new RuntimeException("Failed to write file: " + entry.getKey(), e);
+                        gitTempDir = Files.createTempDirectory("git-build-");
+                        String gitBranch = (branch != null && !branch.isEmpty()) ? branch : "main";
+                        if (username != null && !username.isEmpty() && password != null && !password.isEmpty()) {
+                            GitUtil.cloneRepositoryWithAuth(gitUrl, username, password, gitBranch, gitTempDir);
+                        } else {
+                            GitUtil.cloneRepository(gitUrl, gitBranch, gitTempDir);
+                        }
+
+                        // 确定 Dockerfile 路径
+                        String dockerfileRelativePath = (dockerfilePath != null && !dockerfilePath.isEmpty())
+                                ? dockerfilePath
+                                : "Dockerfile";
+
+                        Path dockerfileFullPath = gitTempDir.resolve(dockerfileRelativePath);
+
+                        // 读取 Dockerfile 内容
+                        finalDockerfileContent = Files.readString(dockerfileFullPath);
+                        log.info("Successfully read Dockerfile from git repository: {}", dockerfileFullPath);
+                    } catch (Exception e) {
+                        log.error("Failed to clone or read from Git repository", e);
+                        task.setStatus("FAILED");
+                        task.setMessage("Git仓库克隆失败：" + e.getMessage());
+                        return;
                     }
                 }
 
-                // 添加调试代码
-                try (Stream<Path> files = Files.list(tempDir)) {
-                    log.info("Files in build context: {}", files.collect(Collectors.toList()));
+                // 预先拉取基础镜像
+                List<String> baseImages = extractBaseImageFromDockerfile(finalDockerfileContent);
+                if (!baseImages.isEmpty()) {
+                    task.setMessage("基础镜像拉取中...");
+                    for (String baseImage : baseImages) {
+                        try {
+                            doPullImage(client, task, baseImage);
+                        } catch (Exception e) {
+                            log.warn("Failed to pre-pull base image: {}", baseImage, e);
+                        }
+                    }
                 }
 
-                try (BuildImageCmd cmd = client.buildImageCmd()
-                        .withRemove(true)
-                        .withForcerm(true)
-                        .withDockerfile(dockerfilePath.toFile())
-                ) {
-                    // 设置标签
-                    cmd.withTags(tags);
+                Path tempDir = null;
+                try {
+                    // 创建临时目录
+                    tempDir = Files.createTempDirectory("docker-build-");
+                    Path dockerfilePathLocal = tempDir.resolve("Dockerfile");
+                    Files.writeString(dockerfilePathLocal, finalDockerfileContent, StandardCharsets.UTF_8);
 
-                    if (Boolean.TRUE.equals(pull)) {
-                        cmd.withPull(true);
-                    }
-                    if (Boolean.TRUE.equals(noCache)) {
-                        cmd.withNoCache(true);
-                    }
-                    // 安全处理 labels
-                    if (labels != null && !labels.isEmpty()) {
-                        cmd.withLabels(DockerClientUtil.stringsToMap(labels.split("\n")));
-                    }
-
-                    // 添加构建参数
-                    if (buildArgs != null && !buildArgs.isEmpty()) {
-                        for (String arg : buildArgs.split("\n")) {
-                            String[] keyValue = arg.split("=", 2);
-                            if (keyValue.length == 2) {
-                                cmd.withBuildArg(keyValue[0], keyValue[1]);
-                            } else {
-                                log.warn("Invalid build arg format: {}", arg);
-                            }
+                    // 存储预处理的文件
+                    log.info("Processing {} preloaded files", uploadedFiles.size());
+                    for (Map.Entry<String, byte[]> entry : uploadedFiles.entrySet()) {
+                        try {
+                            String fileName = entry.getKey();
+                            byte[] fileContent = entry.getValue();
+                            Path targetPath = tempDir.resolve(fileName);
+                            log.info("Writing file: {} to {}", fileName, targetPath);
+                            Files.write(targetPath, fileContent);
+                        } catch (IOException e) {
+                            log.error("Failed to write file: {}", entry.getKey(), e);
+                            throw new RuntimeException("Failed to write file: " + entry.getKey(), e);
                         }
                     }
 
-                    // 添加环境变量作为构建参数
-                    if (envs != null && !envs.isEmpty()) {
-                        for (String env : envs.split("\n")) {
-                            String[] keyValue = env.split("=", 2);
-                            if (keyValue.length == 2) {
-                                cmd.withBuildArg(keyValue[0], keyValue[1]);
-                            } else {
-                                log.warn("Invalid env format: {}", env);
-                            }
-                        }
+                    // 如果是从Git仓库构建，则将Git仓库的内容复制到构建上下文
+                    if (gitTempDir != null) {
+                        copyGitRepositoryContent(gitTempDir, tempDir);
                     }
 
-                    BuildImageResultCallback callback = new BuildImageResultCallback() {
-                        @Override
-                        public void onNext(BuildResponseItem item) {
-                            String stream = item.getStream();
-                            if (stream != null) {
-                                // 使用同步块确保线程安全
-                                synchronized (task) {
-                                    StringBuilder streamBuilder = task.getStreamBuilder();
-                                    if (streamBuilder == null) {
-                                        streamBuilder = new StringBuilder();
-                                        task.setStreamBuilder(streamBuilder);
-                                    }
-                                    streamBuilder.append(stream);
-                                    // 可选：限制最大长度防止内存溢出
-                                    if (streamBuilder.length() > 100000) { // 限制100KB
-                                        streamBuilder.delete(0, streamBuilder.length() - 80000); // 保留后80KB
-                                    }
+                    // 添加调试代码
+                    try (Stream<Path> files = Files.list(tempDir)) {
+                        log.info("Files in build context: {}", files.collect(Collectors.toList()));
+                    }
+
+                    try (BuildImageCmd cmd = client.buildImageCmd()
+                            .withRemove(true)
+                            .withForcerm(true)
+                            .withDockerfile(dockerfilePathLocal.toFile())
+                            .withBaseDirectory(tempDir.toFile())  // 设置构建上下文目录
+                    ) {
+                        // 设置标签
+                        cmd.withTags(tags);
+
+                        if (Boolean.TRUE.equals(pull)) {
+                            cmd.withPull(true);
+                        }
+                        if (Boolean.TRUE.equals(noCache)) {
+                            cmd.withNoCache(true);
+                        }
+                        // 安全处理 labels
+                        if (labels != null && !labels.isEmpty()) {
+                            cmd.withLabels(DockerClientUtil.stringsToMap(labels.split("\n")));
+                        }
+
+                        // 添加构建参数
+                        if (buildArgs != null && !buildArgs.isEmpty()) {
+                            for (String arg : buildArgs.split("\n")) {
+                                String[] keyValue = arg.split("=", 2);
+                                if (keyValue.length == 2) {
+                                    cmd.withBuildArg(keyValue[0], keyValue[1]);
+                                } else {
+                                    log.warn("Invalid build arg format: {}", arg);
                                 }
-                                log.info("Building image: {}", stream);
                             }
-                            super.onNext(item);
                         }
-                    };
 
-                    task.setMessage("镜像正在构建中...");
-                    cmd.exec(callback).awaitCompletion();
+                        // 添加环境变量作为构建参数
+                        if (envs != null && !envs.isEmpty()) {
+                            for (String env : envs.split("\n")) {
+                                String[] keyValue = env.split("=", 2);
+                                if (keyValue.length == 2) {
+                                    cmd.withBuildArg(keyValue[0], keyValue[1]);
+                                } else {
+                                    log.warn("Invalid env format: {}", env);
+                                }
+                            }
+                        }
 
-                    // 镜像构建完成, 更新任务状态
-                    task.setStatus("SUCCESS");
-                    task.setMessage("镜像构建成功");
-                    task.setEndTime(LocalDateTime.now());
+                        BuildImageResultCallback callback = new BuildImageResultCallback() {
+                            @Override
+                            public void onNext(BuildResponseItem item) {
+                                String stream = item.getStream();
+                                if (stream != null) {
+                                    // 使用同步块确保线程安全
+                                    synchronized (task) {
+                                        StringBuilder streamBuilder = task.getStreamBuilder();
+                                        if (streamBuilder == null) {
+                                            streamBuilder = new StringBuilder();
+                                            task.setStreamBuilder(streamBuilder);
+                                        }
+                                        streamBuilder.append(stream);
+                                        // 可选：限制最大长度防止内存溢出
+                                        if (streamBuilder.length() > 100000) { // 限制100KB
+                                            streamBuilder.delete(0, streamBuilder.length() - 80000); // 保留后80KB
+                                        }
+                                    }
+                                    log.info("Building image: {}", stream);
+                                }
+                                super.onNext(item);
+                            }
+                        };
 
-//                    // 清理虚悬镜像
-//                    cleanupDanglingImages(client);
+                        task.setMessage("镜像正在构建中...");
+                        cmd.exec(callback).awaitCompletion();
 
-                    log.info("Successfully built image: {}", tags);
+                        // 镜像构建完成, 更新任务状态
+                        task.setStatus("SUCCESS");
+                        task.setMessage("镜像构建成功");
+                        task.setEndTime(LocalDateTime.now());
+
+                        log.info("Successfully built image: {}", tags);
+                    }
+                } catch (InterruptedException e) {
+                    task.setStatus("FAILED");
+                    task.setMessage("镜像构建失败：线程被中断");
+
+                    log.error("Interrupted while building image: {}", e.getMessage());
+                    Thread.currentThread().interrupt(); // 恢复中断状态
+                } catch (Exception e) {
+                    task.setStatus("FAILED");
+                    task.setMessage("镜像构建失败：" + e.getMessage());
+
+                    log.error("Error building image: {}", e.getMessage());
+                } finally {
+                    // 清理临时目录
+                    if (tempDir != null) {
+                        try {
+                            deleteTempDirectory(tempDir);
+                        } catch (IOException e) {
+                            log.warn("Failed to delete temp directory: {}", tempDir, e);
+                        }
+                    }
                 }
-            } catch (InterruptedException e) {
-                task.setStatus("FAILED");
-                task.setMessage("镜像构建失败：线程被中断");
-
-                log.error("Interrupted while building image: {}", e.getMessage());
-                Thread.currentThread().interrupt(); // 恢复中断状态
-            } catch (Exception e) {
-                task.setStatus("FAILED");
-                task.setMessage("镜像构建失败：" + e.getMessage());
-
-                log.error("Error building image: {}", e.getMessage());
             } finally {
-                // 清理临时目录
-                if (tempDir != null) {
+                // 清理Git临时目录
+                if (gitTempDir != null) {
                     try {
-                        deleteTempDirectory(tempDir);
-                    } catch (IOException e) {
-                        log.warn("Failed to delete temp directory: {}", tempDir, e);
+                        GitUtil.deleteTempDirectory(gitTempDir);
+                    } catch (Exception e) {
+                        log.warn("Failed to delete git temp directory: {}", gitTempDir, e);
                     }
                 }
             }
         });
 
         return result;
+    }
+
+    /**
+     * 复制Git仓库内容到构建目录
+     */
+    private void copyGitRepositoryContent(Path sourceDir, Path targetDir) throws IOException {
+        log.info("Copying Git repository content from {} to {}", sourceDir, targetDir);
+
+        Files.walk(sourceDir)
+                .filter(path -> !path.equals(sourceDir)) // 排除源目录本身
+                .forEach(sourcePath -> {
+                    try {
+                        Path relativePath = sourceDir.relativize(sourcePath);
+                        Path targetPath = targetDir.resolve(relativePath);
+
+                        // 创建目标目录
+                        if (Files.isDirectory(sourcePath)) {
+                            Files.createDirectories(targetPath);
+                        } else {
+                            // 复制文件
+                            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    } catch (IOException e) {
+                        log.warn("Failed to copy file: {}", sourcePath, e);
+                    }
+                });
+
+        log.info("Git repository content copied successfully");
     }
 
     /**
