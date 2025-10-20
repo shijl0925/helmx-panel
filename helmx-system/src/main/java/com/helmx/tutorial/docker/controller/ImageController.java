@@ -230,7 +230,12 @@ public class ImageController {
     @PostMapping(value = "/build")
     public ResponseEntity<Result> buildDockerImage(
             @RequestParam() String host,
-            @RequestParam() String dockerfile,
+            @RequestParam(required = false) String dockerfile,
+            @RequestParam(required = false) String dockerfilePath,
+            @RequestParam(required = false) String gitUrl,
+            @RequestParam(required = false) String branch,
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) String password,
             @RequestParam(required = false) String buildArgs,
             @RequestParam(required = false) String envs,
             @RequestParam(required = false) Boolean pull,
@@ -242,7 +247,21 @@ public class ImageController {
         dockerClientUtil.setCurrentHost(host);
 
         Set<String> tagSet = new HashSet<>(Arrays.asList(tags));
-        Map<String, String> result = dockerClientUtil.buildImage(dockerfile, tagSet, buildArgs, pull, noCache, labels, envs, files);
+        Map<String, String> result = dockerClientUtil.buildImage(
+                dockerfile,
+                dockerfilePath,
+                gitUrl,
+                branch,
+                username,
+                password,
+                tagSet,
+                buildArgs,
+                pull,
+                noCache,
+                labels,
+                envs,
+                files
+        );
         return ResponseUtil.success(result);
     }
 
