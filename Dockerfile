@@ -14,7 +14,7 @@ WORKDIR /backend-build
 COPY . .
 
 # Package backend
-RUN --mount=type=cache,target=/root/.m2 mvn clean package -DskipTests
+RUN mvn clean package -DskipTests
 
 # Final Monolithic Application Stage
 FROM openjdk:21 AS monolithic
