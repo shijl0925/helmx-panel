@@ -2315,6 +2315,41 @@ public class DockerClientUtil {
         }
     }
 
+    /**
+     * 从tar文件导入镜像
+     * @param imageTarInputStream 镜像tar文件的输入流
+     * @return 导入结果
+     */
+    public Map<String, Object> importImage(InputStream imageTarInputStream) {
+        Map<String, Object> result = new HashMap<>();
+
+        try (LoadImageCmd cmd = getCurrentDockerClient().loadImageCmd(imageTarInputStream)) {
+            cmd.exec();
+
+            result.put("status", "success");
+            result.put("message", "镜像导入成功");
+        } catch (Exception e) {
+            log.error("Failed to import image", e);
+            result.put("status", "failed");
+            result.put("message", "镜像导入失败: " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * 导出镜像到tar文件
+     * @param imageName 镜像ID或名称
+     * @return 镜像tar文件的字节数组
+     */
+    public InputStream exportImage(String imageName) {
+        try (SaveImageCmd cmd = getCurrentDockerClient().saveImageCmd(imageName)) {
+
+            return cmd.exec();
+        } catch (Exception e) {
+            log.error("Failed to export image: {}", imageName, e);
+            throw new RuntimeException("镜像导出失败: " + e.getMessage(), e);
+        }
+    }
     // createImageCmd
-    // saveImageCmd
 }
