@@ -14,8 +14,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.util.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 @RestController
 @RequestMapping("/api/v1/ops/images")
@@ -283,5 +288,61 @@ public class ImageController {
         result.put("stream", task.getStream());
 
         return ResponseUtil.success(result);
+    }
+
+    @Operation(summary = "Import Docker Image from tar file")
+    @PostMapping("/import")
+    public ResponseEntity<Result> importDockerImage(
+            @RequestParam String host,
+            @RequestParam("file") MultipartFile imageTarFile) {
+
+        dockerClientUtil.setCurrentHost(host);
+
+        try {
+            try (InputStream inputStream = imageTarFile.getInputStream()) {
+                Map<String, Object> result = dockerClientUtil.importImage(inputStream);
+
+                if ("success".equals(result.get("status"))) {
+                    return ResponseUtil.success(result);
+                } else {
+                    return ResponseUtil.failed(500, result, (String) result.get("message"));
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to import image", e);
+            return ResponseUtil.failed(500, null, "镜像导入失败: " + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "Export Docker Image to tar file")
+    @PostMapping("/export")
+    public ResponseEntity<StreamingResponseBody> exportDockerImage(@RequestBody ExportImageRequest criteria) {
+        String host = criteria.getHost();
+        String imageName = criteria.getImageName();
+        String filename = criteria.getFilename();
+
+        // 将 host 信息传递到异步线程中
+        final String hostForAsync = host;
+        final String imageNameForAsync = imageName;
+
+        StreamingResponseBody stream = outputStream -> {
+            dockerClientUtil.setCurrentHost(hostForAsync);
+            try (InputStream imageInputStream = dockerClientUtil.exportImage(imageNameForAsync)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = imageInputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+                outputStream.flush();
+            } catch (Exception e) {
+                log.error("Error streaming image data", e);
+                throw e;
+            }
+        };
+
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                .header("Content-Type", "application/x-tar")
+                .body(stream);
     }
 }
