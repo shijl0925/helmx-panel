@@ -1756,7 +1756,8 @@ public class DockerClientUtil {
     /**
      * 清理虚悬镜像（无tag的中间镜像）
      */
-    private void cleanupDanglingImages(DockerClient client) {
+    private long cleanupDanglingImages(DockerClient client) {
+        long totalSize = 0L;
         try {
             // 获取所有虚悬镜像（dangling images）
             List<Image> danglingImages = client.listImagesCmd()
@@ -1768,6 +1769,9 @@ public class DockerClientUtil {
                 try {
                     client.removeImageCmd(image.getId()).exec();
                     log.info("Removed dangling image: {}", image.getId());
+
+                    long imageSize = image.getSize() != null ? image.getSize() : 0L;
+                    totalSize += imageSize;
                 } catch (Exception e) {
                     log.warn("Failed to remove dangling image {}: {}", image.getId(), e.getMessage());
                 }
@@ -1775,6 +1779,8 @@ public class DockerClientUtil {
         } catch (Exception e) {
             log.warn("Failed to cleanup dangling images: {}", e.getMessage());
         }
+        log.info("Total size of removed dangling images: {} bytes", totalSize);
+        return totalSize;
     }
 
     /**
@@ -2102,18 +2108,7 @@ public class DockerClientUtil {
 
             if (pruneTypeStr.equals("IMAGES")) {
                 // 获取虚悬镜像列表(指那些没有被任何容器引用的镜像，通常这些镜像的仓库名（镜像名）和标签（TAG）都是<none>)
-                List<Image> images = getCurrentDockerClient().listImagesCmd().withDanglingFilter(true).exec();
-                log.info("Dangling image: {}", images);
-                long totalSize = 0L;
-                for (Image image : images) {
-                    try {
-                        long imageSize = image.getSize() != null ? image.getSize() : 0L;
-                        totalSize += imageSize;
-                        getCurrentDockerClient().removeImageCmd(image.getId()).exec();
-                    } catch (Exception e) {
-                        log.error("Failed to remove image: {}", image.getId(), e);
-                    }
-                }
+                long totalSize = cleanupDanglingImages(getCurrentDockerClient());
                 size += totalSize;
             }
 

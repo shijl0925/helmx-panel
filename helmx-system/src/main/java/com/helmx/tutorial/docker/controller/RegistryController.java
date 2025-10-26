@@ -125,6 +125,10 @@ public class RegistryController {
     @GetMapping("/{id}")
     public ResponseEntity<Result> GetRegistry(@PathVariable Long id) {
         Registry registry = registryMapper.selectById(id);
+        if (registry == null) {
+            return ResponseUtil.failed(404, null, "Registry not found");
+        }
+        registry.setPassword(null);
 
         return ResponseUtil.success(registry);
     }
@@ -154,6 +158,9 @@ public class RegistryController {
             registry.setPassword(null);
         }
         registryMapper.updateById(registry);
+
+        // Redact sensitive credentials before responding
+        registry.setPassword(null);
 
         return ResponseUtil.success(registry);
     }
