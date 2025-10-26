@@ -85,7 +85,16 @@ public class DockerConnectionManager {
 
             // 配置TLS
             if (tlsVerify) {
-                String envName = dockerEnv.getName().replaceAll("[/\\\\]", "");
+                if (dockerEnv == null) {
+                    throw new RuntimeException("DockerEnv is null but TLS verification is enabled for host: " + host);
+                }
+                String envName = dockerEnv.getName();
+                if (envName == null || envName.isEmpty() || envName.contains("..") || envName.contains("/") || envName.contains("\\")) {
+                    throw new IllegalArgumentException("Invalid environment name: " + envName);
+                }
+                envName = envName.replaceAll("[/\\\\]", "");
+                // envName = envName.replaceAll("[^a-zA-Z0-9._-]", ""); // 只保留安全字符
+                // String envName = dockerEnv.getName().replaceAll("[/\\\\]", "");
                 String certPath = Paths.get(dockerCertPath, envName, "certs").toString();
                 configBuilder.withDockerTlsVerify(true)
                         .withDockerCertPath(certPath);

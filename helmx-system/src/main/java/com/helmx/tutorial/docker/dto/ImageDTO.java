@@ -9,7 +9,6 @@ import com.github.dockerjava.api.model.Image;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.Objects;
 
 @Data
 public class ImageDTO {

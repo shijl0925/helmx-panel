@@ -1,8 +1,10 @@
 package com.helmx.tutorial.docker.websocket;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -23,7 +25,7 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
     private final ConcurrentHashMap<String, TerminalSession> sessions = new ConcurrentHashMap<>();
 
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+    public void afterConnectionEstablished(@NonNull WebSocketSession session) throws Exception {
         log.info("Terminal WebSocket connection established: {}", session.getId());
 
         // 提取 token（从查询参数或头信息）
@@ -76,7 +78,15 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
     }
 
     private String extractContainerIdFromPath(WebSocketSession session) {
+        if (session.getUri() == null) {
+            log.warn("WebSocket session URI is null");
+            return null;
+        }
         String path = session.getUri().getPath();
+        if (path == null || path.isEmpty()) {
+            log.warn("WebSocket session path is null");
+            return null;
+        }
         // 提取路径中的containerId，例如：/api/v1/ops/containers/terminal/{containerId}
         String[] pathParts = path.split("/");
         if (pathParts.length > 0) {
@@ -86,7 +96,7 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    protected void handleTextMessage(@NonNull WebSocketSession session, @NonNull TextMessage message) throws Exception {
         TerminalSession terminalSession = sessions.get(session.getId());
         if (terminalSession != null) {
             // 将前端输入发送到容器
@@ -95,7 +105,7 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+    public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) throws Exception {
         log.info("Terminal WebSocket connection closed: {}", session.getId());
         TerminalSession terminalSession = sessions.remove(session.getId());
         if (terminalSession != null) {
@@ -104,7 +114,7 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
     }
 
     @Override
-    public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+    public void handleTransportError(@NonNull WebSocketSession session, @NonNull Throwable exception) throws Exception {
         log.error("Terminal WebSocket transport error: {}", session.getId(), exception);
         try {
             TerminalSession terminalSession = sessions.remove(session.getId());

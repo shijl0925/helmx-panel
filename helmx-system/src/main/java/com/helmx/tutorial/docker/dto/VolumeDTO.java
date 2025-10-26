@@ -1,7 +1,6 @@
 package com.helmx.tutorial.docker.dto;
 
 import com.github.dockerjava.api.command.InspectVolumeResponse;
-import com.github.dockerjava.api.model.Volume;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 

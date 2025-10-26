@@ -6,6 +6,7 @@ import org.springframework.beans.factory.DisposableBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.core.env.Environment;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -111,7 +112,7 @@ public class SpringBeanHolder implements ApplicationContextAware, DisposableBean
     }
 
     @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+    public void setApplicationContext(@NonNull ApplicationContext applicationContext) throws BeansException {
         if (SpringBeanHolder.applicationContext != null) {
             log.warn("SpringContextHolder中的ApplicationContext被覆盖, 原有ApplicationContext为:" + SpringBeanHolder.applicationContext);
         }

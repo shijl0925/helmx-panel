@@ -8,6 +8,7 @@ import com.github.dockerjava.api.model.Frame;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -27,13 +28,13 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
     private final Map<String, LogContainerCmd> activeCommands = new ConcurrentHashMap<>();
 
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+    public void afterConnectionEstablished(@NonNull WebSocketSession session) throws Exception {
         // 连接建立后的处理
         log.info("WebSocket connection established for session: {}", session.getId());
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    protected void handleTextMessage(@NonNull WebSocketSession session, @NonNull TextMessage message) throws Exception {
         // 处理客户端发送的消息（包含容器日志请求参数）
         String payload = message.getPayload();
         // 解析payload获取containerId, host, tail等参数
@@ -129,7 +130,7 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+    public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) throws Exception {
         log.info("WebSocket connection closed for session: {}, status: {}", session.getId(), status);
 
         // 清理活动的命令
