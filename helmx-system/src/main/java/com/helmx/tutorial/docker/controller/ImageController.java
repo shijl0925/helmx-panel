@@ -143,7 +143,7 @@ public class ImageController {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
-        Map<String, String> result = dockerClientUtil.pullImageIfNotExists(criteria.getImageName());
+        Map<String, String> result = dockerClientUtil.pullImageIfNotExists(criteria.getImageName(), false);
 
         return ResponseUtil.success(result);
     }

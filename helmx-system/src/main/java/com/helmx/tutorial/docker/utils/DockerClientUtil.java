@@ -491,7 +491,7 @@ public class DockerClientUtil {
     /**
      * 拉取镜像（如果不存在）
      */
-    public Map<String, String> pullImageIfNotExists(String imageName) throws InterruptedException {
+    public Map<String, String> pullImageIfNotExists(String imageName, Boolean checkIfExists) throws InterruptedException {
         Map<String, String> result = new HashMap<>();
         result.put("imageName", imageName);
 
@@ -509,19 +509,21 @@ public class DockerClientUtil {
 
         DockerClient client = getCurrentDockerClient();
 
-        try (InspectImageCmd cmd = client.inspectImageCmd(imageName)) {
-            // 检查镜像是否存在
-            cmd.exec();
-            log.info("Image {} already exists", imageName);
+        if (checkIfExists != null && checkIfExists) {
+            try (InspectImageCmd cmd = client.inspectImageCmd(imageName)) {
+                // 检查镜像是否存在
+                cmd.exec();
+                log.info("Image {} already exists", imageName);
 
-            task.setStatus("SUCCESS");
-            task.setMessage("镜像拉取成功");
-            task.setEndTime(LocalDateTime.now());
+                task.setStatus("SUCCESS");
+                task.setMessage("镜像拉取成功");
+                task.setEndTime(LocalDateTime.now());
 
-            return result; // 如果镜像存在，直接返回
-        } catch (Exception e) {
-            // 镜像不存在，继续执行拉取操作
-            log.info("Image {} not found, pulling...", imageName);
+                return result; // 如果镜像存在，直接返回
+            } catch (Exception e) {
+                // 镜像不存在，继续执行拉取操作
+                log.info("Image {} not found, pulling...", imageName);
+            }
         }
 
         // 镜像不存在，异步执行拉取操作
