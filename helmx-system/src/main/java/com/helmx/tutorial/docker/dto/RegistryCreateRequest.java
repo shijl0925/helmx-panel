@@ -8,11 +8,11 @@ import lombok.Data;
 public class RegistryCreateRequest {
 
     @ApiModelProperty(value = "名称")
-    @NotBlank(message = "名称不能为空")
+    @NotBlank(message = "name cannot be blank")
     private String name;
 
     @ApiModelProperty(value = "URL")
-    @NotBlank(message = "URL不能为空")
+    @NotBlank(message = "url cannot be blank")
     private String url;
 
     @ApiModelProperty(value = "用户名")

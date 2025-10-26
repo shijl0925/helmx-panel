@@ -6,6 +6,7 @@ import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 import com.github.dockerjava.api.model.Network;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -25,7 +26,7 @@ public class NetworkController {
 
     @Operation(summary = "Get all Docker Networks")
     @PostMapping("/all")
-    public ResponseEntity<Result> SearchDockerNetworks(@RequestBody NetworkQueryRequest criteria) {
+    public ResponseEntity<Result> SearchDockerNetworks(@Valid @RequestBody NetworkQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -47,7 +48,7 @@ public class NetworkController {
 
     @Operation(summary = "Create new docker network")
     @PostMapping("")
-    public ResponseEntity<Result> CreateNewDockerNetwork(@RequestBody NetworkCreateRequest criteria) {
+    public ResponseEntity<Result> CreateNewDockerNetwork(@Valid @RequestBody NetworkCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -66,7 +67,7 @@ public class NetworkController {
 
     @Operation(summary = "Get Docker Network Info")
     @PostMapping("/info")
-    public ResponseEntity<Result> GetDockerNetworkInfo(@RequestBody NetworkInfoRequest criteria) {
+    public ResponseEntity<Result> GetDockerNetworkInfo(@Valid @RequestBody NetworkInfoRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -77,7 +78,7 @@ public class NetworkController {
 
     @Operation(summary = "Remove Docker Network")
     @PostMapping("/remove")
-    public ResponseEntity<Result> removeDockerNetwork(@RequestBody removeNetworkRequest criteria) {
+    public ResponseEntity<Result> removeDockerNetwork(@Valid @RequestBody removeNetworkRequest criteria) {
         String[] names = criteria.getNames();
         Map<String, Object> result = new HashMap<>();
 

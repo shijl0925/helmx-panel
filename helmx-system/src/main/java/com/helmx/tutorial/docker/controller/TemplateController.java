@@ -14,6 +14,7 @@ import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 import io.swagger.annotations.ApiParam;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -67,7 +68,7 @@ public class TemplateController {
 
     @Operation(summary = "创建新模板")
     @PostMapping("")
-    public ResponseEntity<Result> CreateTemplate(@RequestBody TemplateCreateRequest request) {
+    public ResponseEntity<Result> CreateTemplate(@Valid @RequestBody TemplateCreateRequest request) {
         // 检查名称是否重复
         LambdaQueryWrapper<Template> nameQuery = new LambdaQueryWrapper<>();
         nameQuery.eq(Template::getName, request.getName());

@@ -9,6 +9,7 @@ import com.helmx.tutorial.docker.mapper.RegistryMapper;
 import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -46,7 +47,7 @@ public class RegistryController {
 
     @Operation(summary = "Create a new registry")
     @PostMapping("")
-    public ResponseEntity<Result> CreateRegistry(@RequestBody RegistryCreateRequest request) {
+    public ResponseEntity<Result> CreateRegistry(@Valid @RequestBody RegistryCreateRequest request) {
         // 检查名称是否重复
         LambdaQueryWrapper<Registry> nameQuery = new LambdaQueryWrapper<>();
         nameQuery.eq(Registry::getName, request.getName());
@@ -77,7 +78,7 @@ public class RegistryController {
 
     @Operation(summary = "Test registry connect")
     @PostMapping("/test_connect")
-    public ResponseEntity<Result> TestConnectRegistry(@RequestBody RegistryConnectRequest request) throws IOException {
+    public ResponseEntity<Result> TestConnectRegistry(@Valid @RequestBody RegistryConnectRequest request) throws IOException {
         Map<String, Object> result = new HashMap<>();
         try {
             String registryUrl = request.getUrl();
@@ -135,7 +136,7 @@ public class RegistryController {
 
     @Operation(summary = "Update registry by ID")
     @PutMapping("/{id}")
-    public ResponseEntity<Result> UpdateRegistryById(@PathVariable Long id, @RequestBody RegistryCreateRequest request) {
+    public ResponseEntity<Result> UpdateRegistryById(@PathVariable Long id, @Valid @RequestBody RegistryCreateRequest request) {
         Registry registry = registryMapper.selectById(id);
 
         if (registry == null) {

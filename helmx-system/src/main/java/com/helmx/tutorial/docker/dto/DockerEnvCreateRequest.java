@@ -8,6 +8,7 @@ import lombok.Data;
 public class DockerEnvCreateRequest {
 
     @ApiModelProperty(value = "名称")
+    @NotBlank(message = "Name cannot be blank")
     @NotBlank(message = "名称不能为空")
     private String name;
 
@@ -15,7 +16,7 @@ public class DockerEnvCreateRequest {
     private String remark;
 
     @ApiModelProperty(value = "地址")
-    @NotBlank(message = "地址不能为空")
+    @NotBlank(message = "Address cannot be blank")
     private String host;
 
     // 新增TLS相关字段

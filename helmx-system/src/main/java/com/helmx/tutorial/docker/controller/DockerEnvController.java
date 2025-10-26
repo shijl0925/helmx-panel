@@ -14,6 +14,7 @@ import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 import io.swagger.annotations.ApiParam;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,7 +78,7 @@ public class DockerEnvController {
 
     @Operation(summary = "Create a new env")
     @PostMapping("")
-    public ResponseEntity<Result> CreateDockerEnv(@RequestBody DockerEnvCreateRequest request) {
+    public ResponseEntity<Result> CreateDockerEnv(@Valid @RequestBody DockerEnvCreateRequest request) {
         // 检查名称是否重复
         LambdaQueryWrapper<DockerEnv> nameQuery = new LambdaQueryWrapper<>();
         nameQuery.eq(DockerEnv::getName, request.getName());

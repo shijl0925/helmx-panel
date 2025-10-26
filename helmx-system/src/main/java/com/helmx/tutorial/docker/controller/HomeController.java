@@ -8,6 +8,7 @@ import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -33,7 +34,7 @@ public class HomeController {
 
     @Operation(summary = "Get Docker status")
     @PostMapping("/docker_status")
-    public ResponseEntity<Result> GetDockerStatus(@RequestBody StatusRequest criteria) {
+    public ResponseEntity<Result> GetDockerStatus(@Valid @RequestBody StatusRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -85,7 +86,7 @@ public class HomeController {
 
     @Operation(summary = "Docker System Prune")
     @PostMapping("/prune")
-    public ResponseEntity<Result> DockerSystemPrune(@RequestBody PruneRequest criteria) {
+    public ResponseEntity<Result> DockerSystemPrune(@Valid @RequestBody PruneRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 

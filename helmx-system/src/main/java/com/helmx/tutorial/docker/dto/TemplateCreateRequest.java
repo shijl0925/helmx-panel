@@ -8,7 +8,7 @@ import lombok.Data;
 public class TemplateCreateRequest {
 
     @ApiModelProperty(value = "模板名称", required = true)
-    @NotBlank(message = "模板名称不能为空")
+    @NotBlank(message = "name cannot be blank")
     private String name;
 
     @ApiModelProperty(value = "环境描述")

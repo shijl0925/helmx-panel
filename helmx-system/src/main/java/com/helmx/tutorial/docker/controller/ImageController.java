@@ -8,6 +8,8 @@ import com.github.dockerjava.api.command.InspectImageResponse;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.Image;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +41,7 @@ public class ImageController {
 
     @Operation(summary = "Get all Docker images")
     @PostMapping("/all")
-    public ResponseEntity<Result> GetAllDockerImages(@RequestBody ImageQueryRequest criteria) {
+    public ResponseEntity<Result> GetAllDockerImages(@Valid @RequestBody ImageQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
         List<Image> images = dockerClientUtil.listImages().stream()
@@ -137,7 +139,7 @@ public class ImageController {
 
     @Operation(summary = "Pull Docker Image")
     @PostMapping("/pull")
-    public ResponseEntity<Result> PullDockerImage(@RequestBody ImagePullRequest criteria) throws InterruptedException {
+    public ResponseEntity<Result> PullDockerImage(@Valid @RequestBody ImagePullRequest criteria) throws InterruptedException {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -167,7 +169,7 @@ public class ImageController {
 
     @Operation(summary = "Push Docker Image")
     @PostMapping("/push")
-    public ResponseEntity<Result> PushDockerImage(@RequestBody ImagePushRequest criteria) {
+    public ResponseEntity<Result> PushDockerImage(@Valid @RequestBody ImagePushRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -198,7 +200,7 @@ public class ImageController {
 
     @Operation(summary = "Add tag for image")
     @PostMapping("/add_tag")
-    public ResponseEntity<Result> tagImage(@RequestBody ImageTagRequest criteria) {
+    public ResponseEntity<Result> tagImage(@Valid @RequestBody ImageTagRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -208,7 +210,7 @@ public class ImageController {
 
     @Operation(summary = "Remove Docker Image")
     @PostMapping("/remove")
-    public ResponseEntity<Result> removeDockerImage(@RequestBody removeImageRequest criteria) {
+    public ResponseEntity<Result> removeDockerImage(@Valid @RequestBody removeImageRequest criteria) {
         String imageId = criteria.getImageId();
         Boolean force = criteria.getForce();
 
@@ -313,7 +315,7 @@ public class ImageController {
 
     @Operation(summary = "Export Docker Image to tar file")
     @PostMapping("/export")
-    public ResponseEntity<StreamingResponseBody> exportDockerImage(@RequestBody ExportImageRequest criteria) {
+    public ResponseEntity<StreamingResponseBody> exportDockerImage(@Valid @RequestBody ExportImageRequest criteria) {
         String host = criteria.getHost();
         String imageName = criteria.getImageName();
         String filename = criteria.getFilename();

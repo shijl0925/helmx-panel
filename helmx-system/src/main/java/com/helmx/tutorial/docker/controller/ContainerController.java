@@ -58,7 +58,7 @@ public class ContainerController {
 
     @Operation(summary = "Search Docker Containers")
     @PostMapping("/search")
-    public ResponseEntity<Result> SearchDockerContainers(@RequestBody ContainerQueryRequest criteria) {
+    public ResponseEntity<Result> SearchDockerContainers(@Valid @RequestBody ContainerQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host); // "tcp://"+host+":2375"
 
@@ -201,7 +201,7 @@ public class ContainerController {
 
     @Operation(summary = "Copy file from container")
     @PostMapping("/copy/from")
-    public ResponseEntity<?> copyFileFromContainer(@RequestBody ContainerCopyRequest request) {
+    public ResponseEntity<?> copyFileFromContainer(@Valid @RequestBody ContainerCopyRequest request) {
         try {
             String host = request.getHost();
             dockerClientUtil.setCurrentHost(host);
@@ -247,7 +247,7 @@ public class ContainerController {
 
     @Operation(summary = "Operate Docker Container")
     @PostMapping("/operate")
-    public ResponseEntity<Result> OperateDockerContainer(@RequestBody ContainerOperation criteria) {
+    public ResponseEntity<Result> OperateDockerContainer(@Valid @RequestBody ContainerOperation criteria) {
         String operation = criteria.getOperation();
         String containerId = criteria.getContainerId();
         Map<String, Object> result = new HashMap<>();
@@ -277,7 +277,7 @@ public class ContainerController {
 
     @Operation(summary = "Get container logs")
     @PostMapping("/logs")
-    public ResponseEntity<Result> GetContainerLogs(@RequestBody ContainerLogRequest criteria) {
+    public ResponseEntity<Result> GetContainerLogs(@Valid @RequestBody ContainerLogRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -367,7 +367,7 @@ public class ContainerController {
 
     @Operation(summary = "Rename Docker Container")
     @PostMapping("/rename")
-    public ResponseEntity<Result> RenameDockerContainer(@RequestBody ContainerRenameRequest criteria) {
+    public ResponseEntity<Result> RenameDockerContainer(@Valid @RequestBody ContainerRenameRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -417,7 +417,7 @@ public class ContainerController {
 
     @Operation(summary = "Commit Docker Container")
     @PostMapping("/commit")
-    public ResponseEntity<Result> CommitDockerContainer(@RequestBody ContainerCommitRequest criteria) {
+    public ResponseEntity<Result> CommitDockerContainer(@Valid @RequestBody ContainerCommitRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -437,7 +437,7 @@ public class ContainerController {
 
     @Operation(summary = "Update container networks")
     @PostMapping("/networks")
-    public ResponseEntity<Result> updateContainerNetworks(@RequestBody ContainerNetworkUpdateRequest request) {
+    public ResponseEntity<Result> updateContainerNetworks(@Valid @RequestBody ContainerNetworkUpdateRequest request) {
         String containerId = request.getContainerId();
 
         String host = request.getHost();
@@ -471,7 +471,7 @@ public class ContainerController {
 
     @Operation(summary = "Disconnect container network")
     @PostMapping("/disconnect")
-    public ResponseEntity<Result> disconnectContainerNetwork(@RequestBody ContainerNetworkDisconnectRequest request) {
+    public ResponseEntity<Result> disconnectContainerNetwork(@Valid @RequestBody ContainerNetworkDisconnectRequest request) {
         String containerId = request.getContainerId();
         String networkName = request.getNetwork();
 

@@ -3,6 +3,7 @@ package com.helmx.tutorial.docker.controller;
 import com.helmx.tutorial.docker.dto.*;
 import com.github.dockerjava.api.command.InspectVolumeResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -51,7 +52,7 @@ public class VolumeController {
 
     @Operation(summary = "Search docker volumes")
     @PostMapping("/search")
-    public ResponseEntity<Result> SearchDockerVolumes(@RequestBody VolumeQueryRequest criteria) {
+    public ResponseEntity<Result> SearchDockerVolumes(@Valid @RequestBody VolumeQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -111,7 +112,7 @@ public class VolumeController {
 
     @Operation(summary = "Create new docker volume")
     @PostMapping("")
-    public ResponseEntity<Result> CreateNewDockerVolume(@RequestBody VolumeCreateRequest criteria) {
+    public ResponseEntity<Result> CreateNewDockerVolume(@Valid @RequestBody VolumeCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -130,7 +131,7 @@ public class VolumeController {
 
     @Operation(summary = "Get Docker Volume Info")
     @PostMapping("/info")
-    public ResponseEntity<Result> GetDockerVolumeInfo(@RequestBody VolumeInfoRequest criteria) {
+    public ResponseEntity<Result> GetDockerVolumeInfo(@Valid @RequestBody VolumeInfoRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -144,7 +145,7 @@ public class VolumeController {
 
     @Operation(summary = "Remove Docker Volume")
     @PostMapping("/remove")
-    public ResponseEntity<Result> removeDockerVolume(@RequestBody removeVolumeRequest criteria) {
+    public ResponseEntity<Result> removeDockerVolume(@Valid @RequestBody removeVolumeRequest criteria) {
         String[] names = criteria.getNames();
         Map<String, Object> result = new HashMap<>();
 
