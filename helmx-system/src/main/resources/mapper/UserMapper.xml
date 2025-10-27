@@ -4,20 +4,25 @@
 
 <mapper namespace="com.helmx.tutorial.system.mapper.UserMapper">
     <select id="checkUserPermissions" resultType="boolean">
-        SELECT EXISTS(
-        SELECT 1
+        SELECT CASE
+        WHEN COUNT(DISTINCT m.auth_code) = (SELECT COUNT(*) FROM (
+        <foreach collection="permissions" item="perm" separator=" UNION ALL ">
+            SELECT #{perm} as perm
+        </foreach>
+        ) temp) THEN 1
+        ELSE 0
+        END
         FROM tb_users u
         INNER JOIN tb_rbac_user_roles ur ON u.id = ur.user_id
         INNER JOIN tb_rbac_roles r ON ur.role_id = r.id
-        INNER JOIN tb_rbac_role_resources rr ON r.id = rr.role_id
-        INNER JOIN tb_rbac_resources res ON rr.resource_id = res.id
+        INNER JOIN tb_rbac_role_menus rm ON r.id = rm.role_id
+        INNER JOIN tb_rbac_menus m ON rm.menu_id = m.id
         WHERE u.id = #{userId}
         AND u.status = 1
         AND r.status = 1
-        AND res.code IN
+        AND m.auth_code IN
         <foreach collection="permissions" item="perm" open="(" separator="," close=")">
             #{perm}
         </foreach>
-        )
     </select>
 </mapper>
