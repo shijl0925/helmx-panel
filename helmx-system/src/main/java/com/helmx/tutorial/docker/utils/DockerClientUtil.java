@@ -346,7 +346,7 @@ public class DockerClientUtil {
                 public void onNext(Frame item) {
                     logs.append(new String(item.getPayload())).append("\n");
                 }
-            }).awaitCompletion();
+            }).awaitCompletion(3000, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // 保留中断状态
             throw new RuntimeException("获取容器日志被中断", e);
