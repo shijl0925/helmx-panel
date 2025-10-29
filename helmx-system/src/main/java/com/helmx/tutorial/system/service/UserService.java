@@ -53,9 +53,4 @@ public interface UserService extends IService<User> {
     Set<Menu> getUserMenus(Long userId);
 
     boolean isSuperAdmin(Long userId);
-
-    // 检查用户是否具有指定权限
-    boolean checkUserPermissions(Long userId, String... permissions);
-
-    boolean checkUserPermissions(Long userId, List<String> permissions);
 }

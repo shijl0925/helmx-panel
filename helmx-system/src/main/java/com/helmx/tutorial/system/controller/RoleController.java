@@ -11,7 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-// import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.dto.Result;
@@ -45,7 +45,7 @@ public class RoleController {
 
     @Operation(summary = "Get all roles")
     @GetMapping("")
-    // @PreAuthorize("@va.check('System:Role:Read')")
+    @PreAuthorize("@va.check('System:Role:List')")
     public ResponseEntity<Result> GetAllRoles(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String code,
@@ -102,7 +102,7 @@ public class RoleController {
 
     @Operation(summary = "Create a new role")
     @PostMapping("")
-    // @PreAuthorize("@va.check('System:Role:Create')")
+    @PreAuthorize("@va.check('System:Role:Create')")
     public ResponseEntity<Result> CreateRole(@RequestBody RoleCreateRequest roleRequest) {
         Role role = new Role();
 
@@ -140,7 +140,7 @@ public class RoleController {
 
     @Operation(summary = "Update role by ID")
     @PutMapping("/{id}")
-    // @PreAuthorize("@va.check('System:Role:Update')")
+    @PreAuthorize("@va.check('System:Role:Edit')")
     public ResponseEntity<Result> UpdateRoleById(@PathVariable Long id, @RequestBody RoleUpdateRequest roleRequest) {
         Role role = roleMapper.selectById(id);
         if (role == null) {
@@ -180,7 +180,7 @@ public class RoleController {
 
     @Operation(summary = "Delete role by ID")
     @DeleteMapping("/{id}")
-    // @PreAuthorize("@va.check('System:Role:Delete')")
+    @PreAuthorize("@va.check('System:Role:Delete')")
     public ResponseEntity<Result> DeleteRoleById(@PathVariable Long id) {
         roleMapper.deleteById(id);
         return ResponseUtil.success(null);

@@ -12,7 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-// import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -50,7 +50,7 @@ public class UserController {
 
     @Operation(summary = "Get all users")
     @GetMapping("")  // @RequestMapping(value = "", method = RequestMethod.GET)
-    // @PreAuthorize("@va.check('System:User:Read')")
+    @PreAuthorize("@va.check('System:User:List')")
     public ResponseEntity<Result> GetAllUsers(
             @RequestParam(defaultValue = "1") @ApiParam(value = "当前页码") Integer page,
             @RequestParam(defaultValue = "10") @ApiParam(value = "每页数量") Integer pageSize,
@@ -125,7 +125,7 @@ public class UserController {
 
     @Operation(summary = "Create a new user")
     @PostMapping("")
-    // @PreAuthorize("@va.check('System:User:Create')")
+    @PreAuthorize("@va.check('System:User:Create')")
     public ResponseEntity<Result> CreateUser(@RequestBody UserCreateRequest resources) {
         if (resources == null) {
             return ResponseUtil.failed(400, null, "Invalid request");
@@ -159,7 +159,7 @@ public class UserController {
 
     @Operation(summary = "Get user by ID")
     @GetMapping("/{id}")
-    // @PreAuthorize("@va.check('System:User:Read')")
+    @PreAuthorize("@va.check('System:User:List')")
     public ResponseEntity<Result> GetUserById(@PathVariable Long id) {
         if (!userService.existsById(id)) {
             return ResponseUtil.failed(404, null, "User not found");
@@ -178,7 +178,7 @@ public class UserController {
 
     @Operation(summary = "Update user by ID")
     @PutMapping("/{id}")
-    // @PreAuthorize("@va.check('System:User:Update')")
+    @PreAuthorize("@va.check('System:User:Edit')")
     public ResponseEntity<Result> UpdateUserById(@PathVariable Long id, @RequestBody UserUpdateRequest userRequest) {
         if (!userService.existsById(id)) {
             return ResponseUtil.failed(404, null, "User not found");
@@ -210,7 +210,7 @@ public class UserController {
 
     @Operation(summary = "Update User Password")
     @PutMapping("/{id}/reset_password")
-    // @PreAuthorize("@va.check('System:User:Update')")
+    // @PreAuthorize("@va.check('System:User:Edit')")
     public ResponseEntity<Result> UpdateUserPassword(@PathVariable Long id, @RequestBody ResetPasswordRequest resetPasswordRequest) {
         // 基本输入验证
         if (resetPasswordRequest.getOldPassword() == null || resetPasswordRequest.getNewPassword() == null) {
@@ -252,7 +252,7 @@ public class UserController {
 
     @Operation(summary = "Delete user by ID")
     @DeleteMapping("/{id}")
-    // @PreAuthorize("@va.check('System:User:Delete')")
+    @PreAuthorize("@va.check('System:User:Delete')")
     public ResponseEntity<Result> DeleteUserById(@PathVariable Long id) {
         if (!userService.existsById(id)) {
             return ResponseUtil.failed(404, null, "User not found");

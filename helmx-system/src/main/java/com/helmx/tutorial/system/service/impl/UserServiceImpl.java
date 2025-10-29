@@ -239,35 +239,4 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public boolean isSuperAdmin(Long userId) {
         return userMapper.isSuperAdmin(userId);
     }
-
-    /**
-     * 检查用户是否具有指定权限
-     *
-     * @param userId 用户ID
-     * @param permissions 权限代码数组
-     * @return 如果用户具有所有指定权限返回true，否则返回false
-     */
-    public boolean checkUserPermissions(Long userId, String... permissions) {
-        if (userId == null || permissions == null || permissions.length == 0) {
-            return false;
-        }
-
-        List<String> permissionList = Arrays.asList(permissions);
-        return userMapper.checkUserPermissions(userId, permissionList);
-    }
-
-    /**
-     * 检查用户是否具有指定权限（使用列表参数）
-     *
-     * @param userId 用户ID
-     * @param permissions 权限代码列表
-     * @return 如果用户具有所有指定权限返回true，否则返回false
-     */
-    public boolean checkUserPermissions(Long userId, List<String> permissions) {
-        if (userId == null || permissions == null || permissions.isEmpty()) {
-            return false;
-        }
-
-        return userMapper.checkUserPermissions(userId, permissions);
-    }
 }

@@ -1,19 +1,15 @@
 package com.helmx.tutorial.security.configuration;
 
-//import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-//import com.baomidou.mybatisplus.core.toolkit.StringUtils;
+import com.helmx.tutorial.system.mapper.UserMapper;
 import com.helmx.tutorial.system.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
-//import com.helmx.tutorial.modules.system.entity.Resource;
-//import com.helmx.tutorial.modules.system.entity.User;
 import com.helmx.tutorial.utils.SecurityUtils;
 
 import java.util.*;
-//import java.util.stream.Collectors;
 
 @Slf4j
 @Service(value = "va")
@@ -21,8 +17,11 @@ public class AuthorityConfig {
 
     private final UserService userService;
 
-    public AuthorityConfig(UserService userService) {
+    private final UserMapper userMapper;
+
+    public AuthorityConfig(UserService userService, UserMapper userMapper) {
         this.userService = userService;
+        this.userMapper = userMapper;
     }
 
     /**
@@ -57,21 +56,8 @@ public class AuthorityConfig {
             return true;
         }
 
-//        // 方法1：通过用户ID查询用户接口权限，然后判断
-//        Set<Resource> resources = userService.getUserResources(userId);
-//        if (resources == null || resources.isEmpty()) {
-//            return false;
-//        }
-//        Set<String> resourceCodes = resources.stream()
-//                .map(Resource::getCode)
-//                .filter(Objects::nonNull)
-//                .filter(StringUtils::isNotBlank)
-//                .collect(Collectors.toSet());
-//        log.info("resourceCodes：{}", resourceCodes);
-//
-//        return resourceCodes.containsAll(Arrays.asList(permissions));
-
-        // 方法2: 使用 UserService 的 checkUserPermissions 方法
-        return userService.checkUserPermissions(userId, permissions);
+        // 直接使用 UserMapper 查询用户权限
+        Set<String> userPermissions = userMapper.selectUserPermissions(userId);
+        return userPermissions.containsAll(Arrays.asList(permissions));
     }
 }

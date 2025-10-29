@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-// import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.utils.ResponseUtil;
@@ -38,7 +38,7 @@ public class MenuController {
 
     @Operation(summary = "Get all menus")
     @GetMapping("")
-    // @PreAuthorize("@va.check('System:Menu:Read')")
+    @PreAuthorize("@va.check('System:Menu:List')")
     public ResponseEntity<Result> GetAllMenus() {
         List<Menu> menuTree = menuService.buildMenuTree();
         return ResponseUtil.success(menuTree);
@@ -46,7 +46,7 @@ public class MenuController {
 
     @Operation(summary = "Create a new menu")
     @PostMapping("")
-    // @PreAuthorize("@va.check('System:Menu:Create')")
+    @PreAuthorize("@va.check('System:Menu:Create')")
     public ResponseEntity<Result> CreateMenu(@RequestBody MenuCreateRequest menuRequest) {
         Menu menu = new Menu();
         menu.setName(menuRequest.getName());
@@ -109,7 +109,7 @@ public class MenuController {
 
     @Operation(summary = "Get menu by ID")
     @GetMapping("/{id}")
-    // @PreAuthorize("@va.check('System:Menu:Read')")
+    @PreAuthorize("@va.check('System:Menu:List')")
     public ResponseEntity<Result> GetMenuById(@PathVariable Long id) {
         Menu menu = menuService.getById(id);
         return menu != null ? ResponseUtil.success(menu) : ResponseUtil.failed(404, null, "Menu not found");
@@ -117,7 +117,7 @@ public class MenuController {
 
     @Operation(summary = "Update menu by ID")
     @PutMapping("/{id}")
-    // @PreAuthorize("@va.check('System:Menu:Update')")
+    @PreAuthorize("@va.check('System:Menu:Edit')")
     public ResponseEntity<Result> UpdateMenuById(@PathVariable Long id, @RequestBody MenuUpdateRequest menuRequest) {
         Menu menu = menuService.getById(id);
         if (menu == null) {
@@ -168,7 +168,7 @@ public class MenuController {
 
     @Operation(summary = "Delete menu by ID")
     @DeleteMapping("/{id}")
-    // @PreAuthorize("@va.check('System:Menu:Delete')")
+    @PreAuthorize("@va.check('System:Menu:Delete')")
     public ResponseEntity<Result> DeleteMenuById(@PathVariable Long id) {
         menuMapper.deleteById(id);
         return ResponseUtil.success(null);
