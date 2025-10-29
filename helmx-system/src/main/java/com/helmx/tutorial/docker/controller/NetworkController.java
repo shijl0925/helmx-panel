@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -26,6 +27,7 @@ public class NetworkController {
 
     @Operation(summary = "Get all Docker Networks")
     @PostMapping("/all")
+    @PreAuthorize("@va.check('Ops:Network:List')")
     public ResponseEntity<Result> SearchDockerNetworks(@Valid @RequestBody NetworkQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -48,6 +50,7 @@ public class NetworkController {
 
     @Operation(summary = "Create new docker network")
     @PostMapping("")
+    @PreAuthorize("@va.check('Ops:Network:Create')")
     public ResponseEntity<Result> CreateNewDockerNetwork(@Valid @RequestBody NetworkCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -67,6 +70,7 @@ public class NetworkController {
 
     @Operation(summary = "Get Docker Network Info")
     @PostMapping("/info")
+    @PreAuthorize("@va.check('Ops:Network:List')")
     public ResponseEntity<Result> GetDockerNetworkInfo(@Valid @RequestBody NetworkInfoRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -78,6 +82,7 @@ public class NetworkController {
 
     @Operation(summary = "Remove Docker Network")
     @PostMapping("/remove")
+    @PreAuthorize("@va.check('Ops:Network:Delete')")
     public ResponseEntity<Result> removeDockerNetwork(@Valid @RequestBody removeNetworkRequest criteria) {
         String[] names = criteria.getNames();
         Map<String, Object> result = new HashMap<>();

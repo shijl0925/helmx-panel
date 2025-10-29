@@ -18,6 +18,7 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -36,6 +37,7 @@ public class TemplateController {
 
     @Operation(summary = "搜索模板")
     @GetMapping("")
+    @PreAuthorize("@va.check('Ops:Template:List')")
     public ResponseEntity<Result> SearchTemplates(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) @ApiParam(value = "模板类型") String type,
@@ -68,6 +70,7 @@ public class TemplateController {
 
     @Operation(summary = "创建新模板")
     @PostMapping("")
+    @PreAuthorize("@va.check('Ops:Template:Create')")
     public ResponseEntity<Result> CreateTemplate(@Valid @RequestBody TemplateCreateRequest request) {
         // 检查名称是否重复
         LambdaQueryWrapper<Template> nameQuery = new LambdaQueryWrapper<>();
@@ -89,6 +92,7 @@ public class TemplateController {
 
     @Operation(summary = "根据ID更新模板")
     @PutMapping("/{id}")
+    @PreAuthorize("@va.check('Ops:Template:Edit')")
     public ResponseEntity<Result> UpdateTemplateById(@PathVariable Long id, @RequestBody TemplateUpdateRequest request) {
         Template template = templateService.getById(id);
         if (template == null) {
@@ -115,6 +119,7 @@ public class TemplateController {
 
     @Operation(summary = "根据ID删除模板")
     @DeleteMapping("/{id}")
+    @PreAuthorize("@va.check('Ops:Template:Delete')")
     public ResponseEntity<Result> DeleteTemplateById(@PathVariable Long id) {
         Template template = templateService.getById(id);
         if (template == null) {
@@ -128,6 +133,7 @@ public class TemplateController {
 
     @Operation(summary = "根据ID获取模板详情")
     @GetMapping("/{id}")
+    @PreAuthorize("@va.check('Ops:Template:List')")
     public ResponseEntity<Result> GetTemplateById(@PathVariable Long id) {
         Template template = templateService.getById(id);
         if (template == null) {

@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -86,6 +87,7 @@ public class HomeController {
 
     @Operation(summary = "Docker System Prune")
     @PostMapping("/prune")
+    @PreAuthorize("@va.check('Ops:Container:Prune', 'Ops:Image:Prune', 'Ops:Volume:Prune', 'Ops:Network:Prune')")
     public ResponseEntity<Result> DockerSystemPrune(@Valid @RequestBody PruneRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);

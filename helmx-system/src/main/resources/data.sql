@@ -57,6 +57,7 @@ INSERT IGNORE INTO tb_rbac_menus (id, created_at, updated_at, type, title, path,
   (40,NOW(), NOW(),'button','ops.docker.pruneContainers','',NULL,25,NULL,'DockerContainerPrune',1,NULL,'Ops:Container:Prune'),
   (41,NOW(), NOW(),'button','ops.docker.containerStats','',NULL,25,NULL,'DockerContainerStats',1,NULL,'Ops:Container:Stats'),
   (42,NOW(), NOW(),'button','ops.docker.uploadFile','',NULL,25,NULL,'DockerContainerUpload',1,NULL,'Ops:Container:Upload'),
+  (65,NOW(), NOW(),'button','ops.docker.inspect','',NULL,25,NULL,'DockerContainerInspect',1,NULL,'Ops:Container:Inspect'),
 
   -- Docker 镜像操作按钮
   (43,NOW(), NOW(),'button','ops.image.buildImage','',NULL,26,NULL,'DockerImageBuild',1,NULL,'Ops:Image:Build'),
@@ -65,6 +66,8 @@ INSERT IGNORE INTO tb_rbac_menus (id, created_at, updated_at, type, title, path,
   (46,NOW(), NOW(),'button','ops.image.deleteImage','',NULL,26,NULL,'DockerImageDelete',1,NULL,'Ops:Image:Delete'),
   (47,NOW(), NOW(),'button','ops.image.pruneImages','',NULL,26,NULL,'DockerImagePrune',1,NULL,'Ops:Image:Prune'),
   (48,NOW(), NOW(),'button','ops.image.tagImage','',NULL,26,NULL,'DockerImageTag',1,NULL,'Ops:Image:Tag'),
+  (66,NOW(), NOW(),'button','ops.image.importImages','',NULL,26,NULL,'DockerImageImport',1,NULL,'Ops:Image:Import'),
+  (67,NOW(), NOW(),'button','ops.image.exportImage','',NULL,26,NULL,'DockerImageExport',1,NULL,'Ops:Image:Export'),
 
   -- Docker 卷操作按钮
   (49,NOW(), NOW(),'button','ops.volume.createVolume','',NULL,27,NULL,'DockerVolumeCreate',1,NULL,'Ops:Volume:Create'),
@@ -94,8 +97,8 @@ INSERT IGNORE INTO tb_rbac_menus (id, created_at, updated_at, type, title, path,
 
 -- 插入角色菜单关联数据
 INSERT IGNORE INTO tb_rbac_role_menus (role_id, menu_id) VALUES
- (1, 1), (1, 2), (1, 3), (1, 4), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 23), (1, 24), (1, 25), (1, 26), (1, 27), (1, 28), (1, 29), (1, 30), (1, 31), (1, 32), (1, 33), (1, 34), (1, 35), (1, 36), (1, 37), (1, 38), (1, 39), (1, 40), (1, 41), (1, 42), (1, 43), (1, 44), (1, 45), (1, 46), (1, 47), (1, 48), (1, 49), (1, 50), (1, 51), (1, 52), (1, 53), (1, 54), (1, 55), (1, 56), (1, 57), (1, 58), (1, 59), (1, 60), (1, 61), (1, 62), (1, 63), (1, 64), -- 超级管理员拥有所有菜单权限
- (2, 1), (2, 2), (2, 3), (2, 4), (2, 6), (2, 7), (2, 9), (2, 10), (2, 12), (2, 13), (2, 23), (2, 24), (2, 25), (2, 26), (2, 27), (2, 28), (2, 32), (2, 33), (2, 34), (2, 35), (2, 36), (2, 37), (2, 38), (2, 39), (2, 40), (2, 41), (2, 42), (2, 43), (2, 44), (2, 45), (2, 46), (2, 47), (2, 48), (2, 49), (2, 50), (2, 51), (2, 52), (2, 53), (2, 54), (2, 55), -- 管理员
+ (1, 1), (1, 2), (1, 3), (1, 4), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 23), (1, 24), (1, 25), (1, 26), (1, 27), (1, 28), (1, 29), (1, 30), (1, 31), (1, 32), (1, 33), (1, 34), (1, 35), (1, 36), (1, 37), (1, 38), (1, 39), (1, 40), (1, 41), (1, 42), (1, 43), (1, 44), (1, 45), (1, 46), (1, 47), (1, 48), (1, 49), (1, 50), (1, 51), (1, 52), (1, 53), (1, 54), (1, 55), (1, 56), (1, 57), (1, 58), (1, 59), (1, 60), (1, 61), (1, 62), (1, 63), (1, 64), (1, 65), (1, 66), (1, 67), -- 超级管理员拥有所有菜单权限
+ (2, 1), (2, 2), (2, 3), (2, 4), (2, 6), (2, 7), (2, 9), (2, 10), (2, 12), (2, 13), (2, 23), (2, 24), (2, 25), (2, 26), (2, 27), (2, 28), (2, 32), (2, 33), (2, 34), (2, 35), (2, 36), (2, 37), (2, 38), (2, 39), (2, 40), (2, 41), (2, 42), (2, 43), (2, 44), (2, 45), (2, 46), (2, 47), (2, 48), (2, 49), (2, 50), (2, 51), (2, 52), (2, 53), (2, 54), (2, 55), (1, 65), (1, 66), (1, 67), -- 管理员
  (3, 1), (3, 2), (3, 3), (3, 4), (3, 23), (3, 24), (3, 25), (3, 26), (3, 27), (3, 28);  -- 普通用户
 
 -- 插入容器环境数据

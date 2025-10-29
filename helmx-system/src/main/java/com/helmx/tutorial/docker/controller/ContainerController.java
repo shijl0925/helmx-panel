@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
@@ -38,6 +39,7 @@ public class ContainerController {
 
     @Operation(summary = "Create Docker Container")
     @PostMapping("")
+    @PreAuthorize("@va.check('Ops:Container:Create')")
     public ResponseEntity<Result> CreateDockerContainer(@Valid @RequestBody ContainerCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -58,6 +60,7 @@ public class ContainerController {
 
     @Operation(summary = "Search Docker Containers")
     @PostMapping("/search")
+    @PreAuthorize("@va.check('Ops:Container:List')")
     public ResponseEntity<Result> SearchDockerContainers(@Valid @RequestBody ContainerQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host); // "tcp://"+host+":2375"
@@ -147,6 +150,7 @@ public class ContainerController {
 
     @Operation(summary = "Get Docker Container info")
     @PostMapping("/info")
+    @PreAuthorize("@va.check('Ops:Container:List')")
     public ResponseEntity<Result> GetDockerContainerInfo(@RequestBody ContainerInfoRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -162,6 +166,7 @@ public class ContainerController {
 
     @Operation(summary = "Get Docker Container stats")
     @PostMapping("/stats")
+    @PreAuthorize("@va.check('Ops:Container:Stats')")
     public ResponseEntity<Result> GetDockerContainerStats(@RequestBody ContainerInfoRequest criteria) {
         String containerId = criteria.getContainerId();
 
@@ -184,6 +189,7 @@ public class ContainerController {
 
     @Operation(summary = "Get Docker Container top")
     @PostMapping("/top")
+    @PreAuthorize("@va.check('Ops:Container:List')")
     public ResponseEntity<Result> GetDockerContainerTop(@RequestBody ContainerInfoRequest criteria) {
         String containerId = criteria.getContainerId();
 
@@ -201,6 +207,7 @@ public class ContainerController {
 
     @Operation(summary = "Copy file from container")
     @PostMapping("/copy/from")
+    @PreAuthorize("@va.check('Ops:Container:Download')")
     public ResponseEntity<?> copyFileFromContainer(@Valid @RequestBody ContainerCopyRequest request) {
         try {
             String host = request.getHost();
@@ -229,6 +236,7 @@ public class ContainerController {
 
     @Operation(summary = "Copy file to container")
     @PostMapping("/copy/to")
+    @PreAuthorize("@va.check('Ops:Container:Upload')")
     public ResponseEntity<Result> copyFileToContainer(
             @RequestParam("file") MultipartFile file,
             @RequestParam() String host,
@@ -247,6 +255,7 @@ public class ContainerController {
 
     @Operation(summary = "Operate Docker Container")
     @PostMapping("/operate")
+    @PreAuthorize("@va.check('Ops:Container:Operate')")
     public ResponseEntity<Result> OperateDockerContainer(@Valid @RequestBody ContainerOperation criteria) {
         String operation = criteria.getOperation();
         String containerId = criteria.getContainerId();
@@ -277,6 +286,7 @@ public class ContainerController {
 
     @Operation(summary = "Get container logs")
     @PostMapping("/logs")
+    @PreAuthorize("@va.check('Ops:Container:Logs')")
     public ResponseEntity<Result> GetContainerLogs(@Valid @RequestBody ContainerLogRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -290,6 +300,7 @@ public class ContainerController {
 
     @Operation(summary = "Stream container logs via SSE")
     @GetMapping(value = "/logs/stream/{containerId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PreAuthorize("@va.check('Ops:Container:Logs')")
     public SseEmitter streamContainerLogs(
             @RequestParam String host,
             @PathVariable String containerId,
@@ -367,6 +378,7 @@ public class ContainerController {
 
     @Operation(summary = "Rename Docker Container")
     @PostMapping("/rename")
+    @PreAuthorize("@va.check('Ops:Container:Edit')")
     public ResponseEntity<Result> RenameDockerContainer(@Valid @RequestBody ContainerRenameRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -385,6 +397,7 @@ public class ContainerController {
 
     @Operation(summary = "Get Docker Container inspect")
     @PostMapping("/inspect")
+    @PreAuthorize("@va.check('Ops:Container:Inspect')")
     public ResponseEntity<Result> GetDockerContainerInspect(@RequestBody ContainerInfoRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -397,6 +410,7 @@ public class ContainerController {
 
     @Operation(summary = "Update Docker Container")
     @PostMapping("/update")
+    @PreAuthorize("@va.check('Ops:Container:Edit')")
     public ResponseEntity<Result> UpdateDockerContainer(@Valid @RequestBody ContainerCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -417,6 +431,7 @@ public class ContainerController {
 
     @Operation(summary = "Commit Docker Container")
     @PostMapping("/commit")
+    @PreAuthorize("@va.check('Ops:Container:Commit')")
     public ResponseEntity<Result> CommitDockerContainer(@Valid @RequestBody ContainerCommitRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -437,6 +452,7 @@ public class ContainerController {
 
     @Operation(summary = "Update container networks")
     @PostMapping("/networks")
+    @PreAuthorize("@va.check('Ops:Container:Edit')")
     public ResponseEntity<Result> updateContainerNetworks(@Valid @RequestBody ContainerNetworkUpdateRequest request) {
         String containerId = request.getContainerId();
 
@@ -471,6 +487,7 @@ public class ContainerController {
 
     @Operation(summary = "Disconnect container network")
     @PostMapping("/disconnect")
+    @PreAuthorize("@va.check('Ops:Container:Edit')")
     public ResponseEntity<Result> disconnectContainerNetwork(@Valid @RequestBody ContainerNetworkDisconnectRequest request) {
         String containerId = request.getContainerId();
         String networkName = request.getNetwork();
@@ -487,6 +504,7 @@ public class ContainerController {
 
     @Operation(summary = "Execute command in Docker Container")
     @PostMapping("/exec")
+    @PreAuthorize("@va.check('Ops:Container:Exec')")
     public ResponseEntity<Result> ExecuteCommandInContainer(@RequestBody ContainerExecRequest request) {
         try {
             ContainerExecResponse response = dockerClientUtil.execCommand(request);

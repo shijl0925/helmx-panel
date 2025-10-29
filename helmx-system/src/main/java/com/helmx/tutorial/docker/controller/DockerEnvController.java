@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -39,6 +40,7 @@ public class DockerEnvController {
 
     @Operation(summary = "Get all envs")
     @GetMapping("/all")
+    @PreAuthorize("@va.check('Ops:DockerEnv:List')")
     public ResponseEntity<Result> GetAllDockerEnvs(@RequestParam(required = false) String name) {
         QueryWrapper<DockerEnv> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", 1);
@@ -49,6 +51,7 @@ public class DockerEnvController {
 
     @Operation(summary = "Search envs")
     @GetMapping("")
+    @PreAuthorize("@va.check('Ops:DockerEnv:List')")
     public ResponseEntity<Result> SearchDockerEnvs(
             @RequestParam(required = false) String name,
             @RequestParam(defaultValue = "1") @ApiParam(value = "当前页码") Integer page,
@@ -78,6 +81,7 @@ public class DockerEnvController {
 
     @Operation(summary = "Create a new env")
     @PostMapping("")
+    @PreAuthorize("@va.check('Ops:DockerEnv:Create')")
     public ResponseEntity<Result> CreateDockerEnv(@Valid @RequestBody DockerEnvCreateRequest request) {
         // 检查名称是否重复
         LambdaQueryWrapper<DockerEnv> nameQuery = new LambdaQueryWrapper<>();
@@ -107,6 +111,7 @@ public class DockerEnvController {
 
     @Operation(summary = "Update env by ID")
     @PutMapping("/{id}")
+    @PreAuthorize("@va.check('Ops:DockerEnv:Edit')")
     public ResponseEntity<Result> UpdateDockerEnvById(@PathVariable Long id, @RequestBody DockerEnvUpdateRequest request) {
         DockerEnv env = dockerEnvService.getById(id);
         if (env == null) {
@@ -135,6 +140,7 @@ public class DockerEnvController {
 
     @Operation(summary = "Delete env by ID")
     @DeleteMapping("/{id}")
+    @PreAuthorize("@va.check('Ops:DockerEnv:Delete')")
     public ResponseEntity<Result> DeleteDockerEnvById(@PathVariable Long id) {
         dockerEnvMapper.deleteById(id);
 

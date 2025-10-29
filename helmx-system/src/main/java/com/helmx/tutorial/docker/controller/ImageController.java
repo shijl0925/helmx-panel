@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
@@ -41,6 +42,7 @@ public class ImageController {
 
     @Operation(summary = "Get all Docker images")
     @PostMapping("/all")
+    @PreAuthorize("@va.check('Ops:Image:List')")
     public ResponseEntity<Result> GetAllDockerImages(@Valid @RequestBody ImageQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -55,6 +57,7 @@ public class ImageController {
 
     @Operation(summary = "Search Docker images")
     @PostMapping("/search")
+    @PreAuthorize("@va.check('Ops:Image:List')")
     public ResponseEntity<Result> SearchDockerImages(@RequestBody ImageQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -125,6 +128,7 @@ public class ImageController {
 
     @Operation(summary = "Get Docker Image Info")
     @PostMapping("/info")
+    @PreAuthorize("@va.check('Ops:Image:List')")
     public ResponseEntity<Result> GetDockerImageInfo(@RequestBody ImageInfoRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -139,6 +143,7 @@ public class ImageController {
 
     @Operation(summary = "Pull Docker Image")
     @PostMapping("/pull")
+    @PreAuthorize("@va.check('Ops:Image:Pull')")
     public ResponseEntity<Result> PullDockerImage(@Valid @RequestBody ImagePullRequest criteria) throws InterruptedException {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -169,6 +174,7 @@ public class ImageController {
 
     @Operation(summary = "Push Docker Image")
     @PostMapping("/push")
+    @PreAuthorize("@va.check('Ops:Image:Push')")
     public ResponseEntity<Result> PushDockerImage(@Valid @RequestBody ImagePushRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -200,6 +206,7 @@ public class ImageController {
 
     @Operation(summary = "Add tag for image")
     @PostMapping("/add_tag")
+    @PreAuthorize("@va.check('Ops:Image:Tag')")
     public ResponseEntity<Result> tagImage(@Valid @RequestBody ImageTagRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -210,6 +217,7 @@ public class ImageController {
 
     @Operation(summary = "Remove Docker Image")
     @PostMapping("/remove")
+    @PreAuthorize("@va.check('Ops:Image:Delete')")
     public ResponseEntity<Result> removeDockerImage(@Valid @RequestBody removeImageRequest criteria) {
         String imageId = criteria.getImageId();
         Boolean force = criteria.getForce();
@@ -232,6 +240,7 @@ public class ImageController {
 
     @Operation(summary = "Build Docker Image")
     @PostMapping(value = "/build")
+    @PreAuthorize("@va.check('Ops:Image:Build')")
     public ResponseEntity<Result> buildDockerImage(
             @RequestParam() String host,
             @RequestParam(required = false) String dockerfile,
@@ -291,6 +300,7 @@ public class ImageController {
 
     @Operation(summary = "Import Docker Image from tar file")
     @PostMapping("/import")
+    @PreAuthorize("@va.check('Ops:Image:Import')")
     public ResponseEntity<Result> importDockerImage(
             @RequestParam String host,
             @RequestParam("file") MultipartFile imageTarFile) {
@@ -315,6 +325,7 @@ public class ImageController {
 
     @Operation(summary = "Export Docker Image to tar file")
     @PostMapping("/export")
+    @PreAuthorize("@va.check('Ops:Image:Export')")
     public ResponseEntity<StreamingResponseBody> exportDockerImage(@Valid @RequestBody ExportImageRequest criteria) {
         String host = criteria.getHost();
         String imageName = criteria.getImageName();

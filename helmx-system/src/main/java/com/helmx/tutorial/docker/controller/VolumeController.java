@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
@@ -29,6 +30,7 @@ public class VolumeController {
 
     @Operation(summary = "List all Docker Volumes")
     @PostMapping("/all")
+    @PreAuthorize("@va.check('Ops:Volume:List')")
     public ResponseEntity<Result> listDockerVolumes(@RequestBody VolumeQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -52,6 +54,7 @@ public class VolumeController {
 
     @Operation(summary = "Search docker volumes")
     @PostMapping("/search")
+    @PreAuthorize("@va.check('Ops:Volume:List')")
     public ResponseEntity<Result> SearchDockerVolumes(@Valid @RequestBody VolumeQueryRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -112,6 +115,7 @@ public class VolumeController {
 
     @Operation(summary = "Create new docker volume")
     @PostMapping("")
+    @PreAuthorize("@va.check('Ops:Volume:Create')")
     public ResponseEntity<Result> CreateNewDockerVolume(@Valid @RequestBody VolumeCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -131,6 +135,7 @@ public class VolumeController {
 
     @Operation(summary = "Get Docker Volume Info")
     @PostMapping("/info")
+    @PreAuthorize("@va.check('Ops:Volume:List')")
     public ResponseEntity<Result> GetDockerVolumeInfo(@Valid @RequestBody VolumeInfoRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -145,6 +150,7 @@ public class VolumeController {
 
     @Operation(summary = "Remove Docker Volume")
     @PostMapping("/remove")
+    @PreAuthorize("@va.check('Ops:Volume:Delete')")
     public ResponseEntity<Result> removeDockerVolume(@Valid @RequestBody removeVolumeRequest criteria) {
         String[] names = criteria.getNames();
         Map<String, Object> result = new HashMap<>();

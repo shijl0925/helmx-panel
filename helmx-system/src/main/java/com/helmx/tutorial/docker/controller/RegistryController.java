@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -33,6 +34,7 @@ public class RegistryController {
 
     @Operation(summary = "Get all registries")
     @GetMapping("")
+    @PreAuthorize("@va.check('Ops:Registry:List')")
     public ResponseEntity<Result> GetAllRegistries(@RequestParam(required = false) String name) {
         QueryWrapper<Registry> queryWrapper = new QueryWrapper<>();
         if (name != null && !name.isEmpty()) {
@@ -47,6 +49,7 @@ public class RegistryController {
 
     @Operation(summary = "Create a new registry")
     @PostMapping("")
+    @PreAuthorize("@va.check('Ops:Registry:Create')")
     public ResponseEntity<Result> CreateRegistry(@Valid @RequestBody RegistryCreateRequest request) {
         // 检查名称是否重复
         LambdaQueryWrapper<Registry> nameQuery = new LambdaQueryWrapper<>();
@@ -124,6 +127,7 @@ public class RegistryController {
 
     @Operation(summary = "Get registry by ID")
     @GetMapping("/{id}")
+    @PreAuthorize("@va.check('Ops:Registry:List')")
     public ResponseEntity<Result> GetRegistry(@PathVariable Long id) {
         Registry registry = registryMapper.selectById(id);
         if (registry == null) {
@@ -136,6 +140,7 @@ public class RegistryController {
 
     @Operation(summary = "Update registry by ID")
     @PutMapping("/{id}")
+    @PreAuthorize("@va.check('Ops:Registry:Edit')")
     public ResponseEntity<Result> UpdateRegistryById(@PathVariable Long id, @Valid @RequestBody RegistryCreateRequest request) {
         Registry registry = registryMapper.selectById(id);
 
@@ -168,6 +173,7 @@ public class RegistryController {
 
     @Operation(summary = "Delete registry by ID")
     @DeleteMapping("/{id}")
+    @PreAuthorize("@va.check('Ops:Registry:Delete')")
     public ResponseEntity<Result> DeleteRegistry(@PathVariable Long id) {
         registryMapper.deleteById(id);
 
