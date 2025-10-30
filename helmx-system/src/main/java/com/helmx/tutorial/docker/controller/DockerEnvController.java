@@ -40,7 +40,7 @@ public class DockerEnvController {
 
     @Operation(summary = "Get all envs")
     @GetMapping("/all")
-    @PreAuthorize("@va.check('Ops:DockerEnv:List')")
+//    @PreAuthorize("@va.check('Ops:DockerEnv:List')")
     public ResponseEntity<Result> GetAllDockerEnvs(@RequestParam(required = false) String name) {
         QueryWrapper<DockerEnv> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", 1);
