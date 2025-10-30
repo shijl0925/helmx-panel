@@ -487,7 +487,7 @@ public class ContainerController {
 
     @Operation(summary = "Disconnect container network")
     @PostMapping("/disconnect")
-    @PreAuthorize("@va.check('Ops:Container:Edit')")
+    @PreAuthorize("@va.check('Ops:Network:Disconnect')")
     public ResponseEntity<Result> disconnectContainerNetwork(@Valid @RequestBody ContainerNetworkDisconnectRequest request) {
         String containerId = request.getContainerId();
         String networkName = request.getNetwork();
