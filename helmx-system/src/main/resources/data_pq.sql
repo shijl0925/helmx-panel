@@ -68,7 +68,7 @@ INSERT INTO tb_rbac_menus (id, created_at, updated_at, type, title, path, icon, 
   (46,NOW(), NOW(),'button','ops.image.deleteImage','',NULL,26,NULL,'DockerImageDelete',1,NULL,'Ops:Image:Delete'),
   (47,NOW(), NOW(),'button','ops.image.pruneImages','',NULL,26,NULL,'DockerImagePrune',1,NULL,'Ops:Image:Prune'),
   (48,NOW(), NOW(),'button','ops.image.tagImage','',NULL,26,NULL,'DockerImageTag',1,NULL,'Ops:Image:Tag'),
-  (66,NOW(), NOW(),'button','ops.image.importImages','',NULL,26,NULL,'DockerImageImport',1,NULL,'Ops:Image:Import'),
+  (66,NOW(), NOW(),'button','ops.image.importImage','',NULL,26,NULL,'DockerImageImport',1,NULL,'Ops:Image:Import'),
   (67,NOW(), NOW(),'button','ops.image.exportImage','',NULL,26,NULL,'DockerImageExport',1,NULL,'Ops:Image:Export'),
 
   -- Docker 卷操作按钮
