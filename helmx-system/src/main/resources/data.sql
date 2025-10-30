@@ -78,7 +78,7 @@ INSERT IGNORE INTO tb_rbac_menus (id, created_at, updated_at, type, title, path,
   (52,NOW(), NOW(),'button','ops.network.createNetwork','',NULL,28,NULL,'DockerNetworkCreate',1,NULL,'Ops:Network:Create'),
   (53,NOW(), NOW(),'button','ops.network.deleteNetwork','',NULL,28,NULL,'DockerNetworkDelete',1,NULL,'Ops:Network:Delete'),
   (54,NOW(), NOW(),'button','ops.network.pruneNetworks','',NULL,28,NULL,'DockerNetworkPrune',1,NULL,'Ops:Network:Prune'),
-  (55,NOW(), NOW(),'button','ops.network.disconnect','',NULL,28,NULL,'DockerNetworkDisconnect',1,NULL,'Ops:Network:Disconnect'),
+--   (55,NOW(), NOW(),'button','ops.network.disconnect','',NULL,28,NULL,'DockerNetworkDisconnect',1,NULL,'Ops:Network:Disconnect'),
 
   -- Docker 注册表操作按钮
   (56,NOW(), NOW(),'button','ops.registry.create','',NULL,29,NULL,'DockerRegistryCreate',1,NULL,'Ops:Registry:Create'),
