@@ -1,4 +1,4 @@
-helmx-system/src/main-- 插入角色数据
+-- 插入角色数据
 INSERT IGNORE INTO tb_rbac_roles (id, name, remark, status, code, created_at, updated_at) VALUES
  (1, 'Super', 'Super Admin', 1, 'super', NOW(), NOW()),
  (2, 'Admin', 'Admin', 1, 'admin', NOW(), NOW()),
