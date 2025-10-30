@@ -2,6 +2,9 @@ package com.helmx.tutorial.docker.websocket;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 
+import com.helmx.tutorial.system.mapper.UserMapper;
+import com.helmx.tutorial.system.service.UserService;
+import com.helmx.tutorial.utils.SecurityUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.NonNull;
@@ -12,6 +15,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -20,6 +24,12 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
 
     @Autowired
     private DockerClientUtil dockerClientUtil;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private UserMapper userMapper;
 
     // 维护会话映射
     private final ConcurrentHashMap<String, TerminalSession> sessions = new ConcurrentHashMap<>();
@@ -32,6 +42,14 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
         String token = extractParameterFromQuery(session, "token", null);
         if (token == null) {
             session.close(CloseStatus.BAD_DATA.withReason("Missing token"));
+            return;
+        }
+
+        // 获取当前用户名, 检查权限
+        Long userId = SecurityUtils.getCurrentUserId(token);
+        if (!checkPermission(userId)) {
+            log.warn("User {} does not have permission to access terminal", userId);
+            session.close(CloseStatus.BAD_DATA.withReason("Forbidden"));
             return;
         }
 
@@ -58,6 +76,18 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
 
         // 启动终端会话
         terminalSession.start(session);
+    }
+
+    private boolean checkPermission(Long userId) {
+        if (userId != null) {
+            if (userService.isSuperAdmin(userId)) {
+                return true;
+            }
+
+            Set<String> userPermissions = userMapper.selectUserPermissions(userId);
+            return userPermissions.contains("Ops:Container:Exec");
+        }
+        return false;
     }
 
     private String extractParameterFromQuery(WebSocketSession session, String paramName, String defaultValue) {
