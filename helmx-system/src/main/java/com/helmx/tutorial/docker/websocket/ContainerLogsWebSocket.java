@@ -6,6 +6,9 @@ import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.LogContainerCmd;
 import com.github.dockerjava.api.model.Frame;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
+import com.helmx.tutorial.system.mapper.UserMapper;
+import com.helmx.tutorial.system.service.UserService;
+import com.helmx.tutorial.utils.SecurityUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.NonNull;
@@ -16,6 +19,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -24,6 +28,12 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
 
     @Autowired
     private DockerClientUtil dockerClientUtil;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private UserMapper userMapper;
 
     private final Map<String, LogContainerCmd> activeCommands = new ConcurrentHashMap<>();
 
@@ -43,6 +53,16 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
         String host = request.getString("host");
         String containerId = request.getString("containerId");
         int tail = request.getIntValue("tail", 0);
+
+        String token = request.getString("token");
+
+        // 获取当前用户名, 检查权限
+        Long userId = SecurityUtils.getCurrentUserId(token);
+        if (!checkPermission(userId)) {
+            log.warn("User {} does not have permission to access terminal", userId);
+            session.close(CloseStatus.BAD_DATA.withReason("Forbidden"));
+            return;
+        }
 
         // 设置Docker主机
         dockerClientUtil.setCurrentHost(host);
@@ -143,5 +163,16 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
             }
         }
     }
-}
 
+    private boolean checkPermission(Long userId) {
+        if (userId != null) {
+            if (userService.isSuperAdmin(userId)) {
+                return true;
+            }
+
+            Set<String> userPermissions = userMapper.selectUserPermissions(userId);
+            return userPermissions.contains("Ops:Container:Logs");
+        }
+        return false;
+    }
+}
