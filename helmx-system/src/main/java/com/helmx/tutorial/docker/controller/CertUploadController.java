@@ -1,5 +1,6 @@
 package com.helmx.tutorial.docker.controller;
 
+import com.helmx.tutorial.docker.utils.PathUtil;
 import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,9 +34,24 @@ public class CertUploadController {
             @RequestParam() String name) {
 
         try {
-            // 创建环境特定的证书目录
-            String certDirName = name.replaceAll("[/\\\\]", "");
-            Path certDirPath = Paths.get(certUploadPath, certDirName, "certs");
+            // 加强输入验证和清理
+            String certDirName = PathUtil.sanitizeDirectoryName(name);
+            if (certDirName == null || certDirName.isEmpty()) {
+                return ResponseUtil.failed(400, null, "Invalid certificate directory name");
+            }
+            log.info("Uploading certificates for environment: {}", certDirName);
+
+            // 构建路径并验证是否在允许范围内
+            Path basePath = Paths.get(certUploadPath).toAbsolutePath().normalize();
+            log.info("Base directory path: {}", basePath);
+            Path certDirPath = basePath.resolve(certDirName).resolve("certs").normalize();
+
+            // 关键安全检查：确保路径在基础目录内
+            if (!certDirPath.startsWith(basePath)) {
+                return ResponseUtil.failed(400, null, "Invalid certificate directory name");
+            }
+            log.info("Certificate directory path: {}", certDirPath);
+
             Files.createDirectories(certDirPath);
 
             // 保存证书文件
