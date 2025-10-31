@@ -1,6 +1,9 @@
 package com.helmx.tutorial.docker.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.helmx.tutorial.docker.dto.*;
+import com.helmx.tutorial.docker.entity.DockerEnv;
+import com.helmx.tutorial.docker.mapper.DockerEnvMapper;
 import com.helmx.tutorial.docker.utils.*;
 import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
@@ -40,6 +43,9 @@ public class ImageController {
     @Autowired
     private ImageBuildTaskManager imageBuildTaskManager;
 
+    @Autowired
+    private DockerEnvMapper dockerEnvMapper;
+
     @Operation(summary = "Get all Docker images")
     @PostMapping("/all")
     @PreAuthorize("@va.check('Ops:Image:List')")
@@ -60,6 +66,12 @@ public class ImageController {
     @PreAuthorize("@va.check('Ops:Image:List')")
     public ResponseEntity<Result> SearchDockerImages(@RequestBody ImageQueryRequest criteria) {
         String host = criteria.getHost();
+
+        // 验证主机是否在允许的列表中
+        if (!isHostAllowed(host)) {
+            return ResponseUtil.failed(403, null, "Access to the specified host is not allowed");
+        }
+
         dockerClientUtil.setCurrentHost(host);
 
         List<Image> images = dockerClientUtil.listImages().stream()
@@ -354,5 +366,22 @@ public class ImageController {
                 .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
                 .header("Content-Type", "application/x-tar")
                 .body(stream);
+    }
+
+    /**
+     * 验证主机是否被允许访问
+     * @param host 主机地址
+     * @return 是否允许访问
+     */
+    private boolean isHostAllowed(String host) {
+        if (host == null || host.isEmpty()) {
+            return false;
+        }
+
+        LambdaQueryWrapper<DockerEnv> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(DockerEnv::getHost, host);
+        queryWrapper.eq(DockerEnv::getStatus, 1);
+
+        return dockerEnvMapper.exists(queryWrapper);
     }
 }
