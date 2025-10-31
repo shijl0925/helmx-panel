@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.util.Base64;
 import java.util.HashMap;
@@ -114,15 +115,38 @@ public class RegistryController {
     }
 
     private static int getResponseCode(String registryUrl, String encodedAuth) throws IOException {
-        URL url = new URL(registryUrl + "/v2/");
+        URI uri = URI.create(registryUrl + "/v2/");
+        URL url = uri.toURL();
+
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(15000); // 设置超时为15秒
+        connection.setReadTimeout(15000); // 添加读取超时
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Content-Type", "application/json");
-        connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
 
-        return connection.getResponseCode();
+        if (encodedAuth != null && !encodedAuth.isEmpty()) {
+            // 尝试标准Basic Auth
+            connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
+        }
+
+        // 禁止自动重定向，防止跳转到恶意网站
+        connection.setInstanceFollowRedirects(false);
+
+        int responseCode =  connection.getResponseCode();
+
+        // 如果是401未授权，可能需要特殊处理
+        if (responseCode == 401) {
+            // 获取WWW-Authenticate头，可能需要OAuth2流程
+            String authHeader = connection.getHeaderField("WWW-Authenticate");
+            if (authHeader != null && authHeader.startsWith("Bearer")) {
+                // 这里可以实现Bearer Token获取逻辑
+                log.warn("Registry requires Bearer token authentication: {}", authHeader);
+                throw new IOException("Registry requires Bearer token authentication");
+            }
+        }
+
+        return responseCode;
     }
 
     @Operation(summary = "Get registry by ID")
