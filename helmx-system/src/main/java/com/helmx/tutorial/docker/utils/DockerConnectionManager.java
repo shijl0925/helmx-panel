@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.List;
@@ -85,19 +86,19 @@ public class DockerConnectionManager {
 
             // 配置TLS
             if (tlsVerify) {
-                if (dockerEnv == null) {
-                    throw new RuntimeException("DockerEnv is null but TLS verification is enabled for host: " + host);
-                }
                 String envName = dockerEnv.getName();
-                if (envName == null || envName.isEmpty() || envName.contains("..") || envName.contains("/") || envName.contains("\\")) {
-                    throw new IllegalArgumentException("Invalid environment name: " + envName);
-                }
-                envName = envName.replaceAll("[/\\\\]", "");
-                // envName = envName.replaceAll("[^a-zA-Z0-9._-]", ""); // 只保留安全字符
-                // String envName = dockerEnv.getName().replaceAll("[/\\\\]", "");
-                String certPath = Paths.get(dockerCertPath, envName, "certs").toString();
-                configBuilder.withDockerTlsVerify(true)
-                        .withDockerCertPath(certPath);
+
+                envName = PathUtil.sanitizeDirectoryName(envName);
+                log.info("sanitized envName: {}", envName);
+
+                // 构建路径并验证是否在允许范围内
+                Path basePath = Paths.get(dockerCertPath).toAbsolutePath().normalize();
+                log.info("Base directory path: {}", basePath);
+
+                String certPath = basePath.resolve(envName).resolve("certs").normalize().toString();
+                log.info("Cert directory path: {}", certPath);
+
+                configBuilder.withDockerTlsVerify(true).withDockerCertPath(certPath);
             } else {
                 configBuilder.withDockerTlsVerify(false);
             }
