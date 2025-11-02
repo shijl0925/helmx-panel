@@ -6,6 +6,7 @@ import com.helmx.tutorial.docker.dto.RegistryConnectRequest;
 import com.helmx.tutorial.docker.dto.RegistryCreateRequest;
 import com.helmx.tutorial.docker.entity.Registry;
 import com.helmx.tutorial.docker.mapper.RegistryMapper;
+import com.helmx.tutorial.docker.utils.PasswordUtil;
 import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -73,7 +74,7 @@ public class RegistryController {
         if (request.getAuth() != null && request.getAuth()) {
             registry.setAuth(true);
             registry.setUsername(request.getUsername());
-            registry.setPassword(request.getPassword());
+            registry.setPassword(PasswordUtil.encrypt(request.getPassword()));
         }
         registryMapper.insert(registry);
 
@@ -181,7 +182,7 @@ public class RegistryController {
         if (request.getAuth() != null && request.getAuth()) {
             registry.setAuth(true);
             registry.setUsername(request.getUsername());
-            registry.setPassword(request.getPassword());
+            registry.setPassword(PasswordUtil.encrypt(request.getPassword()));
         } else {
             registry.setAuth(false);
             registry.setUsername(null);

@@ -480,7 +480,7 @@ public class DockerClientUtil {
                 return new AuthConfig()
                         .withRegistryAddress(registry.getUrl())
                         .withUsername(registry.getUsername())
-                        .withPassword(registry.getPassword());
+                        .withPassword(PasswordUtil.decrypt(registry.getPassword()));
             }
         } catch (Exception e) {
             log.warn("Failed to get auth config for image: {}", imageName, e);
