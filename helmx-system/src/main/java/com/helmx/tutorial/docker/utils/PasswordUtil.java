@@ -3,15 +3,16 @@ package com.helmx.tutorial.docker.utils;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.security.SecureRandom;
 import java.util.Base64;
 
 public class PasswordUtil {
     // AES密钥长度
     private static final String ALGORITHM = "AES";
-    private static final String TRANSFORMATION = "AES/ECB/PKCS5Padding";
+    private static final String TRANSFORMATION = "AES/CBC/PKCS5Padding";
 
-    // 使用固定密钥，实际应用中应该从配置文件或环境变量中读取
     private static final String SECRET_KEY = "bDAORZ9t7/+1RpyV5JIXJg==";
 
     /**
@@ -23,9 +24,21 @@ public class PasswordUtil {
         try {
             SecretKeySpec secretKey = new SecretKeySpec(SECRET_KEY.getBytes(), ALGORITHM);
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+
+            // 生成随机IV
+            byte[] iv = new byte[16];
+            new SecureRandom().nextBytes(iv);
+            IvParameterSpec ivSpec = new IvParameterSpec(iv);
+
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec);
             byte[] encryptedBytes = cipher.doFinal(plainText.getBytes());
-            return Base64.getEncoder().encodeToString(encryptedBytes);
+
+            // 将IV和密文一起返回
+            byte[] combined = new byte[iv.length + encryptedBytes.length];
+            System.arraycopy(iv, 0, combined, 0, iv.length);
+            System.arraycopy(encryptedBytes, 0, combined, iv.length, encryptedBytes.length);
+
+            return Base64.getEncoder().encodeToString(combined);
         } catch (Exception e) {
             throw new RuntimeException("encrypt failed", e);
         }
@@ -40,8 +53,19 @@ public class PasswordUtil {
         try {
             SecretKeySpec secretKey = new SecretKeySpec(SECRET_KEY.getBytes(), ALGORITHM);
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-            cipher.init(Cipher.DECRYPT_MODE, secretKey);
-            byte[] decryptedBytes = cipher.doFinal(Base64.getDecoder().decode(cipherText));
+
+            byte[] combined = Base64.getDecoder().decode(cipherText);
+
+            // 提取IV和密文
+            byte[] iv = new byte[16];
+            byte[] encryptedBytes = new byte[combined.length - 16];
+            System.arraycopy(combined, 0, iv, 0, 16);
+            System.arraycopy(combined, 16, encryptedBytes, 0, encryptedBytes.length);
+
+            IvParameterSpec ivSpec = new IvParameterSpec(iv);
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
+
+            byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
             return new String(decryptedBytes);
         } catch (Exception e) {
             throw new RuntimeException("decrypt failed", e);
