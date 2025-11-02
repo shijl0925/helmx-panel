@@ -1121,10 +1121,9 @@ public class DockerClientUtil {
 
     public Map<String, Object> loadStatus() {
         long imageSize = 0;
-        List<Image> images;
-        try (ListImagesCmd cmd = getCurrentDockerClient().listImagesCmd()) {
-            images = cmd.exec();
-        }
+        List<Image> images = this.listImages().stream()
+                .filter(image -> image.getRepoTags() != null &&
+                        Arrays.stream(image.getRepoTags()).noneMatch("<none>:<none>"::equals)).toList();
 
         for (Image image : images) {
             imageSize += image.getSize();
