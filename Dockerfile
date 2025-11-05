@@ -17,7 +17,7 @@ COPY . .
 RUN mvn clean package -DskipTests
 
 # Final Monolithic Application Stage
-FROM openjdk:21 AS monolithic
+FROM openjdk:22-ea-21-jdk-bookworm AS monolithic
 LABEL authors="shijl0925"
 
 # Create application directory
