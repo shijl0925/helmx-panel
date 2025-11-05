@@ -6,9 +6,12 @@ import com.github.dockerjava.api.command.LogContainerCmd;
 import com.github.dockerjava.api.model.Frame;
 import com.helmx.tutorial.docker.dto.*;
 import com.helmx.tutorial.dto.Result;
+import com.helmx.tutorial.system.mapper.UserMapper;
+import com.helmx.tutorial.system.service.UserService;
 import com.helmx.tutorial.utils.ResponseUtil;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.Container;
+import com.helmx.tutorial.utils.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @RestController
@@ -36,6 +40,14 @@ public class ContainerController {
 
     @Autowired
     private DockerClientUtil dockerClientUtil;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private UserMapper userMapper;
+
+    private static final int MAX_MESSAGE_LENGTH = 8192; // 单条消息最大长度
 
     @Operation(summary = "Create Docker Container")
     @PostMapping("")
@@ -300,11 +312,17 @@ public class ContainerController {
 
     @Operation(summary = "Stream container logs via SSE")
     @GetMapping(value = "/logs/stream/{containerId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @PreAuthorize("@va.check('Ops:Container:Logs')")
     public SseEmitter streamContainerLogs(
             @RequestParam String host,
             @PathVariable String containerId,
-            @RequestParam(defaultValue = "0") int tail) {
+            @RequestParam(defaultValue = "0") int tail,
+            @RequestParam String token) {
+        Long userId = SecurityUtils.getCurrentUserId(token);
+        if (!checkPermission(userId)) {
+            log.warn("User {} does not have permission to access terminal", userId);
+            throw new SecurityException("Permission denied: User does not have access to container logs");
+        }
+
         SseEmitter emitter = new SseEmitter(1800000L); // 设置30分钟超时时间
         dockerClientUtil.setCurrentHost(host);
 
@@ -319,24 +337,52 @@ public class ContainerController {
             emitter.complete();
         });
 
-        try {
-            LogContainerCmd cmd = dockerClientUtil.getCurrentDockerClient()
-                    .logContainerCmd(containerId)
-                    .withStdOut(true)
-                    .withStdErr(true)
-                    .withFollowStream(true);
+        try (LogContainerCmd cmd = dockerClientUtil.getCurrentDockerClient().logContainerCmd(containerId)
+                .withStdOut(true)
+                .withStdErr(true)
+                .withFollowStream(true)) {
 
             if (tail != 0) {
                 cmd.withTail(tail);
+            } else {
+                cmd.withTailAll();
             }
 
             cmd.exec(new ResultCallback.Adapter<Frame>() {
+                private final AtomicBoolean isClientConnected = new AtomicBoolean(true);
+
                 @Override
                 public void onNext(Frame item) {
+                    if (!isClientConnected.get()) {
+                        try {
+                            close();
+                        } catch (Exception e) {
+                            log.error("Error closing command", e);
+                        }
+                        return;
+                    }
+
                     try {
-                        emitter.send(SseEmitter.event().data(new String(item.getPayload())));
+                        String payload = new String(item.getPayload());
+                        log.info("Received log message, length: {}", payload.length());
+                        // 限制单条消息长度
+                        if (payload.length() > MAX_MESSAGE_LENGTH) {
+                            payload = payload.substring(0, MAX_MESSAGE_LENGTH) + "...";
+                        }
+                        log.info("Sending log message via SSE, length: {}", payload.length());
+                        emitter.send(SseEmitter.event().data(payload));
+                    } catch (IllegalStateException e) {
+                        // emitter 已完成，标记客户端断开连接
+                        log.debug("SSE emitter already completed, marking client as disconnected");
+                        isClientConnected.set(false);
+                        try {
+                            close();
+                        } catch (Exception closeException) {
+                            log.error("Error closing command", closeException);
+                        }
                     } catch (Exception e) {
                         log.error("Error sending log message via SSE", e);
+                        isClientConnected.set(false);
                         try {
                             close(); // 出错时关闭命令
                         } catch (Exception closeException) {
@@ -374,6 +420,18 @@ public class ContainerController {
         }
 
         return emitter;
+    }
+
+    private boolean checkPermission(Long userId) {
+        if (userId != null) {
+            if (userService.isSuperAdmin(userId)) {
+                return true;
+            }
+
+            Set<String> userPermissions = userMapper.selectUserPermissions(userId);
+            return userPermissions.contains("Ops:Container:Logs");
+        }
+        return false;
     }
 
     @Operation(summary = "Rename Docker Container")
