@@ -1,18 +1,16 @@
 package com.helmx.tutorial.docker.utils;
 
+import com.helmx.tutorial.utils.BaseTask;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
 @Data
-public class ImageBuildTask {
-    private String taskId;
+@EqualsAndHashCode(callSuper = true)
+public class ImageBuildTask extends BaseTask {
     private String imageName;
-    private String status; // PENDING, RUNNING, SUCCESS, FAILED
-    private String message;
     private StringBuilder streamBuilder; // 用于存储构建输出
-    private LocalDateTime startTime;
-    private LocalDateTime endTime;
 
     // 获取字符串形式的流输出
     public String getStream() {

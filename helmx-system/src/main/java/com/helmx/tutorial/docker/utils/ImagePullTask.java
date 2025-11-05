@@ -1,15 +1,13 @@
 package com.helmx.tutorial.docker.utils;
 
+import com.helmx.tutorial.utils.BaseTask;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
 @Data
-public class ImagePullTask {
-    private String taskId;
+@EqualsAndHashCode(callSuper = true)
+public class ImagePullTask extends BaseTask {
     private String imageName;
-    private String status; // PENDING, RUNNING, SUCCESS, FAILED
-    private String message;
-    private LocalDateTime startTime;
-    private LocalDateTime endTime;
 }

@@ -1,4 +1,4 @@
-package com.helmx.tutorial.docker.utils;
+package com.helmx.tutorial.utils;
 
 import org.springframework.stereotype.Component;
 
