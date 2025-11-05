@@ -181,151 +181,115 @@ public class DockerClientUtil {
     }
 
     /**
+     * 通用Docker操作执行器
+     */
+    private Map<String, Object> executeDockerOperation(DockerOperation operation, String errorPrefix) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            String successMessage = operation.execute();
+            result.put("status", "success");
+            result.put("message", successMessage);
+        } catch (Exception e) {
+            result.put("status", "failed");
+            result.put("message", errorPrefix + ": " + e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * Docker操作函数式接口
+     */
+    @FunctionalInterface
+    private interface DockerOperation {
+        String execute() throws Exception;
+    }
+
+    /**
      * 启动容器
      */
     public Map<String, Object> startContainer(String containerId) {
-        Map<String, Object> result = new HashMap<>();
-
-        try {
+        return executeDockerOperation(() -> {
             try (StartContainerCmd cmd = getCurrentDockerClient().startContainerCmd(containerId)) {
                 cmd.exec();
             }
-            // 成功响应
-            result.put("status", "success");
-            result.put("message", "Container start successfully");
-        } catch (Exception e) {
-            result.put("status", "failed");
-            String errorMsg = "Failed to start container: " + e.getMessage();
-            result.put("message", errorMsg);
-        }
-
-        return result;
+            return "Container start successfully";
+        }, "Failed to start container");
     }
 
     /**
      * 停止容器
      */
     public Map<String, Object> stopContainer(String containerId) {
-        Map<String, Object> result = new HashMap<>();
-        try {
+        return executeDockerOperation(() -> {
             try (StopContainerCmd cmd = getCurrentDockerClient().stopContainerCmd(containerId)) {
                 cmd.exec();
             }
-
-            // 成功响应
-            result.put("status", "success");
-            result.put("message", "Container stop successfully");
-        } catch (Exception e) {
-            result.put("status", "failed");
-            String errorMsg = "Failed to stop container: " + e.getMessage();
-            result.put("message", errorMsg);
-        }
-        return result;
+            return "Container stop successfully";
+        }, "Failed to stop container");
     }
 
     /**
      * 重启容器
      */
     public Map<String, Object> restartContainer(String containerId) {
-        Map<String, Object> result = new HashMap<>();
-        try {
+        return executeDockerOperation(() -> {
             try (RestartContainerCmd cmd = getCurrentDockerClient().restartContainerCmd(containerId)) {
                 cmd.exec();
             }
-
-            // 成功响应
-            result.put("status", "success");
-            result.put("message", "Container restart successfully");
-        } catch (Exception e) {
-            result.put("status", "failed");
-            String errorMsg = "Failed to restart container: " + e.getMessage();
-            result.put("message", errorMsg);
-        }
-        return result;
+            return "Container restart successfully";
+        }, "Failed to restart container");
     }
 
     /**
      * 删除容器
      */
     public Map<String, Object> removeContainer(String containerId) {
-        Map<String, Object> result = new HashMap<>();
-        try {
+        return executeDockerOperation(() -> {
             try (RemoveContainerCmd cmd = getCurrentDockerClient().removeContainerCmd(containerId)) {
                 cmd.exec();
             }
-
-            // 成功响应
-            result.put("status", "success");
-            result.put("message", "Container remove successfully");
-        } catch (Exception e) {
-            result.put("status", "failed");
-            String errorMsg = "Failed to remove container: " + e.getMessage();
-            result.put("message", errorMsg);
-        }
-        return result;
+            return "Container remove successfully";
+        }, "Failed to remove container");
     }
 
     /**
      * 杀死容器
      */
     public Map<String, Object> killContainer(String containerId) {
-        Map<String, Object> result = new HashMap<>();
-        try {
+        return executeDockerOperation(() -> {
             try (KillContainerCmd cmd = getCurrentDockerClient().killContainerCmd(containerId)) {
                 cmd.exec();
             }
-            // 成功响应
-            result.put("status", "success");
-            result.put("message", "Container kill successfully");
-        } catch (Exception e) {
-            result.put("status", "failed");
-            String errorMsg = "Failed to kill container: " + e.getMessage();
-            result.put("message", errorMsg);
-        }
-        return result;
+            return "Container kill successfully";
+        }, "Failed to kill container");
     }
 
     /**
      * 暂停容器
      */
     public Map<String, Object>  pauseContainer(String containerId) {
-        Map<String, Object> result = new HashMap<>();
-        try {
+        return executeDockerOperation(() -> {
             try (PauseContainerCmd cmd = getCurrentDockerClient().pauseContainerCmd(containerId)) {
                 cmd.exec();
             }
-
-            // 成功响应
-            result.put("status", "success");
-            result.put("message", "Container pause successfully");
-        } catch (Exception e) {
-            result.put("status", "failed");
-            String errorMsg = "Failed to pause container: " + e.getMessage();
-            result.put("message", errorMsg);
-        }
-        return result;
+            return "Container pause successfully";
+        }, "Failed to pause container");
     }
 
     /**
      * 恢复容器
      */
     public Map<String, Object> unpauseContainer(String containerId) {
-        Map<String, Object> result = new HashMap<>();
-        try {
+        return executeDockerOperation(() -> {
             try (UnpauseContainerCmd cmd = getCurrentDockerClient().unpauseContainerCmd(containerId)) {
                 cmd.exec();
             }
-
-            // 成功响应
-            result.put("status", "success");
-            result.put("message", "Container unpause successfully");
-        } catch (Exception e) {
-            result.put("status", "failed");
-            String errorMsg = "Failed to unpause container: " + e.getMessage();
-            result.put("message", errorMsg);
-        }
-        return result;
+            return "Container unpause successfully";
+        }, "Failed to unpause container");
     }
+
+    private static final int MAX_LOG_SIZE_BYTES = 1048576; // 1MB
+    private static final int LOG_RETAIN_SIZE_BYTES = 524288; // 512KB
 
     /**
      * 获取容器日志
@@ -337,24 +301,31 @@ public class DockerClientUtil {
                 .withStdOut(true)
                 .withStdErr(true)) {
 
-            if (tailNum != 0) {
+            if (tailNum > 0) {
                 cmd.withTail(tailNum);
+            } else {
+                cmd.withTailAll();
             }
 
             cmd.exec(new ResultCallback.Adapter<Frame>() {
                 @Override
                 public void onNext(Frame item) {
-                    logs.append(new String(item.getPayload())).append("\n");
+                    if (item != null && item.getPayload() != null) {
+                        logs.append(new String(item.getPayload())).append("\n");
+                        // 限制日志长度，避免内存占用过高
+                        if (logs.length() > MAX_LOG_SIZE_BYTES) {
+                            logs.delete(0, logs.length() - LOG_RETAIN_SIZE_BYTES);
+                        }
+                    }
                 }
             }).awaitCompletion(3000, TimeUnit.MILLISECONDS);
+            return logs.toString();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // 保留中断状态
             throw new RuntimeException("获取容器日志被中断", e);
         } catch (Exception e) {
             throw new RuntimeException("获取容器日志失败", e);
         }
-
-        return logs.toString();
     }
 
     public Map<String, Object> renameContainer(ContainerRenameRequest criteria) {
