@@ -1,5 +1,5 @@
 # Backend Build Stage
-FROM openjdk:21-jdk-bookworm AS build-stage
+FROM openjdk:22-ea-21-jdk-bookworm AS build-stage
 
 RUN wget https://archive.apache.org/dist/maven/maven-3/3.8.2/binaries/apache-maven-3.8.2-bin.tar.gz && \
     tar -xzf apache-maven-3.8.2-bin.tar.gz && \
