@@ -4,8 +4,6 @@ import com.helmx.tutorial.utils.BaseTask;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-import java.time.LocalDateTime;
-
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class ImageBuildTask extends BaseTask {

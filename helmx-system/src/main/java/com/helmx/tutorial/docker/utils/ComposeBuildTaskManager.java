@@ -4,5 +4,5 @@ import com.helmx.tutorial.utils.BaseTaskManager;
 import org.springframework.stereotype.Component;
 
 @Component
-public class ImagePushTaskManager extends BaseTaskManager<ImagePushTask> {
+public class ComposeBuildTaskManager extends BaseTaskManager<ComposeBuildTask> {
 }

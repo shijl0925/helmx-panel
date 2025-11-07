@@ -137,3 +137,18 @@ CREATE TRIGGER update_tb_template_updated_at
     BEFORE UPDATE ON tb_template
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_stack (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(64) NOT NULL,
+    content TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_stack 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_stack_updated_at ON tb_stack;
+CREATE TRIGGER update_tb_stack_updated_at
+    BEFORE UPDATE ON tb_stack
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();

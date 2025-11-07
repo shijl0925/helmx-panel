@@ -6,6 +6,5 @@ import lombok.EqualsAndHashCode;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class ImagePushTask extends BaseTask {
-    private String imageName;
+public class ComposeBuildTask extends BaseTask {
 }
