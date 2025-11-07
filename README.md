@@ -11,6 +11,7 @@ Helmx Panel is a comprehensive container orchestration and management solution d
 - **Dynamic Container Operations**: Provides standard operations such as container start, stop, restart, pause, and resume, along with container snapshot (`commit`) functionality
 - **Rolling Update Mechanism**: Implements zero-downtime application updates through container backup and replacement
 - **Batch Operations Support**: Enables batch operations and management of multiple containers
+- **Container Orchestration Support**: Provides Docker Compose orchestration functionality to support complex application deployment
 
 ### 2. Real-time Operations Monitoring
 - **Streaming Log Processing**: Real-time log streaming via SSE technology with support for large-volume log handling
@@ -23,12 +24,15 @@ Helmx Panel is a comprehensive container orchestration and management solution d
 - **Secure Authentication Mechanism**: Automatic handling of private registry authentication and permission validation
 - **Incremental Build Optimization**: Image building based on Dockerfile with build cache and multi-stage build support
 - **Image Version Control**: Comprehensive tag management and image version tracking mechanism
+- **Image Import/Export**: Supports importing and exporting images via TAR files
+- **Image Pull/Pus**: Uses asynchronous processing mechanism to complete image pull and push operations
 
 ### 4. Network Virtualization Management
 - **Software-defined Networking**: Support for creating and managing custom networks for secure container communication
 - **Multi-protocol Support**: Complete support for IPv4 and IPv6 dual-stack network configuration
 - **Network Isolation**: Container network isolation through network namespaces
 - **Service Discovery Integration**: Built-in DNS service supporting container service discovery
+- **Network Connection Management**: Supports dynamic connection and disconnection of container networks
 
 ### 5. Persistent Storage Management
 - **Volume Lifecycle Management**: Complete storage volume creation, usage, monitoring, and deletion workflow
@@ -45,6 +49,14 @@ Helmx Panel is a comprehensive container orchestration and management solution d
 - **Distributed Host Management**: Unified management of multiple Docker host environments
 - **TLS Secure Connection**: Enterprise-grade secure transmission with certificate authentication support
 - **Environment State Synchronization**: Real-time synchronization of operational status and resource configurations across environments
+- **Space Reclamation**: Supports systematic cleanup of resources including images, containers, networks, and volumes
+
+### 8. Permission and Security Management
+- **RBAC Permission Model**: Role-based access control with fine-grained permission management
+- **JWT Token Authentication**: Stateless authentication mechanism based on standard JWT
+- **Menu Permission Control**: Dynamic menu rendering and button-level permission control
+- **User Permission Management**: Role permission assignment and menu authorization
+- **Operation Audit**: Key operation permission verification to ensure system security
 
 ## ScreenShots
 
