@@ -28,6 +28,13 @@ public class UserSessionManager {
         onlineUsers.remove(username);
     }
 
+    public void updateLastAccessTime(String username) {
+        Map<String, Object> sessionData = onlineUsers.get(username);
+        if (sessionData != null) {
+            sessionData.put("lastAccessTime", System.currentTimeMillis());
+        }
+    }
+
     public boolean isUserOnline(String username) {
         Map<String, Object> sessionData = onlineUsers.get(username);
         if (sessionData != null) {

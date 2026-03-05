@@ -34,6 +34,9 @@ public class RegistryController {
     @Autowired
     private RegistryMapper registryMapper;
 
+    @Autowired
+    private PasswordUtil passwordUtil;
+
     @Operation(summary = "Get all registries")
     @GetMapping("")
     @PreAuthorize("@va.check('Ops:Registry:List')")
@@ -74,7 +77,7 @@ public class RegistryController {
         if (request.getAuth() != null && request.getAuth()) {
             registry.setAuth(true);
             registry.setUsername(request.getUsername());
-            registry.setPassword(PasswordUtil.encrypt(request.getPassword()));
+            registry.setPassword(passwordUtil.encrypt(request.getPassword()));
         }
         registryMapper.insert(registry);
 
@@ -182,7 +185,7 @@ public class RegistryController {
         if (request.getAuth() != null && request.getAuth()) {
             registry.setAuth(true);
             registry.setUsername(request.getUsername());
-            registry.setPassword(PasswordUtil.encrypt(request.getPassword()));
+            registry.setPassword(passwordUtil.encrypt(request.getPassword()));
         } else {
             registry.setAuth(false);
             registry.setUsername(null);
