@@ -83,7 +83,7 @@ public class NetworkController {
     @Operation(summary = "Remove Docker Network")
     @PostMapping("/remove")
     @PreAuthorize("@va.check('Ops:Network:Delete')")
-    public ResponseEntity<Result> removeDockerNetwork(@Valid @RequestBody removeNetworkRequest criteria) {
+    public ResponseEntity<Result> removeDockerNetwork(@Valid @RequestBody RemoveNetworkRequest criteria) {
         String[] names = criteria.getNames();
         Map<String, Object> result = new HashMap<>();
 

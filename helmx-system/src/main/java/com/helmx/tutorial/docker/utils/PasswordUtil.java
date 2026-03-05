@@ -1,28 +1,47 @@
 package com.helmx.tutorial.docker.utils;
 
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 
+@Component
 public class PasswordUtil {
     // AES密钥长度
     private static final String ALGORITHM = "AES";
     private static final String TRANSFORMATION = "AES/CBC/PKCS5Padding";
 
-    private static final String SECRET_KEY = "bDAORZ9t7/+1RpyV5JIXJg==";
+    @Value("${docker.password.secret-key:bDAORZ9t7/+1RpyV5JIXJg==}")
+    private String secretKeyValue;
+
+    private byte[] keyBytes;
+
+    @PostConstruct
+    private void init() {
+        keyBytes = Base64.getDecoder().decode(secretKeyValue);
+        int keyLen = keyBytes.length;
+        if (keyLen != 16 && keyLen != 24 && keyLen != 32) {
+            throw new IllegalArgumentException(
+                "Invalid AES key length: " + keyLen + " bytes. Must be 16, 24, or 32 bytes.");
+        }
+    }
 
     /**
      * 加密密码
      * @param plainText 明文密码
      * @return 加密后的密码
      */
-    public static String encrypt(String plainText) {
+    public String encrypt(String plainText) {
         try {
-            SecretKeySpec secretKey = new SecretKeySpec(SECRET_KEY.getBytes(), ALGORITHM);
+            SecretKeySpec secretKey = new SecretKeySpec(keyBytes, ALGORITHM);
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
 
             // 生成随机IV
@@ -31,7 +50,7 @@ public class PasswordUtil {
             IvParameterSpec ivSpec = new IvParameterSpec(iv);
 
             cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec);
-            byte[] encryptedBytes = cipher.doFinal(plainText.getBytes());
+            byte[] encryptedBytes = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
 
             // 将IV和密文一起返回
             byte[] combined = new byte[iv.length + encryptedBytes.length];
@@ -49,9 +68,9 @@ public class PasswordUtil {
      * @param cipherText 加密后的密码
      * @return 明文密码
      */
-    public static String decrypt(String cipherText) {
+    public String decrypt(String cipherText) {
         try {
-            SecretKeySpec secretKey = new SecretKeySpec(SECRET_KEY.getBytes(), ALGORITHM);
+            SecretKeySpec secretKey = new SecretKeySpec(keyBytes, ALGORITHM);
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
 
             byte[] combined = Base64.getDecoder().decode(cipherText);
@@ -66,7 +85,7 @@ public class PasswordUtil {
             cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
 
             byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
-            return new String(decryptedBytes);
+            return new String(decryptedBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
             throw new RuntimeException("decrypt failed", e);
         }

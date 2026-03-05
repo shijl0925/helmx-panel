@@ -156,7 +156,7 @@ public class AuthController {
             userInfo.put("email", user.getEmail());
             userInfo.put("realName", user.getNickname());
 
-            String userId = jwt.getClaimAsString("id");
+            String userId = jwt.getClaimAsString("userId");
             logger.info("username: {}, id: {}", username, userId);
 
             // 从 scope 中提取角色信息

@@ -151,7 +151,7 @@ public class VolumeController {
     @Operation(summary = "Remove Docker Volume")
     @PostMapping("/remove")
     @PreAuthorize("@va.check('Ops:Volume:Delete')")
-    public ResponseEntity<Result> removeDockerVolume(@Valid @RequestBody removeVolumeRequest criteria) {
+    public ResponseEntity<Result> removeDockerVolume(@Valid @RequestBody RemoveVolumeRequest criteria) {
         String[] names = criteria.getNames();
         Map<String, Object> result = new HashMap<>();
 
