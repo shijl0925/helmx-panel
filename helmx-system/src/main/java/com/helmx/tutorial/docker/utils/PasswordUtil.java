@@ -25,7 +25,7 @@ public class PasswordUtil {
     private byte[] keyBytes;
 
     @PostConstruct
-    private void init() {
+    void init() {
         keyBytes = Base64.getDecoder().decode(secretKeyValue);
         int keyLen = keyBytes.length;
         if (keyLen != 16 && keyLen != 24 && keyLen != 32) {
