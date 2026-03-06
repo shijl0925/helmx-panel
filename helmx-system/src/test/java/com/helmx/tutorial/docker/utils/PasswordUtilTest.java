@@ -1,19 +1,38 @@
 package com.helmx.tutorial.docker.utils;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class PasswordUtilTest {
 
+    private PasswordUtil passwordUtil;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        passwordUtil = new PasswordUtil();
+        // Inject a test-only AES key via reflection (base64 of "TestPasswordSalt")
+        Field field = PasswordUtil.class.getDeclaredField("secretKeyValue");
+        field.setAccessible(true);
+        field.set(passwordUtil, "VGVzdFBhc3N3b3JkU2FsdA==");
+        // Invoke @PostConstruct init method
+        Method init = PasswordUtil.class.getDeclaredMethod("init");
+        init.setAccessible(true);
+        init.invoke(passwordUtil);
+    }
+
     @Test
     void encryptAndDecrypt_roundtrip_returnsOriginal() {
         String original = "mySecretPassword123";
-        String encrypted = PasswordUtil.encrypt(original);
+        String encrypted = passwordUtil.encrypt(original);
         assertNotNull(encrypted);
         assertNotEquals(original, encrypted);
 
-        String decrypted = PasswordUtil.decrypt(encrypted);
+        String decrypted = passwordUtil.decrypt(encrypted);
         assertEquals(original, decrypted);
     }
 
@@ -21,23 +40,23 @@ class PasswordUtilTest {
     void encrypt_differentCallsProduceDifferentCiphertext() {
         // Each call uses a random IV, so two encryptions of the same plaintext differ
         String plain = "samePassword";
-        String cipher1 = PasswordUtil.encrypt(plain);
-        String cipher2 = PasswordUtil.encrypt(plain);
+        String cipher1 = passwordUtil.encrypt(plain);
+        String cipher2 = passwordUtil.encrypt(plain);
         assertNotEquals(cipher1, cipher2);
     }
 
     @Test
     void encryptAndDecrypt_emptyString_roundtrip() {
         String original = "";
-        String encrypted = PasswordUtil.encrypt(original);
-        String decrypted = PasswordUtil.decrypt(encrypted);
+        String encrypted = passwordUtil.encrypt(original);
+        String decrypted = passwordUtil.decrypt(encrypted);
         assertEquals(original, decrypted);
     }
 
     @Test
     void encryptAndDecrypt_specialChars_roundtrip() {
         String original = "p@$$w0rd!#%^&*()";
-        assertEquals(original, PasswordUtil.decrypt(PasswordUtil.encrypt(original)));
+        assertEquals(original, passwordUtil.decrypt(passwordUtil.encrypt(original)));
     }
 
     @Test

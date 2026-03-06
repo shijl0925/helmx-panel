@@ -119,11 +119,11 @@ class RemainingDockerDTOsTest {
         assertEquals(25, req.getPageSize());
     }
 
-    // ---- removeImageRequest ----
+    // ---- RemoveImageRequest ----
 
     @Test
     void removeImageRequest_defaultValues() {
-        removeImageRequest req = new removeImageRequest();
+        RemoveImageRequest req = new RemoveImageRequest();
         assertEquals("unix:///var/run/docker.sock", req.getHost());
         assertNull(req.getForce());
         assertNull(req.getImageId());
@@ -131,7 +131,7 @@ class RemainingDockerDTOsTest {
 
     @Test
     void removeImageRequest_settersAndGetters() {
-        removeImageRequest req = new removeImageRequest();
+        RemoveImageRequest req = new RemoveImageRequest();
         req.setHost("tcp://10.0.0.4:2375");
         req.setForce(true);
         req.setImageId("sha256:deadbeef");
@@ -143,7 +143,7 @@ class RemainingDockerDTOsTest {
 
     @Test
     void removeImageRequest_noForce_removesNormally() {
-        removeImageRequest req = new removeImageRequest();
+        RemoveImageRequest req = new RemoveImageRequest();
         req.setImageId("sha256:aabbccdd");
         req.setForce(false);
 
@@ -151,18 +151,18 @@ class RemainingDockerDTOsTest {
         assertEquals("sha256:aabbccdd", req.getImageId());
     }
 
-    // ---- removeNetworkRequest ----
+    // ---- RemoveNetworkRequest ----
 
     @Test
     void removeNetworkRequest_defaultValues() {
-        removeNetworkRequest req = new removeNetworkRequest();
+        RemoveNetworkRequest req = new RemoveNetworkRequest();
         assertEquals("unix:///var/run/docker.sock", req.getHost());
         assertNull(req.getNames());
     }
 
     @Test
     void removeNetworkRequest_settersAndGetters() {
-        removeNetworkRequest req = new removeNetworkRequest();
+        RemoveNetworkRequest req = new RemoveNetworkRequest();
         req.setHost("tcp://10.0.0.5:2375");
         req.setNames(new String[]{"net1", "net2", "net3"});
 
@@ -172,23 +172,23 @@ class RemainingDockerDTOsTest {
 
     @Test
     void removeNetworkRequest_emptyNames() {
-        removeNetworkRequest req = new removeNetworkRequest();
+        RemoveNetworkRequest req = new RemoveNetworkRequest();
         req.setNames(new String[]{});
         assertEquals(0, req.getNames().length);
     }
 
-    // ---- removeVolumeRequest ----
+    // ---- RemoveVolumeRequest ----
 
     @Test
     void removeVolumeRequest_defaultValues() {
-        removeVolumeRequest req = new removeVolumeRequest();
+        RemoveVolumeRequest req = new RemoveVolumeRequest();
         assertEquals("unix:///var/run/docker.sock", req.getHost());
         assertNull(req.getNames());
     }
 
     @Test
     void removeVolumeRequest_settersAndGetters() {
-        removeVolumeRequest req = new removeVolumeRequest();
+        RemoveVolumeRequest req = new RemoveVolumeRequest();
         req.setHost("tcp://10.0.0.6:2375");
         req.setNames(new String[]{"vol1", "vol2"});
 
@@ -198,7 +198,7 @@ class RemainingDockerDTOsTest {
 
     @Test
     void removeVolumeRequest_singleVolume() {
-        removeVolumeRequest req = new removeVolumeRequest();
+        RemoveVolumeRequest req = new RemoveVolumeRequest();
         req.setNames(new String[]{"only-vol"});
 
         assertEquals(1, req.getNames().length);
