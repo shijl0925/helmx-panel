@@ -58,6 +58,9 @@ public class DockerClientUtil {
     @Autowired
     private RegistryMapper registryMapper;
 
+    @Autowired
+    private PasswordUtil passwordUtil;
+
     // 设置当前操作的服务器
     public void setCurrentHost(String host) {
         currentHost.set(host);
@@ -451,7 +454,7 @@ public class DockerClientUtil {
                 return new AuthConfig()
                         .withRegistryAddress(registry.getUrl())
                         .withUsername(registry.getUsername())
-                        .withPassword(PasswordUtil.decrypt(registry.getPassword()));
+                        .withPassword(passwordUtil.decrypt(registry.getPassword()));
             }
         } catch (Exception e) {
             log.warn("Failed to get auth config for image: {}", imageName, e);
@@ -553,9 +556,18 @@ public class DockerClientUtil {
      */
     public Map<String, Object> tagImage(String imageId, String tagImageName) {
         Map<String, Object> result = new HashMap<>();
-        String[] parts = tagImageName.split(":");
-        String imageNameWithRepository = parts[0];
-        String tag = parts.length > 1 ? parts[1] : "latest";
+        // Use lastIndexOf to correctly handle image names with registry port (e.g., registry:5000/image:tag)
+        int colonIdx = tagImageName.lastIndexOf(':');
+        String imageNameWithRepository;
+        String tag;
+        if (colonIdx > 0 && colonIdx < tagImageName.length() - 1
+                && !tagImageName.substring(colonIdx + 1).contains("/")) {
+            imageNameWithRepository = tagImageName.substring(0, colonIdx);
+            tag = tagImageName.substring(colonIdx + 1);
+        } else {
+            imageNameWithRepository = tagImageName;
+            tag = "latest";
+        }
         try (TagImageCmd cmd = getCurrentDockerClient().tagImageCmd(imageId, imageNameWithRepository, tag)) {
             cmd.exec();
 

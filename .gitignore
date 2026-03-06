@@ -1,6 +1,12 @@
 # Compiled class file
 *.class
 
+# Maven build output
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**
+!**/src/test/**
+
 # Log file
 *.log
 

@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
-public class removeImageRequest {
+public class RemoveImageRequest {
 
     @ApiModelProperty(value = "主机地址")
     @NotBlank(message = "host cannot be blank")

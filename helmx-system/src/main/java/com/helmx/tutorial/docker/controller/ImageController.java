@@ -230,7 +230,7 @@ public class ImageController {
     @Operation(summary = "Remove Docker Image")
     @PostMapping("/remove")
     @PreAuthorize("@va.check('Ops:Image:Delete')")
-    public ResponseEntity<Result> removeDockerImage(@Valid @RequestBody removeImageRequest criteria) {
+    public ResponseEntity<Result> removeDockerImage(@Valid @RequestBody RemoveImageRequest criteria) {
         String imageId = criteria.getImageId();
         Boolean force = criteria.getForce();
 
