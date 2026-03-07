@@ -146,6 +146,9 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
             } catch (Exception closeException) {
                 log.error("Error closing resources", closeException);
             }
+        } finally {
+            // 清除ThreadLocal，避免线程池复用时的host泄漏
+            dockerClientUtil.clearCurrentHost();
         }
     }
 

@@ -139,6 +139,9 @@ public class DockerEventsWebSocket extends TextWebSocketHandler {
             log.error("Failed to start Docker events streaming for session: {}", session.getId(), e);
             cleanupSession(session.getId());
             closeSessionWithError(session);
+        } finally {
+            // 清除ThreadLocal，避免线程池复用时的host泄漏
+            dockerClientUtil.clearCurrentHost();
         }
     }
 

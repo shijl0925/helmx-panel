@@ -35,6 +35,9 @@ EXPOSE 8080
 ENV SPRING_PROFILES_ACTIVE=prod
 
 ENTRYPOINT ["java", "-jar", \
+  "-XX:+UseContainerSupport", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-XX:+ExitOnOutOfMemoryError", \
   "-Duser.timezone=Asia/Shanghai", \
   "-Dfile.encoding=UTF-8", \
   "-Dspring.profiles.active=${SPRING_PROFILES_ACTIVE}", \

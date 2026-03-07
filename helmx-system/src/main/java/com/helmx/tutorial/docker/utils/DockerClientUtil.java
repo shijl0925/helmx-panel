@@ -68,6 +68,11 @@ public class DockerClientUtil {
         currentHost.set(host);
     }
 
+    // 清除当前线程的Docker主机，避免ThreadLocal泄漏
+    public void clearCurrentHost() {
+        currentHost.remove();
+    }
+
     // 获取当前DockerClient
     public DockerClient getCurrentDockerClient() {
         String host = currentHost.get();
