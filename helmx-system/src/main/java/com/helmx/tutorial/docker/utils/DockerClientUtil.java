@@ -2401,6 +2401,50 @@ public class DockerClientUtil {
     // createImageCmd
 
     /**
+     * Export container filesystem as a tar stream.
+     * Uses the Docker API directly (GET /containers/{id}/export) since ExportContainerCmd
+     * is not available in docker-java 3.6.0.
+     * @param containerId Container ID
+     * @return Input stream of the container filesystem tar archive. The caller must close
+     *         this stream when done; closing it also releases the underlying HTTP response.
+     */
+    public InputStream exportContainer(String containerId) {
+        com.github.dockerjava.transport.DockerHttpClient httpClient = getCurrentDockerHttpClient();
+        com.github.dockerjava.transport.DockerHttpClient.Request request =
+                new com.github.dockerjava.transport.DockerHttpClient.Request.Builder()
+                        .method(com.github.dockerjava.transport.DockerHttpClient.Request.Method.GET)
+                        .path("/containers/" + containerId + "/export")
+                        .build();
+        com.github.dockerjava.transport.DockerHttpClient.Response response = httpClient.execute(request);
+        int statusCode = response.getStatusCode();
+        if (statusCode != 200) {
+            try {
+                response.close();
+            } catch (Exception ignore) {
+                // ignore close error after status check
+            }
+            log.error("Docker API returned status {} for container export: {}", statusCode, containerId);
+            throw new RuntimeException("Container export failed, HTTP status code: " + statusCode);
+        }
+        // Wrap the response body so that closing the stream also releases the HTTP response
+        InputStream body = response.getBody();
+        return new java.io.FilterInputStream(body) {
+            @Override
+            public void close() throws java.io.IOException {
+                try {
+                    super.close();
+                } finally {
+                    try {
+                        response.close();
+                    } catch (Exception e) {
+                        log.warn("Error closing Docker HTTP response for container export: {}", containerId, e);
+                    }
+                }
+            }
+        };
+    }
+
+    /**
      * 列出容器内指定目录的文件和子目录
      * List files and subdirectories in a specified path inside a container.
      *
