@@ -152,8 +152,23 @@ public class DockerConnectionManager {
 
     public void removeClient(String host) {
         String key = host + "_" + this.getTlsVerify(host);
-        clientCache.remove(key);
-        httpClientCache.remove(key);
+        DockerClient client = clientCache.remove(key);
+        DockerHttpClient httpClient = httpClientCache.remove(key);
+        // Close resources to prevent connection-pool / file-descriptor leaks
+        if (client != null) {
+            try {
+                client.close();
+            } catch (Exception e) {
+                log.warn("Error closing DockerClient for host: {}", host, e);
+            }
+        }
+        if (httpClient != null) {
+            try {
+                httpClient.close();
+            } catch (Exception e) {
+                log.warn("Error closing DockerHttpClient for host: {}", host, e);
+            }
+        }
 //        healthCache.remove(key);
     }
 
