@@ -96,8 +96,6 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
         try {
             // 启动终端会话
             terminalSession.start(session);
-        } catch (IllegalArgumentException ex) {
-            session.close(CloseStatus.POLICY_VIOLATION.withReason("Unauthorized host"));
         } finally {
             // 清除ThreadLocal，避免线程池复用时的host泄漏
             dockerClientUtil.clearCurrentHost();
