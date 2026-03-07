@@ -105,13 +105,20 @@ public class RegistryController {
                 return ResponseUtil.success("Registry connection successful", result);
             } else {
                 // 连接失败
-                String message = "Registry connection failed with code: " + responseCode;
+                String message = "Registry authentication failed";
                 result.put("status", "failed");
                 result.put("message", message);
+                log.warn("Registry connection failed with HTTP code: {}", responseCode);
                 return ResponseUtil.failed(500, result, message);
             }
+        } catch (IllegalArgumentException e) {
+            log.warn("Registry connection test rejected due to invalid input");
+            result.put("status", "failed");
+            result.put("message", "Invalid registry URL format");
+            return ResponseUtil.failed(400, result, "Invalid registry URL format");
         } catch (Exception e) {
-            String message = "Registry connection test failed: " + e.getMessage();
+            String message = "Registry connection test failed";
+            log.error("Registry connection test failed", e);
             result.put("status", "failed");
             result.put("message", message);
             return ResponseUtil.failed(500, result, message);
