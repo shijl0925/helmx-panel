@@ -647,4 +647,69 @@ public class ContainerController {
             return ResponseUtil.failed(500, result, message);
         }
     }
+
+    @Operation(summary = "Get Docker Container filesystem diff (added/modified/deleted files since creation)")
+    @PostMapping("/diff")
+    @PreAuthorize("@va.check('Ops:Container:Inspect')")
+    public ResponseEntity<Result> getContainerDiff(@Valid @RequestBody ContainerInfoRequest request) {
+        String host = request.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        try {
+            List<Map<String, Object>> changes = dockerClientUtil.getContainerDiff(request.getContainerId());
+            Map<String, Object> result = new HashMap<>();
+            result.put("containerId", request.getContainerId());
+            result.put("changes", changes);
+            result.put("total", changes.size());
+            return ResponseUtil.success(result);
+        } catch (Exception e) {
+            log.error("Failed to get diff for container: {}", request.getContainerId(), e);
+            return ResponseUtil.failed(500, null, "Failed to get container diff: " + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "Read text file content from inside a Docker Container")
+    @PostMapping("/file/read")
+    @PreAuthorize("@va.check('Ops:Container:Exec')")
+    public ResponseEntity<Result> readContainerFile(@Valid @RequestBody ContainerFileReadRequest request) {
+        String host = request.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        try {
+            String content = dockerClientUtil.readContainerFileContent(
+                    request.getContainerId(), request.getFilePath(), request.getEncoding());
+            Map<String, Object> result = new HashMap<>();
+            result.put("containerId", request.getContainerId());
+            result.put("filePath", request.getFilePath());
+            result.put("content", content);
+            result.put("encoding", request.getEncoding());
+            return ResponseUtil.success(result);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid path in file read request: {}", e.getMessage());
+            return ResponseUtil.failed(400, null, e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to read file from container: {}", request.getContainerId(), e);
+            return ResponseUtil.failed(500, null, "Failed to read file from container: " + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "Write text file content into a Docker Container (create or overwrite)")
+    @PostMapping("/file/write")
+    @PreAuthorize("@va.check('Ops:Container:Upload')")
+    public ResponseEntity<Result> writeContainerFile(@Valid @RequestBody ContainerFileWriteRequest request) {
+        String host = request.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        Map<String, Object> result = dockerClientUtil.writeContainerFileContent(
+                request.getContainerId(), request.getFilePath(), request.getContent(), request.getEncoding());
+        String status = (String) result.get("status");
+        String message = (String) result.get("message");
+
+        if ("success".equals(status)) {
+            return ResponseUtil.success(message, result);
+        } else {
+            log.error("Failed to write file to container: {}", message);
+            return ResponseUtil.failed(500, result, message);
+        }
+    }
 }

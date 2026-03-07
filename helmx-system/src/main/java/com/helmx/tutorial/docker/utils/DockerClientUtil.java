@@ -25,6 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.helmx.tutorial.docker.utils.GitUtil;
 
 import java.io.*;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -2584,5 +2585,145 @@ public class DockerClientUtil {
             result.put("message", "Failed to update container resources: " + e.getMessage());
         }
         return result;
+    }
+
+    /**
+     * 获取容器文件系统变更（docker diff）
+     * 返回自容器创建以来文件系统中新增、修改或删除的文件列表。
+     * kind: 0=修改(Modified), 1=新增(Added), 2=删除(Deleted)
+     *
+     * @param containerId 容器ID
+     * @return 变更列表，每项含 path、kind、kindLabel 字段
+     */
+    public List<Map<String, Object>> getContainerDiff(String containerId) {
+        try (ContainerDiffCmd cmd = getCurrentDockerClient().containerDiffCmd(containerId)) {
+            List<ChangeLog> changeLogs = cmd.exec();
+            if (changeLogs == null) {
+                return Collections.emptyList();
+            }
+            List<Map<String, Object>> result = new ArrayList<>(changeLogs.size());
+            for (ChangeLog changeLog : changeLogs) {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("path", changeLog.getPath());
+                int kind = changeLog.getKind() != null ? changeLog.getKind() : -1;
+                entry.put("kind", kind);
+                entry.put("kindLabel", switch (kind) {
+                    case 0 -> "Modified";
+                    case 1 -> "Added";
+                    case 2 -> "Deleted";
+                    default -> "Unknown";
+                });
+                result.add(entry);
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to get diff for container {}: {}", containerId, e.getMessage(), e);
+            throw new RuntimeException("Failed to get container diff: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 读取容器内文件的文本内容
+     * 基于 docker cp 机制，将容器内指定文件读取为字符串返回。
+     *
+     * @param containerId 容器ID
+     * @param filePath    容器内文件的绝对路径（必须是文件，不能是目录）
+     * @param encoding    字符编码，默认 UTF-8
+     * @return 文件的文本内容
+     */
+    public String readContainerFileContent(String containerId, String filePath, String encoding) {
+        if (filePath == null || filePath.isBlank()) {
+            throw new IllegalArgumentException("File path cannot be blank");
+        }
+        if (!filePath.startsWith("/") || filePath.contains("..") || !filePath.matches("^/[^;|&`$<>\\\\\"'!]*$")) {
+            log.warn("Rejected potentially unsafe container file path: {}", filePath);
+            throw new IllegalArgumentException("Invalid file path: must be an absolute path without path traversal or shell special characters");
+        }
+
+        Charset charset;
+        try {
+            charset = Charset.forName(encoding != null ? encoding : "UTF-8");
+        } catch (Exception e) {
+            log.warn("Invalid encoding '{}', falling back to UTF-8", encoding);
+            charset = StandardCharsets.UTF_8;
+        }
+
+        byte[] fileBytes = copyFileFromContainer(containerId, filePath);
+        return new String(fileBytes, charset);
+    }
+
+    /**
+     * 将文本内容写入容器内的指定文件（新建或覆盖）
+     * 通过 docker cp 机制将文本内容打包为 tar 后写入容器。
+     *
+     * @param containerId 容器ID
+     * @param filePath    容器内文件的绝对路径（含文件名）
+     * @param content     要写入的文本内容
+     * @param encoding    字符编码，默认 UTF-8
+     * @return 操作结果
+     */
+    public Map<String, Object> writeContainerFileContent(String containerId, String filePath, String content, String encoding) {
+        Map<String, Object> result = new HashMap<>();
+
+        if (filePath == null || filePath.isBlank()) {
+            result.put("status", "failed");
+            result.put("message", "File path cannot be blank");
+            return result;
+        }
+        if (!filePath.startsWith("/") || filePath.contains("..") || !filePath.matches("^/[^;|&`$<>\\\\\"'!]*$")) {
+            log.warn("Rejected potentially unsafe container file path: {}", filePath);
+            result.put("status", "failed");
+            result.put("message", "Invalid file path: must be an absolute path without path traversal or shell special characters");
+            return result;
+        }
+
+        Charset charset;
+        try {
+            charset = Charset.forName(encoding != null ? encoding : "UTF-8");
+        } catch (Exception e) {
+            log.warn("Invalid encoding '{}', falling back to UTF-8", encoding);
+            charset = StandardCharsets.UTF_8;
+        }
+
+        // Extract the directory path and file name from the full file path
+        // When lastSlash == 0 (e.g. "/filename.txt"), dirPath correctly becomes "/" and fileName is "filename.txt"
+        int lastSlash = filePath.lastIndexOf('/');
+        String dirPath = lastSlash > 0 ? filePath.substring(0, lastSlash) : "/";
+        String fileName = filePath.substring(lastSlash + 1);
+
+        byte[] contentBytes = content.getBytes(charset);
+
+        try (InputStream tarInputStream = createTextTarInputStream(fileName, contentBytes);
+             CopyArchiveToContainerCmd cmd = getCurrentDockerClient().copyArchiveToContainerCmd(containerId)) {
+            cmd.withTarInputStream(tarInputStream)
+                    .withRemotePath(dirPath)
+                    .exec();
+            result.put("status", "success");
+            result.put("message", "File written successfully");
+        } catch (Exception e) {
+            log.error("Failed to write file to container {}: {}", containerId, e.getMessage(), e);
+            result.put("status", "failed");
+            result.put("message", "Failed to write file to container: " + e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * 将字节内容打包为 tar 输入流（用于写入容器文件）
+     */
+    private InputStream createTextTarInputStream(String fileName, byte[] content) throws IOException {
+        ByteArrayOutputStream tarOutput = new ByteArrayOutputStream();
+        try (TarArchiveOutputStream tarOutputStream = new TarArchiveOutputStream(tarOutput)) {
+            tarOutputStream.setBigNumberMode(TarArchiveOutputStream.BIGNUMBER_POSIX);
+            tarOutputStream.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+
+            TarArchiveEntry entry = new TarArchiveEntry(fileName);
+            entry.setSize(content.length);
+            tarOutputStream.putArchiveEntry(entry);
+            tarOutputStream.write(content);
+            tarOutputStream.closeArchiveEntry();
+            tarOutputStream.finish();
+        }
+        return new ByteArrayInputStream(tarOutput.toByteArray());
     }
 }
