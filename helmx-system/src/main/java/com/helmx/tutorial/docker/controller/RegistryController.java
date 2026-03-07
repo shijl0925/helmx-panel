@@ -112,7 +112,7 @@ public class RegistryController {
                 return ResponseUtil.failed(500, result, message);
             }
         } catch (IllegalArgumentException e) {
-            log.warn("Registry connection test rejected due to invalid input");
+            log.warn("Registry connection test rejected due to malformed registry URL");
             result.put("status", "failed");
             result.put("message", "Invalid registry URL format");
             return ResponseUtil.failed(400, result, "Invalid registry URL format");
