@@ -9,6 +9,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistration;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,5 +46,12 @@ class WebSocketConfigTest {
         webSocketConfig.registerWebSocketHandlers(registry);
 
         verify(registration).setAllowedOrigins("https://ui.example.com", "https://admin.example.com");
+    }
+
+    @Test
+    void registerWebSocketHandlers_missingConfiguredOrigins_throwsIllegalStateException() {
+        ReflectionTestUtils.setField(webSocketConfig, "allowedOrigin", "");
+
+        assertThrows(IllegalStateException.class, () -> webSocketConfig.registerWebSocketHandlers(registry));
     }
 }

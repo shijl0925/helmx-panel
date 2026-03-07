@@ -31,6 +31,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry registry) {
+        if (!StringUtils.hasText(allowedOrigin)) {
+            throw new IllegalStateException("app.cors.allowed-origin must be configured for WebSocket origins");
+        }
         String[] allowedOrigins = StringUtils.commaDelimitedListToStringArray(allowedOrigin);
         registry.addHandler(containerTerminalWebSocket, "/api/v1/ops/containers/terminal/{containerId}")
                 .addHandler(containerLogsWebSocket, "/api/v1/ops/containers/logs/stream")

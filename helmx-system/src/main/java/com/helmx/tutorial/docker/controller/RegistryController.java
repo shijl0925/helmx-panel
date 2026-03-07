@@ -105,7 +105,9 @@ public class RegistryController {
                 return ResponseUtil.success("Registry connection successful", result);
             } else {
                 // 连接失败
-                String message = "Registry authentication failed";
+                String message = (responseCode == 401 || responseCode == 403)
+                        ? "Registry authentication failed"
+                        : "Registry connection failed";
                 result.put("status", "failed");
                 result.put("message", message);
                 log.debug("Registry connection failed with HTTP code: {}", responseCode);
