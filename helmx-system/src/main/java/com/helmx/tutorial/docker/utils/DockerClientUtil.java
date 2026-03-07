@@ -2330,4 +2330,227 @@ public class DockerClientUtil {
         }
     }
     // createImageCmd
+
+    /**
+     * 列出容器内指定目录的文件和子目录
+     * List files and subdirectories in a specified path inside a container.
+     *
+     * @param containerId 容器ID
+     * @param path        容器内目录路径
+     * @return 文件列表，每项包含 name, size, type, permissions
+     */
+    public List<Map<String, Object>> listContainerFiles(String containerId, String path) {
+        List<Map<String, Object>> files = new ArrayList<>();
+
+        // Validate path: must start with '/' and must not contain shell special characters
+        if (path == null || path.isBlank()) {
+            path = "/";
+        }
+        if (!path.matches("^/[^;|&`$<>\\\\\"'!]*$") && !path.equals("/")) {
+            log.warn("Rejected potentially unsafe container path: {}", path);
+            throw new IllegalArgumentException("Invalid path: path must be an absolute path without shell special characters");
+        }
+
+        try {
+            DockerClient client = getCurrentDockerClient();
+            // Pass path as a separate argument to ls, NOT interpolated into a shell string,
+            // to prevent command injection.
+            String[] cmd = {"ls", "-la", path};
+
+            ExecCreateCmdResponse execCreate = client.execCreateCmd(containerId)
+                    .withCmd(cmd)
+                    .withUser("root")
+                    .withAttachStdout(true)
+                    .withAttachStderr(true)
+                    .withTty(false)
+                    .exec();
+
+            StringBuilder output = new StringBuilder();
+            client.execStartCmd(execCreate.getId())
+                    .withDetach(false)
+                    .withTty(false)
+                    .exec(new ResultCallback.Adapter<Frame>() {
+                        @Override
+                        public void onNext(Frame frame) {
+                            if (frame != null && frame.getPayload() != null) {
+                                output.append(new String(frame.getPayload(), StandardCharsets.UTF_8));
+                            }
+                        }
+                    }).awaitCompletion();
+
+            String outputStr = output.toString();
+            if (outputStr.isBlank()) {
+                return files;
+            }
+
+            for (String line : outputStr.split("\n")) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("total ")) {
+                    continue;
+                }
+                Map<String, Object> entry = parseLsLine(line);
+                if (entry != null) {
+                    files.add(entry);
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error listing container files for {}: {}", containerId, e.getMessage(), e);
+        }
+        return files;
+    }
+
+    /**
+     * Parse a single line from `ls -la` output into a map.
+     */
+    private Map<String, Object> parseLsLine(String line) {
+        // Format: permissions links owner group size date time name [-> target]
+        String[] parts = line.split("\\s+", 9);
+        if (parts.length < 8) {
+            return null;
+        }
+        try {
+            String permissions = parts[0];
+            String size = parts[4];
+            String name;
+            String linkTarget = null;
+
+            // Standard ls -la: permissions links owner group size month day time|year name
+            // parts: [0]=perm [1]=links [2]=owner [3]=group [4]=size [5]=month [6]=day [7]=time/year [8]=name
+            name = parts.length >= 9 ? parts[8] : parts[7];
+
+            // Handle symlinks: "name -> target"
+            if (name.contains(" -> ")) {
+                String[] nameParts = name.split(" -> ", 2);
+                name = nameParts[0].trim();
+                linkTarget = nameParts[1].trim();
+            } else {
+                name = name.trim();
+            }
+
+            // Skip . and ..
+            if (".".equals(name) || "..".equals(name)) {
+                return null;
+            }
+
+            String type = permissions.startsWith("d") ? "directory"
+                    : permissions.startsWith("l") ? "symlink"
+                    : "file";
+
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", name);
+            entry.put("type", type);
+            entry.put("permissions", permissions);
+            entry.put("size", parseSizeLong(size));
+            if (linkTarget != null) {
+                entry.put("linkTarget", linkTarget);
+            }
+            return entry;
+        } catch (Exception e) {
+            log.debug("Failed to parse ls line: {}", line, e);
+            return null;
+        }
+    }
+
+    private long parseSizeLong(String s) {
+        try {
+            return Long.parseLong(s);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
+    }
+
+    /**
+     * 批量操作容器 (start / stop / restart / remove / pause / unpause / kill)
+     * Perform a single operation on a list of containers and return per-container results.
+     *
+     * @param request 包含容器ID列表、主机地址和操作类型
+     * @return 每个容器的操作结果列表
+     */
+    public List<Map<String, Object>> bulkOperateContainers(BulkContainerOperationRequest request) {
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        for (String containerId : request.getContainerIds()) {
+            Map<String, Object> containerResult = new HashMap<>();
+            containerResult.put("containerId", containerId);
+
+            try {
+                Map<String, Object> opResult = switch (request.getOperation().toLowerCase()) {
+                    case "start" -> startContainer(containerId);
+                    case "stop" -> stopContainer(containerId);
+                    case "restart" -> restartContainer(containerId);
+                    case "kill" -> killContainer(containerId);
+                    case "pause" -> pauseContainer(containerId);
+                    case "unpause" -> unpauseContainer(containerId);
+                    case "remove" -> {
+                        if (request.isForce()) {
+                            try {
+                                stopContainer(containerId);
+                            } catch (Exception ignored) {
+                                // ignore stop error when force-removing
+                            }
+                        }
+                        yield removeContainer(containerId);
+                    }
+                    default -> Map.of("status", "failed", "message", "Unknown operation: " + request.getOperation());
+                };
+                containerResult.put("status", opResult.get("status"));
+                containerResult.put("message", opResult.get("message"));
+            } catch (Exception e) {
+                log.error("Bulk operation {} failed for container {}: {}", request.getOperation(), containerId, e.getMessage());
+                containerResult.put("status", "failed");
+                containerResult.put("message", e.getMessage());
+            }
+            results.add(containerResult);
+        }
+        return results;
+    }
+
+    /**
+     * 更新容器资源限制 (无需重建容器)
+     * Update CPU/memory resource limits for a running container without recreation.
+     *
+     * @param request 包含资源限制参数
+     * @return 操作结果
+     */
+    public Map<String, Object> updateContainerResources(ContainerResourceUpdateRequest request) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            DockerClient client = getCurrentDockerClient();
+            UpdateContainerCmd cmd = client.updateContainerCmd(request.getContainerId());
+
+            if (request.getCpuShares() != null) {
+                cmd.withCpuShares(request.getCpuShares());
+            }
+            if (request.getCpuQuota() != null) {
+                cmd.withCpuQuota(request.getCpuQuota());
+            }
+            if (request.getCpuPeriod() != null) {
+                cmd.withCpuPeriod(request.getCpuPeriod());
+            }
+            if (request.getMemory() != null) {
+                cmd.withMemory(request.getMemory());
+            }
+            if (request.getMemorySwap() != null) {
+                cmd.withMemorySwap(request.getMemorySwap());
+            }
+            if (request.getMemoryReservation() != null) {
+                cmd.withMemoryReservation(request.getMemoryReservation());
+            }
+            if (request.getBlkioWeight() != null) {
+                cmd.withBlkioWeight(request.getBlkioWeight());
+            }
+
+            cmd.exec();
+
+            result.put("status", "success");
+            result.put("message", "Container resources updated successfully");
+        } catch (Exception e) {
+            log.error("Failed to update resources for container {}: {}", request.getContainerId(), e.getMessage(), e);
+            result.put("status", "failed");
+            result.put("message", "Failed to update container resources: " + e.getMessage());
+        }
+        return result;
+    }
 }

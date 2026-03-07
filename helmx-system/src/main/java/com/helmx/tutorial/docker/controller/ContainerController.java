@@ -577,4 +577,74 @@ public class ContainerController {
             return ResponseUtil.failed(500, null, "Failed to execute command: " + e.getMessage());
         }
     }
+
+    @Operation(summary = "List files in a Docker Container directory")
+    @PostMapping("/files")
+    @PreAuthorize("@va.check('Ops:Container:Exec')")
+    public ResponseEntity<Result> ListContainerFiles(@Valid @RequestBody ContainerFilesRequest request) {
+        String host = request.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        try {
+            List<Map<String, Object>> files = dockerClientUtil.listContainerFiles(
+                    request.getContainerId(), request.getPath());
+            Map<String, Object> result = new HashMap<>();
+            result.put("path", request.getPath());
+            result.put("files", files);
+            result.put("total", files.size());
+            return ResponseUtil.success(result);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid path in list files request: {}", e.getMessage());
+            return ResponseUtil.failed(400, null, e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to list files in container: {}", request.getContainerId(), e);
+            return ResponseUtil.failed(500, null, "Failed to list files: " + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "Bulk operate Docker Containers (start/stop/restart/remove/pause/unpause/kill)")
+    @PostMapping("/bulk")
+    @PreAuthorize("@va.check('Ops:Container:Edit')")
+    public ResponseEntity<Result> BulkOperateContainers(@Valid @RequestBody BulkContainerOperationRequest request) {
+        String host = request.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        List<Map<String, Object>> results = dockerClientUtil.bulkOperateContainers(request);
+
+        long successCount = results.stream()
+                .filter(r -> "success".equals(r.get("status"))).count();
+        long failCount = results.size() - successCount;
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("results", results);
+        response.put("successCount", successCount);
+        response.put("failCount", failCount);
+
+        if (failCount == 0) {
+            return ResponseUtil.success("All operations completed successfully", response);
+        } else if (successCount == 0) {
+            return ResponseUtil.failed(500, response, "All operations failed");
+        } else {
+            return ResponseUtil.success("Operations partially completed", response);
+        }
+    }
+
+    @Operation(summary = "Update Docker Container resource limits (CPU/Memory) without recreation")
+    @PostMapping("/resources")
+    @PreAuthorize("@va.check('Ops:Container:Edit')")
+    public ResponseEntity<Result> UpdateContainerResources(@Valid @RequestBody ContainerResourceUpdateRequest request) {
+        String host = request.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        Map<String, Object> result = dockerClientUtil.updateContainerResources(request);
+        String status = (String) result.get("status");
+        String message = (String) result.get("message");
+
+        if ("success".equals(status)) {
+            return ResponseUtil.success(message, result);
+        } else {
+            log.error("Failed to update container resources: {}", message);
+            return ResponseUtil.failed(500, result, message);
+        }
+    }
 }
