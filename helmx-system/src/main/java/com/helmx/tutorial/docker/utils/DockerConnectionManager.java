@@ -43,6 +43,8 @@ public class DockerConnectionManager {
 
     private final Map<String, DockerClient> clientCache = new ConcurrentHashMap<>();
 
+    private final Map<String, DockerHttpClient> httpClientCache = new ConcurrentHashMap<>();
+
 //    // 健康状态缓存 (host -> (lastCheckTime, isHealthy))
 //    private final Map<String, HealthStatus> healthCache = new ConcurrentHashMap<>();
 //
@@ -67,51 +69,66 @@ public class DockerConnectionManager {
         return clientCache.computeIfAbsent(key, k -> createDockerClient(host));
     }
 
+    public DockerHttpClient getDockerHttpClient(String host) {
+        String key = host + "_" + this.getTlsVerify(host);
+        return httpClientCache.computeIfAbsent(key, k -> createDockerHttpClient(host));
+    }
+
+    private DefaultDockerClientConfig buildDockerClientConfig(String host) {
+        DefaultDockerClientConfig.Builder configBuilder = DefaultDockerClientConfig.createDefaultConfigBuilder()
+                .withDockerHost(host)
+                .withApiVersion(apiVersion);
+
+        LambdaQueryWrapper<DockerEnv> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(DockerEnv::getHost, host);
+        List<DockerEnv> dockerEnvs = dockerEnvMapper.selectList(queryWrapper);
+
+        if (dockerEnvs.size() > 1) {
+            log.warn("Multiple DockerEnv records found for host: {}, using the first one", host);
+        }
+
+        DockerEnv dockerEnv = dockerEnvs.isEmpty() ? null : dockerEnvs.get(0);
+        boolean tlsVerify = dockerEnv != null ? dockerEnv.getTlsVerify() : false;
+
+        // 配置TLS
+        if (tlsVerify) {
+            String envName = dockerEnv.getName();
+
+            envName = PathUtil.sanitizeDirectoryName(envName);
+            log.info("sanitized envName: {}", envName);
+
+            // 构建路径并验证是否在允许范围内
+            Path basePath = Paths.get(dockerCertPath).toAbsolutePath().normalize();
+            log.info("Base directory path: {}", basePath);
+
+            String certPath = basePath.resolve(envName).resolve("certs").normalize().toString();
+            log.info("Cert directory path: {}", certPath);
+
+            configBuilder.withDockerTlsVerify(true).withDockerCertPath(certPath);
+        } else {
+            configBuilder.withDockerTlsVerify(false);
+        }
+
+        return configBuilder.build();
+    }
+
+    private DockerHttpClient createDockerHttpClient(String host) {
+        DefaultDockerClientConfig config = buildDockerClientConfig(host);
+        return new ApacheDockerHttpClient.Builder()
+                .dockerHost(URI.create(host))
+                .maxConnections(100)
+                .connectionTimeout(Duration.ofSeconds(connectionTimeout))
+                .responseTimeout(Duration.ofSeconds(responseTimeout))
+                .sslConfig(config.getSSLConfig())
+                .build();
+    }
+
     private DockerClient createDockerClient(String host) {
         try {
-            DefaultDockerClientConfig.Builder configBuilder = DefaultDockerClientConfig.createDefaultConfigBuilder()
-                    .withDockerHost(host)
-                    .withApiVersion(apiVersion);
+            DefaultDockerClientConfig config = buildDockerClientConfig(host);
 
-            LambdaQueryWrapper<DockerEnv> queryWrapper = new LambdaQueryWrapper<>();
-            queryWrapper.eq(DockerEnv::getHost, host);
-            List<DockerEnv> dockerEnvs = dockerEnvMapper.selectList(queryWrapper);
-
-            if (dockerEnvs.size() > 1) {
-                log.warn("Multiple DockerEnv records found for host: {}, using the first one", host);
-            }
-
-            DockerEnv dockerEnv = dockerEnvs.isEmpty() ? null : dockerEnvs.get(0);
-            boolean tlsVerify = dockerEnv != null ? dockerEnv.getTlsVerify() : false;
-
-            // 配置TLS
-            if (tlsVerify) {
-                String envName = dockerEnv.getName();
-
-                envName = PathUtil.sanitizeDirectoryName(envName);
-                log.info("sanitized envName: {}", envName);
-
-                // 构建路径并验证是否在允许范围内
-                Path basePath = Paths.get(dockerCertPath).toAbsolutePath().normalize();
-                log.info("Base directory path: {}", basePath);
-
-                String certPath = basePath.resolve(envName).resolve("certs").normalize().toString();
-                log.info("Cert directory path: {}", certPath);
-
-                configBuilder.withDockerTlsVerify(true).withDockerCertPath(certPath);
-            } else {
-                configBuilder.withDockerTlsVerify(false);
-            }
-
-            DefaultDockerClientConfig config = configBuilder.build();
-
-            DockerHttpClient httpClient = new ApacheDockerHttpClient.Builder()
-                    .dockerHost(URI.create(host))
-                    .maxConnections(100)
-                    .connectionTimeout(Duration.ofSeconds(connectionTimeout))
-                    .responseTimeout(Duration.ofSeconds(responseTimeout))
-                    .sslConfig(config.getSSLConfig())
-                    .build();
+            // 复用已缓存的 HttpClient 实例（通过 getDockerHttpClient 确保单例）
+            DockerHttpClient httpClient = getDockerHttpClient(host);
 
             DockerClient dockerClient = DockerClientImpl.getInstance(config, httpClient);
 
@@ -136,6 +153,7 @@ public class DockerConnectionManager {
     public void removeClient(String host) {
         String key = host + "_" + this.getTlsVerify(host);
         clientCache.remove(key);
+        httpClientCache.remove(key);
 //        healthCache.remove(key);
     }
 

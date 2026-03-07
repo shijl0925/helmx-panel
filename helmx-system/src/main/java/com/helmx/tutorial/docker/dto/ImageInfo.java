@@ -46,7 +46,7 @@ public class ImageInfo {
 
     private List<String> layers;
 
-    private List<Map<String, String>> history;
+    private List<ImageHistoryItem> history;
 
     public ImageInfo(InspectImageResponse image) {
         this.id = Objects.requireNonNull(image.getId()).split(":")[1];
