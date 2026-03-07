@@ -1556,21 +1556,28 @@ public class DockerClientUtil {
      */
     public List<Map<String, String>> getImageHistory(String imageId) {
         try {
-            Process process = Runtime.getRuntime().exec("docker history --no-trunc --format {{.CreatedSince}}|||{{.CreatedBy}}|||{{.Size}} " + imageId);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            ProcessBuilder pb = new ProcessBuilder(
+                    "docker", "history", "--no-trunc", "--format",
+                    "{{.CreatedSince}}|||{{.CreatedBy}}|||{{.Size}}", imageId);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
 
             List<Map<String, String>> history = new ArrayList<>();
-            String line;
-
-            while ((line = reader.readLine()) != null) {
-                String[] parts = line.split("\\|\\|\\|", 3);
-                if (parts.length == 3) {
-                    Map<String, String> historyItem = new HashMap<>();
-                    historyItem.put("created", parts[0].trim());
-                    historyItem.put("layer", parts[1].trim());
-                    historyItem.put("size", parts[2].trim());
-                    history.add(historyItem);
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split("\\|\\|\\|", 3);
+                    if (parts.length == 3) {
+                        Map<String, String> historyItem = new HashMap<>();
+                        historyItem.put("created", parts[0].trim());
+                        historyItem.put("layer", parts[1].trim());
+                        historyItem.put("size", parts[2].trim());
+                        history.add(historyItem);
+                    }
                 }
+            } finally {
+                process.destroy();
             }
 
             return history;
@@ -2276,11 +2283,12 @@ public class DockerClientUtil {
             entry.setSize(file.getSize());
             tarOutputStream.putArchiveEntry(entry);
 
-            InputStream inputStream = file.getInputStream();
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                tarOutputStream.write(buffer, 0, bytesRead);
+            try (InputStream inputStream = file.getInputStream()) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    tarOutputStream.write(buffer, 0, bytesRead);
+                }
             }
 
             tarOutputStream.closeArchiveEntry();

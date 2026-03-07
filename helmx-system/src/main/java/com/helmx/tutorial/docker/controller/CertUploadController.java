@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -74,7 +75,9 @@ public class CertUploadController {
     private void saveCertFile(MultipartFile file, Path dirPath, String fileName) throws IOException {
         if (file != null && !file.isEmpty()) {
             Path filePath = dirPath.resolve(fileName);
-            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+            try (InputStream inputStream = file.getInputStream()) {
+                Files.copy(inputStream, filePath, StandardCopyOption.REPLACE_EXISTING);
+            }
             // 设置适当的文件权限
             filePath.toFile().setReadable(true, true);
             if (fileName.equals("key.pem")) {
