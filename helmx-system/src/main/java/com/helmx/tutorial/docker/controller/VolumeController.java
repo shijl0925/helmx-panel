@@ -170,4 +170,23 @@ public class VolumeController {
         result.put("status", "success");
         return ResponseUtil.success("Volume removed successfully!", result);
     }
+
+    @Operation(summary = "Prune unused Docker Volumes")
+    @PostMapping("/prune")
+    @PreAuthorize("@va.check('Ops:Volume:Prune')")
+    public ResponseEntity<Result> pruneDockerVolumes(@Valid @RequestBody StatusRequest criteria) {
+        String host = criteria.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        Map<String, Object> result = dockerClientUtil.pruneCmd("VOLUMES");
+        String status = (String) result.get("status");
+        String message = (String) result.get("message");
+
+        if ("success".equals(status)) {
+            return ResponseUtil.success(message, result);
+        } else {
+            log.error("Prune volumes failed: {}", message);
+            return ResponseUtil.failed(500, result, message);
+        }
+    }
 }

@@ -2745,6 +2745,31 @@ public class DockerClientUtil {
     }
 
     /**
+     * 搜索 Docker Hub 镜像
+     */
+    public List<Map<String, Object>> searchImagesOnHub(String term, int limit) {
+        List<Map<String, Object>> results = new ArrayList<>();
+        try (SearchImagesCmd cmd = getCurrentDockerClient().searchImagesCmd(term)) {
+            if (limit > 0) {
+                cmd.withLimit(limit);
+            }
+            List<SearchItem> items = cmd.exec();
+            for (SearchItem item : items) {
+                Map<String, Object> entry = new HashMap<>();
+                entry.put("name", item.getName());
+                entry.put("description", item.getDescription());
+                entry.put("starCount", item.getStarCount());
+                entry.put("isOfficial", item.isOfficial());
+                entry.put("isTrusted", item.isTrusted());
+                results.add(entry);
+            }
+        } catch (Exception e) {
+            log.error("Failed to search Docker Hub images for term '{}': {}", term, e.getMessage(), e);
+        }
+        return results;
+    }
+
+    /**
      * 将字节内容打包为 tar 输入流（用于写入容器文件）
      */
     private InputStream createTextTarInputStream(String fileName, byte[] content) throws IOException {
