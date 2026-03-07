@@ -581,7 +581,7 @@ public class ContainerController {
     @Operation(summary = "List files in a Docker Container directory")
     @PostMapping("/files")
     @PreAuthorize("@va.check('Ops:Container:Exec')")
-    public ResponseEntity<Result> ListContainerFiles(@Valid @RequestBody ContainerFilesRequest request) {
+    public ResponseEntity<Result> listContainerFiles(@Valid @RequestBody ContainerFilesRequest request) {
         String host = request.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -605,7 +605,7 @@ public class ContainerController {
     @Operation(summary = "Bulk operate Docker Containers (start/stop/restart/remove/pause/unpause/kill)")
     @PostMapping("/bulk")
     @PreAuthorize("@va.check('Ops:Container:Edit')")
-    public ResponseEntity<Result> BulkOperateContainers(@Valid @RequestBody BulkContainerOperationRequest request) {
+    public ResponseEntity<Result> bulkOperateContainers(@Valid @RequestBody BulkContainerOperationRequest request) {
         String host = request.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -632,7 +632,7 @@ public class ContainerController {
     @Operation(summary = "Update Docker Container resource limits (CPU/Memory) without recreation")
     @PostMapping("/resources")
     @PreAuthorize("@va.check('Ops:Container:Edit')")
-    public ResponseEntity<Result> UpdateContainerResources(@Valid @RequestBody ContainerResourceUpdateRequest request) {
+    public ResponseEntity<Result> updateContainerResources(@Valid @RequestBody ContainerResourceUpdateRequest request) {
         String host = request.getHost();
         dockerClientUtil.setCurrentHost(host);
 

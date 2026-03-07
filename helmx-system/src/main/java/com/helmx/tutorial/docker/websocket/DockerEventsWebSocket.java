@@ -111,7 +111,11 @@ public class DockerEventsWebSocket extends TextWebSocketHandler {
                                 : null);
                         eventJson.put("time", event.getTime());
                         eventJson.put("timeNano", event.getTimeNano());
-                        session.sendMessage(new TextMessage(eventJson.toJSONString()));
+                        synchronized (session) {
+                            if (session.isOpen()) {
+                                session.sendMessage(new TextMessage(eventJson.toJSONString()));
+                            }
+                        }
                     } catch (Exception e) {
                         log.error("Error sending Docker event via WebSocket: {}", session.getId(), e);
                     }

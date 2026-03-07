@@ -256,6 +256,18 @@ public class DockerClientUtil {
     }
 
     /**
+     * 强制删除容器
+     */
+    public Map<String, Object> removeContainerForce(String containerId) {
+        return executeDockerOperation(() -> {
+            try (RemoveContainerCmd cmd = getCurrentDockerClient().removeContainerCmd(containerId).withForce(true)) {
+                cmd.exec();
+            }
+            return "Container force-removed successfully";
+        }, "Failed to force-remove container");
+    }
+
+    /**
      * 杀死容器
      */
     public Map<String, Object> killContainer(String containerId) {
@@ -2376,7 +2388,7 @@ public class DockerClientUtil {
                                 output.append(new String(frame.getPayload(), StandardCharsets.UTF_8));
                             }
                         }
-                    }).awaitCompletion();
+                    }).awaitCompletion(30, TimeUnit.SECONDS);
 
             String outputStr = output.toString();
             if (outputStr.isBlank()) {
@@ -2395,6 +2407,9 @@ public class DockerClientUtil {
             }
         } catch (IllegalArgumentException e) {
             throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Interrupted while listing container files for {}", containerId, e);
         } catch (Exception e) {
             log.error("Error listing container files for {}: {}", containerId, e.getMessage(), e);
         }
@@ -2485,11 +2500,7 @@ public class DockerClientUtil {
                     case "unpause" -> unpauseContainer(containerId);
                     case "remove" -> {
                         if (request.isForce()) {
-                            try {
-                                stopContainer(containerId);
-                            } catch (Exception ignored) {
-                                // ignore stop error when force-removing
-                            }
+                            yield removeContainerForce(containerId);
                         }
                         yield removeContainer(containerId);
                     }
@@ -2516,9 +2527,7 @@ public class DockerClientUtil {
      */
     public Map<String, Object> updateContainerResources(ContainerResourceUpdateRequest request) {
         Map<String, Object> result = new HashMap<>();
-        try {
-            DockerClient client = getCurrentDockerClient();
-            UpdateContainerCmd cmd = client.updateContainerCmd(request.getContainerId());
+        try (UpdateContainerCmd cmd = getCurrentDockerClient().updateContainerCmd(request.getContainerId())) {
 
             if (request.getCpuShares() != null) {
                 cmd.withCpuShares(request.getCpuShares());
