@@ -74,8 +74,13 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
         TerminalSession terminalSession = new TerminalSession(host, containerId, dockerClientUtil, cmd, user);
         sessions.put(session.getId(), terminalSession);
 
-        // 启动终端会话
-        terminalSession.start(session);
+        try {
+            // 启动终端会话
+            terminalSession.start(session);
+        } finally {
+            // 清除ThreadLocal，避免线程池复用时的host泄漏
+            dockerClientUtil.clearCurrentHost();
+        }
     }
 
     private boolean checkPermission(Long userId) {

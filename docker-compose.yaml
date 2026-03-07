@@ -19,6 +19,13 @@ services:
       - './postgresql/conf:/etc/postgresql/conf.d'
       - postgresql_data:/var/lib/postgresql/data
       - './postgresql/log:/var/log/postgresql'
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '1.0'
+        reservations:
+          memory: 256m
 
   redis:
     image: redis:6.2.20-alpine
@@ -33,6 +40,13 @@ services:
     restart: always
     volumes:
       - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.5'
+        reservations:
+          memory: 128m
 
   helmx:
     image: shijl0925/helmx-panel:latest
@@ -61,6 +75,13 @@ services:
     volumes:
       - './logs:/app/logs'
       - './docker-certs:/app/docker-certs'
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+        reservations:
+          memory: 512m
 
   helmx-web:
     image: shijl0925/helmx-panel-web:latest
@@ -77,6 +98,13 @@ services:
     restart: always
     ports:
         - '80:80'
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: '0.5'
+        reservations:
+          memory: 64m
 
 volumes:
   postgresql_data:

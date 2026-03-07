@@ -68,6 +68,11 @@ public class DockerClientUtil {
         currentHost.set(host);
     }
 
+    // 清除当前线程的Docker主机，避免ThreadLocal泄漏
+    public void clearCurrentHost() {
+        currentHost.remove();
+    }
+
     // 获取当前DockerClient
     public DockerClient getCurrentDockerClient() {
         String host = currentHost.get();
@@ -1570,10 +1575,13 @@ public class DockerClientUtil {
      * 获取镜像历史（通过 Docker HTTP API）
      */
     public List<ImageHistoryItem> getImageHistory(String imageId) {
+        // URL-encode imageId to prevent path injection / traversal
+        String encodedId = java.net.URLEncoder.encode(imageId, StandardCharsets.UTF_8);
+
         com.github.dockerjava.transport.DockerHttpClient.Request request =
                 com.github.dockerjava.transport.DockerHttpClient.Request.builder()
                         .method(com.github.dockerjava.transport.DockerHttpClient.Request.Method.GET)
-                        .path("/images/" + imageId + "/history")
+                        .path("/images/" + encodedId + "/history")
                         .build();
 
         try (com.github.dockerjava.transport.DockerHttpClient.Response response =
@@ -1589,6 +1597,9 @@ public class DockerClientUtil {
             }
 
             List<JSONObject> rawList = JSON.parseArray(json, JSONObject.class);
+            if (rawList == null) {
+                return new ArrayList<>();
+            }
             return rawList.stream()
                     .map(item -> {
                         String createdBy = item.getString("CreatedBy");
@@ -1599,7 +1610,9 @@ public class DockerClientUtil {
                         Long createdEpoch = item.getLong("Created");
                         String id = item.getString("Id");
                         String comment = item.getString("Comment");
-                        List<String> tags = item.getList("Tags", String.class);
+                        // Docker API returns null for Tags on untagged layers; normalise to empty list
+                        List<String> rawTags = item.getList("Tags", String.class);
+                        List<String> tags = rawTags != null ? rawTags : new ArrayList<>();
 
                         String created = createdEpoch != null
                                 ? Instant.ofEpochSecond(createdEpoch).toString()
