@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class DockerHostValidator {
 
+    // tb_docker_env.status = 1 means the Docker environment is enabled/active.
     private static final int ACTIVE_STATUS = 1;
 
     private final DockerEnvMapper dockerEnvMapper;
