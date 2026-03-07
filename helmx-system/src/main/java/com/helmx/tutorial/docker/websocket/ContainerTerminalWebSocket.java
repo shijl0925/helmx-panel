@@ -97,7 +97,7 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
             for (String param : params) {
                 if (param.startsWith(paramName + "=")) {
                     try {
-                        return java.net.URLDecoder.decode(param.substring(paramName.length() + 1), "UTF-8");
+                        return java.net.URLDecoder.decode(param.substring(paramName.length() + 1), java.nio.charset.StandardCharsets.UTF_8);
                     } catch (Exception e) {
                         log.error("Failed to decode {} parameter", paramName, e);
                     }

@@ -94,7 +94,9 @@ public class DockerClientUtil {
 
         try {
             DockerClient client = getCurrentDockerClient();
-            client.pingCmd().exec();
+            try (var cmd = client.pingCmd()) {
+                cmd.exec();
+            }
             return true;
         } catch (Exception e) {
             log.debug("Connection health check failed for host: {}", host, e);
@@ -326,7 +328,7 @@ public class DockerClientUtil {
                 @Override
                 public void onNext(Frame item) {
                     if (item != null && item.getPayload() != null) {
-                        logs.append(new String(item.getPayload())).append("\n");
+                        logs.append(new String(item.getPayload(), StandardCharsets.UTF_8)).append("\n");
                         // 限制日志长度，避免内存占用过高
                         if (logs.length() > MAX_LOG_SIZE_BYTES) {
                             logs.delete(0, logs.length() - LOG_RETAIN_SIZE_BYTES);
@@ -922,20 +924,20 @@ public class DockerClientUtil {
             }
 
             // 创建容器命令
-            CreateContainerCmd createContainerCmd = getCurrentDockerClient().createContainerCmd(imageName);
+            try (CreateContainerCmd createContainerCmd = getCurrentDockerClient().createContainerCmd(imageName)) {
+                if (containerName != null && !containerName.isEmpty()) {
+                    createContainerCmd.withName(containerName);
+                }
+                log.info("Creating new container with image: {}", imageName);
 
-            if (containerName != null && !containerName.isEmpty()) {
-                createContainerCmd.withName(containerName);
+                // 设置容器配置
+                configureContainer(createContainerCmd, criteria);
+
+                // 执行创建容器命令
+                CreateContainerResponse container = createContainerCmd.exec();
+                containerId = container.getId();
+                log.info("Created new container with ID: {}", containerId);
             }
-            log.info("Creating new container with image: {}", imageName);
-
-            // 设置容器配置
-            configureContainer(createContainerCmd, criteria);
-
-            // 执行创建容器命令
-            CreateContainerResponse container = createContainerCmd.exec();
-            containerId = container.getId();
-            log.info("Created new container with ID: {}", containerId);
 
             // 启动新容器
             try (StartContainerCmd cmd = getCurrentDockerClient().startContainerCmd(containerId)) {
@@ -1035,17 +1037,19 @@ public class DockerClientUtil {
             if (newImageName == null || newImageName.isEmpty()) {
                 throw new IllegalArgumentException("Image name must not be null or empty.");
             }
-            CreateContainerCmd createContainerCmd = getCurrentDockerClient().createContainerCmd(newImageName)
-                    .withName(newContainerName);
-            log.info("Creating container: {} with image: {}", newContainerName, newImageName);
+            String newContainerId;
+            try (CreateContainerCmd createContainerCmd = getCurrentDockerClient().createContainerCmd(newImageName)
+                    .withName(newContainerName)) {
+                log.info("Creating container: {} with image: {}", newContainerName, newImageName);
 
-            // 设置容器配置
-            configureContainer(createContainerCmd, criteria);
+                // 设置容器配置
+                configureContainer(createContainerCmd, criteria);
 
-            // 执行创建容器命令
-            CreateContainerResponse newContainer = createContainerCmd.exec();
-            String newContainerId = newContainer.getId();
-            log.info("Created new container with ID: {}", newContainerId);
+                // 执行创建容器命令
+                CreateContainerResponse newContainer = createContainerCmd.exec();
+                newContainerId = newContainer.getId();
+                log.info("Created new container with ID: {}", newContainerId);
+            }
 
             // 启动新容器
             try (StartContainerCmd cmd = getCurrentDockerClient().startContainerCmd(newContainerId)) {
@@ -1763,14 +1767,17 @@ public class DockerClientUtil {
         long totalSize = 0L;
         try {
             // 获取所有虚悬镜像（dangling images）
-            List<Image> danglingImages = client.listImagesCmd()
-                    .withDanglingFilter(true)
-                    .exec();
+            List<Image> danglingImages;
+            try (var listCmd = client.listImagesCmd().withDanglingFilter(true)) {
+                danglingImages = listCmd.exec();
+            }
 
             // 删除虚悬镜像
             for (Image image : danglingImages) {
                 try {
-                    client.removeImageCmd(image.getId()).exec();
+                    try (var removeCmd = client.removeImageCmd(image.getId())) {
+                        removeCmd.exec();
+                    }
                     log.info("Removed dangling image: {}", image.getId());
 
                     long imageSize = image.getSize() != null ? image.getSize() : 0L;
@@ -2035,24 +2042,25 @@ public class DockerClientUtil {
     private void copyGitRepositoryContent(Path sourceDir, Path targetDir) throws IOException {
         log.info("Copying Git repository content from {} to {}", sourceDir, targetDir);
 
-        Files.walk(sourceDir)
-                .filter(path -> !path.equals(sourceDir)) // 排除源目录本身
-                .forEach(sourcePath -> {
-                    try {
-                        Path relativePath = sourceDir.relativize(sourcePath);
-                        Path targetPath = targetDir.resolve(relativePath);
+        try (Stream<Path> walk = Files.walk(sourceDir)) {
+            walk.filter(path -> !path.equals(sourceDir)) // 排除源目录本身
+                    .forEach(sourcePath -> {
+                        try {
+                            Path relativePath = sourceDir.relativize(sourcePath);
+                            Path targetPath = targetDir.resolve(relativePath);
 
-                        // 创建目标目录
-                        if (Files.isDirectory(sourcePath)) {
-                            Files.createDirectories(targetPath);
-                        } else {
-                            // 复制文件
-                            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                            // 创建目标目录
+                            if (Files.isDirectory(sourcePath)) {
+                                Files.createDirectories(targetPath);
+                            } else {
+                                // 复制文件
+                                Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                            }
+                        } catch (IOException e) {
+                            log.warn("Failed to copy file: {}", sourcePath, e);
                         }
-                    } catch (IOException e) {
-                        log.warn("Failed to copy file: {}", sourcePath, e);
-                    }
-                });
+                    });
+        }
 
         log.info("Git repository content copied successfully");
     }
@@ -2062,10 +2070,11 @@ public class DockerClientUtil {
      */
     private void deleteTempDirectory(Path tempDir) throws IOException {
         if (tempDir != null && Files.exists(tempDir)) {
-            Files.walk(tempDir)
-                    .sorted(Comparator.reverseOrder())
-                    .map(Path::toFile)
-                    .forEach(File::delete);
+            try (Stream<Path> walk = Files.walk(tempDir)) {
+                walk.sorted(Comparator.reverseOrder())
+                        .map(Path::toFile)
+                        .forEach(File::delete);
+            }
         }
     }
 
@@ -2105,9 +2114,11 @@ public class DockerClientUtil {
                 return result;
             }
 
-            PruneCmd pruneCmd = getCurrentDockerClient().pruneCmd(pruneType);
-            PruneResponse response = pruneCmd.exec();
-            long size = response.getSpaceReclaimed() != null ? response.getSpaceReclaimed() : 0L;
+            long size;
+            try (PruneCmd pruneCmd = getCurrentDockerClient().pruneCmd(pruneType)) {
+                PruneResponse response = pruneCmd.exec();
+                size = response.getSpaceReclaimed() != null ? response.getSpaceReclaimed() : 0L;
+            }
 
             if (pruneTypeStr.equals("IMAGES")) {
                 // 获取虚悬镜像列表(指那些没有被任何容器引用的镜像，通常这些镜像的仓库名（镜像名）和标签（TAG）都是<none>)
@@ -2171,7 +2182,7 @@ public class DockerClientUtil {
                         @Override
                         public void onNext(Frame object) {
                             if (object != null && object.getPayload() != null) {
-                                output.append(new String(object.getPayload()));
+                                output.append(new String(object.getPayload(), StandardCharsets.UTF_8));
                             }
                         }
                     }).awaitCompletion();
@@ -2264,9 +2275,10 @@ public class DockerClientUtil {
      */
     public byte[] copyFileFromContainer(String containerId, String containerPath) {
         try (CopyArchiveFromContainerCmd cmd = getCurrentDockerClient().copyArchiveFromContainerCmd(containerId, containerPath)) {
-            InputStream inputStream = cmd.exec();
-            // 解压tar文件获取实际文件内容
-            return extractFileFromTar(inputStream);
+            try (InputStream inputStream = cmd.exec()) {
+                // 解压tar文件获取实际文件内容
+                return extractFileFromTar(inputStream);
+            }
         } catch (Exception e) {
             log.error("Unexpected error when copying archive from container: {}", containerId, e);
             throw new RuntimeException(e.getMessage(), e);
@@ -2377,26 +2389,29 @@ public class DockerClientUtil {
             // to prevent command injection.
             String[] cmd = {"ls", "-la", path};
 
-            ExecCreateCmdResponse execCreate = client.execCreateCmd(containerId)
+            ExecCreateCmdResponse execCreate;
+            try (var execCreateCmd = client.execCreateCmd(containerId)
                     .withCmd(cmd)
                     .withUser("root")
                     .withAttachStdout(true)
                     .withAttachStderr(true)
-                    .withTty(false)
-                    .exec();
+                    .withTty(false)) {
+                execCreate = execCreateCmd.exec();
+            }
 
             StringBuilder output = new StringBuilder();
-            client.execStartCmd(execCreate.getId())
+            try (var execStartCmd = client.execStartCmd(execCreate.getId())
                     .withDetach(false)
-                    .withTty(false)
-                    .exec(new ResultCallback.Adapter<Frame>() {
-                        @Override
-                        public void onNext(Frame frame) {
-                            if (frame != null && frame.getPayload() != null) {
-                                output.append(new String(frame.getPayload(), StandardCharsets.UTF_8));
-                            }
+                    .withTty(false)) {
+                execStartCmd.exec(new ResultCallback.Adapter<Frame>() {
+                    @Override
+                    public void onNext(Frame frame) {
+                        if (frame != null && frame.getPayload() != null) {
+                            output.append(new String(frame.getPayload(), StandardCharsets.UTF_8));
                         }
-                    }).awaitCompletion(30, TimeUnit.SECONDS);
+                    }
+                }).awaitCompletion(30, TimeUnit.SECONDS);
+            }
 
             String outputStr = output.toString();
             if (outputStr.isBlank()) {
