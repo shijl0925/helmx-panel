@@ -242,11 +242,11 @@ public class ImageController {
         try {
             dockerClientUtil.removeImage(imageId, force);
             result.put("status", "success");
-            return ResponseUtil.success("Container removed successfully!", result);
+            return ResponseUtil.success("Image removed successfully!", result);
         } catch (Exception e) {
             result.put("status", "failed");
             result.put("message", e.getMessage());
-            return ResponseUtil.success("Image removed failed!" + e.getMessage(), result);
+            return ResponseUtil.failed(500, result, "Image removed failed! " + e.getMessage());
         }
     }
 
@@ -359,6 +359,8 @@ public class ImageController {
             } catch (Exception e) {
                 log.error("Error streaming image data", e);
                 throw e;
+            } finally {
+                dockerClientUtil.clearCurrentHost();
             }
         };
 

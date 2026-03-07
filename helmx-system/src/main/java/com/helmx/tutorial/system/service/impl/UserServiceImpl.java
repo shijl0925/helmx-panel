@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.helmx.tutorial.system.entity.*;
 import com.helmx.tutorial.system.mapper.*;
@@ -40,6 +41,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    @Transactional
     public void registerUser(SignupRequest signUpRequest) {
 
         User user = new User();
@@ -59,6 +61,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    @Transactional
     public void updateUserRoles(Long userId, Set<Integer> roleIds) {
         if (userId == null) {
             throw new IllegalArgumentException("User ID cannot be null");
