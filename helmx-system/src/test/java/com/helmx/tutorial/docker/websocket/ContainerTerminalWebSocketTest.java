@@ -17,7 +17,7 @@ import org.springframework.web.socket.WebSocketSession;
 import java.net.URI;
 
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -77,7 +77,7 @@ class ContainerTerminalWebSocketTest {
         when(jwtTokenUtil.validateToken("valid")).thenReturn(true);
         when(jwtTokenUtil.getUserIdFromToken("valid")).thenReturn(7L);
         when(userService.isSuperAdmin(7L)).thenReturn(true);
-        org.mockito.Mockito.doThrow(new IllegalArgumentException("blocked"))
+        doThrow(new IllegalArgumentException("blocked"))
                 .when(dockerHostValidator).validateHostAllowlist("tcp://blocked:2375");
 
         handler.afterConnectionEstablished(session);
