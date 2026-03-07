@@ -75,7 +75,7 @@ class ContainerTerminalWebSocketTest {
         when(session.getId()).thenReturn("session-2");
         when(session.getUri()).thenReturn(new URI("ws://localhost/api/v1/ops/containers/terminal/container-1?token=valid&host=tcp://blocked:2375"));
         when(jwtTokenUtil.validateToken("valid")).thenReturn(true);
-        when(jwtTokenUtil.getClaimFromToken("valid", "userId")).thenReturn(7L);
+        when(jwtTokenUtil.getUserIdFromToken("valid")).thenReturn(7L);
         when(userService.isSuperAdmin(7L)).thenReturn(true);
         org.mockito.Mockito.doThrow(new IllegalArgumentException("blocked"))
                 .when(dockerHostValidator).validateHostAllowlist("tcp://blocked:2375");

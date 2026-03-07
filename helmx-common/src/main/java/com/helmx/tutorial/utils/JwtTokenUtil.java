@@ -85,4 +85,19 @@ public class JwtTokenUtil {
             return null;
         }
     }
+
+    public Long getUserIdFromToken(String token) {
+        Object userIdClaim = getClaimFromToken(token, "userId");
+        if (userIdClaim instanceof Number number) {
+            return number.longValue();
+        }
+        if (userIdClaim != null) {
+            try {
+                return Long.valueOf(userIdClaim.toString());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid userId claim in token: {}", userIdClaim);
+            }
+        }
+        return null;
+    }
 }

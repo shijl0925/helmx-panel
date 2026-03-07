@@ -69,7 +69,7 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
         }
 
         // 获取当前用户名, 检查权限
-        Long userId = getUserIdFromToken(token);
+        Long userId = jwtTokenUtil.getUserIdFromToken(token);
         if (!checkPermission(userId)) {
             log.warn("User {} does not have permission to access terminal", userId);
             session.close(CloseStatus.BAD_DATA.withReason("Forbidden"));
@@ -198,18 +198,4 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
         return false;
     }
 
-    private Long getUserIdFromToken(String token) {
-        Object userIdClaim = jwtTokenUtil.getClaimFromToken(token, "userId");
-        if (userIdClaim instanceof Number number) {
-            return number.longValue();
-        }
-        if (userIdClaim != null) {
-            try {
-                return Long.valueOf(userIdClaim.toString());
-            } catch (NumberFormatException ex) {
-                log.warn("Invalid userId claim in websocket token: {}", userIdClaim);
-            }
-        }
-        return null;
-    }
 }

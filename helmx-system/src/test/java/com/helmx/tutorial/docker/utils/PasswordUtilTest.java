@@ -70,7 +70,7 @@ class PasswordUtilTest {
     }
 
     @Test
-    void init_missingSecretKey_throwsIllegalStateException() throws Exception {
+    void init_missingSecretKey_throwsIllegalStateExceptionWrappedByReflection() throws Exception {
         PasswordUtil util = new PasswordUtil();
         Field field = PasswordUtil.class.getDeclaredField("secretKeyValue");
         field.setAccessible(true);
