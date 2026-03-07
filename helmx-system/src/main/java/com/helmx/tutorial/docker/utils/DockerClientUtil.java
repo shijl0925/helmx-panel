@@ -63,8 +63,12 @@ public class DockerClientUtil {
     @Autowired
     private PasswordUtil passwordUtil;
 
+    @Autowired
+    private DockerHostValidator dockerHostValidator;
+
     // 设置当前操作的服务器
     public void setCurrentHost(String host) {
+        dockerHostValidator.validateHostAllowlist(host);
         currentHost.set(host);
     }
 

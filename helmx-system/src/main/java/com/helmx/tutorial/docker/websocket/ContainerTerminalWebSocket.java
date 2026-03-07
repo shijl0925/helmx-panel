@@ -1,10 +1,11 @@
 package com.helmx.tutorial.docker.websocket;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
+import com.helmx.tutorial.docker.utils.DockerHostValidator;
 
 import com.helmx.tutorial.system.mapper.UserMapper;
 import com.helmx.tutorial.system.service.UserService;
-import com.helmx.tutorial.utils.SecurityUtils;
+import com.helmx.tutorial.utils.JwtTokenUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.NonNull;
@@ -31,6 +32,12 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private DockerHostValidator dockerHostValidator;
+
+    @Autowired
+    private JwtTokenUtil jwtTokenUtil;
+
     // 维护会话映射
     private final ConcurrentHashMap<String, TerminalSession> sessions = new ConcurrentHashMap<>();
 
@@ -45,8 +52,13 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
             return;
         }
 
+        if (!jwtTokenUtil.validateToken(token)) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("Invalid or expired token"));
+            return;
+        }
+
         // 获取当前用户名, 检查权限
-        Long userId = SecurityUtils.getCurrentUserId(token);
+        Long userId = getUserIdFromToken(token);
         if (!checkPermission(userId)) {
             log.warn("User {} does not have permission to access terminal", userId);
             session.close(CloseStatus.BAD_DATA.withReason("Forbidden"));
@@ -67,6 +79,13 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
             return;
         }
 
+        try {
+            dockerHostValidator.validateHostAllowlist(host);
+        } catch (IllegalArgumentException ex) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("Unauthorized host"));
+            return;
+        }
+
         String cmd = extractParameterFromQuery(session, "cmd", "/bin/bash");
         String user = extractParameterFromQuery(session, "user", "root");
 
@@ -77,6 +96,8 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
         try {
             // 启动终端会话
             terminalSession.start(session);
+        } catch (IllegalArgumentException ex) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("Unauthorized host"));
         } finally {
             // 清除ThreadLocal，避免线程池复用时的host泄漏
             dockerClientUtil.clearCurrentHost();
@@ -93,6 +114,21 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
             return userPermissions.contains("Ops:Container:Exec");
         }
         return false;
+    }
+
+    private Long getUserIdFromToken(String token) {
+        Object userIdClaim = jwtTokenUtil.getClaimFromToken(token, "userId");
+        if (userIdClaim instanceof Number number) {
+            return number.longValue();
+        }
+        if (userIdClaim != null) {
+            try {
+                return Long.valueOf(userIdClaim.toString());
+            } catch (NumberFormatException ex) {
+                log.warn("Invalid userId claim in websocket token: {}", userIdClaim);
+            }
+        }
+        return null;
     }
 
     private String extractParameterFromQuery(WebSocketSession session, String paramName, String defaultValue) {

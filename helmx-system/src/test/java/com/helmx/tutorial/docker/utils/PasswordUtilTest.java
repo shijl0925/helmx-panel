@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -66,5 +67,19 @@ class PasswordUtilTest {
         assertFalse(key.isBlank());
         // A 128-bit AES key base64-encoded is 24 characters
         assertTrue(key.length() >= 20);
+    }
+
+    @Test
+    void init_missingSecretKey_throwsIllegalStateException() throws Exception {
+        PasswordUtil util = new PasswordUtil();
+        Field field = PasswordUtil.class.getDeclaredField("secretKeyValue");
+        field.setAccessible(true);
+        field.set(util, "");
+
+        Method init = PasswordUtil.class.getDeclaredMethod("init");
+        init.setAccessible(true);
+
+        InvocationTargetException exception = assertThrows(InvocationTargetException.class, () -> init.invoke(util));
+        assertInstanceOf(IllegalStateException.class, exception.getCause());
     }
 }

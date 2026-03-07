@@ -6,9 +6,10 @@ import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.LogContainerCmd;
 import com.github.dockerjava.api.model.Frame;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
+import com.helmx.tutorial.docker.utils.DockerHostValidator;
 import com.helmx.tutorial.system.mapper.UserMapper;
 import com.helmx.tutorial.system.service.UserService;
-import com.helmx.tutorial.utils.SecurityUtils;
+import com.helmx.tutorial.utils.JwtTokenUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.NonNull;
@@ -35,6 +36,12 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private DockerHostValidator dockerHostValidator;
+
+    @Autowired
+    private JwtTokenUtil jwtTokenUtil;
+
     private final Map<String, LogContainerCmd> activeCommands = new ConcurrentHashMap<>();
 
     @Override
@@ -56,11 +63,23 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
 
         String token = request.getString("token");
 
+        if (!jwtTokenUtil.validateToken(token)) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("Invalid or expired token"));
+            return;
+        }
+
         // 获取当前用户名, 检查权限
-        Long userId = SecurityUtils.getCurrentUserId(token);
+        Long userId = getUserIdFromToken(token);
         if (!checkPermission(userId)) {
             log.warn("User {} does not have permission to access terminal", userId);
             session.close(CloseStatus.BAD_DATA.withReason("Forbidden"));
+            return;
+        }
+
+        try {
+            dockerHostValidator.validateHostAllowlist(host);
+        } catch (IllegalArgumentException ex) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("Unauthorized host"));
             return;
         }
 
@@ -177,5 +196,20 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
             return userPermissions.contains("Ops:Container:Logs");
         }
         return false;
+    }
+
+    private Long getUserIdFromToken(String token) {
+        Object userIdClaim = jwtTokenUtil.getClaimFromToken(token, "userId");
+        if (userIdClaim instanceof Number number) {
+            return number.longValue();
+        }
+        if (userIdClaim != null) {
+            try {
+                return Long.valueOf(userIdClaim.toString());
+            } catch (NumberFormatException ex) {
+                log.warn("Invalid userId claim in websocket token: {}", userIdClaim);
+            }
+        }
+        return null;
     }
 }

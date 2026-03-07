@@ -19,13 +19,16 @@ public class PasswordUtil {
     private static final String ALGORITHM = "AES";
     private static final String TRANSFORMATION = "AES/CBC/PKCS5Padding";
 
-    @Value("${docker.password.secret-key:bDAORZ9t7/+1RpyV5JIXJg==}")
+    @Value("${docker.password.secret-key}")
     private String secretKeyValue;
 
     private byte[] keyBytes;
 
     @PostConstruct
     private void init() {
+        if (secretKeyValue == null || secretKeyValue.isBlank()) {
+            throw new IllegalStateException("docker.password.secret-key must be configured");
+        }
         keyBytes = Base64.getDecoder().decode(secretKeyValue);
         int keyLen = keyBytes.length;
         if (keyLen != 16 && keyLen != 24 && keyLen != 32) {
