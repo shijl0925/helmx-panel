@@ -264,6 +264,7 @@ public class DockerCompose {
             List<String> checkCommand = buildComposeCommand("-f", composeFile.toString(), "ps");
             ProcessBuilder checkProcessBuilder = new ProcessBuilder(checkCommand);
             checkProcessBuilder.directory(stackDirPath.toFile());
+            checkProcessBuilder.redirectErrorStream(true);
             Process checkProcess = checkProcessBuilder.start();
 
             StringBuilder output = new StringBuilder();
