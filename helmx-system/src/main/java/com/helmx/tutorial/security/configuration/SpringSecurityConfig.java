@@ -66,8 +66,8 @@ public class SpringSecurityConfig {
                 .cors(Customizer.withDefaults())
                 // 禁用 CSRF
                 .csrf(csrf -> csrf.disable())
-                // 启用会话管理
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                // 使用无状态会话策略，JWT认证不需要服务端Session
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // 授权异常
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
