@@ -8,6 +8,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class DockerHostValidator {
 
+    private static final int ACTIVE_STATUS = 1;
+
     private final DockerEnvMapper dockerEnvMapper;
 
     public DockerHostValidator(DockerEnvMapper dockerEnvMapper) {
@@ -21,7 +23,7 @@ public class DockerHostValidator {
 
         LambdaQueryWrapper<DockerEnv> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(DockerEnv::getHost, host)
-                .eq(DockerEnv::getStatus, 1);
+                .eq(DockerEnv::getStatus, ACTIVE_STATUS);
 
         if (!dockerEnvMapper.exists(queryWrapper)) {
             throw new IllegalArgumentException("Access to the specified host is not allowed");
