@@ -93,7 +93,7 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
                 public void onNext(Frame item) {
                     try {
                         if (session.isOpen()) {
-                            session.sendMessage(new TextMessage(new String(item.getPayload())));
+                            session.sendMessage(new TextMessage(new String(item.getPayload(), java.nio.charset.StandardCharsets.UTF_8)));
                         }
                     } catch (Exception e) {
                         log.error("Error sending log message via WebSocket", e);

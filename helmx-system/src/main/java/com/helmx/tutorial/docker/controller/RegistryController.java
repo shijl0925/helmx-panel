@@ -95,7 +95,7 @@ public class RegistryController {
 
             // 构建基础认证头
             String auth = username + ":" + password;
-            String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes());
+            String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             int responseCode = getResponseCode(registryUrl, encodedAuth);
             if (responseCode == 200) {
@@ -123,34 +123,38 @@ public class RegistryController {
         URL url = uri.toURL();
 
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setRequestMethod("GET");
-        connection.setConnectTimeout(15000); // 设置超时为15秒
-        connection.setReadTimeout(15000); // 添加读取超时
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("Content-Type", "application/json");
+        try {
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(15000); // 设置超时为15秒
+            connection.setReadTimeout(15000); // 添加读取超时
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Content-Type", "application/json");
 
-        if (encodedAuth != null && !encodedAuth.isEmpty()) {
-            // 尝试标准Basic Auth
-            connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
-        }
-
-        // 禁止自动重定向，防止跳转到恶意网站
-        connection.setInstanceFollowRedirects(false);
-
-        int responseCode =  connection.getResponseCode();
-
-        // 如果是401未授权，可能需要特殊处理
-        if (responseCode == 401) {
-            // 获取WWW-Authenticate头，可能需要OAuth2流程
-            String authHeader = connection.getHeaderField("WWW-Authenticate");
-            if (authHeader != null && authHeader.startsWith("Bearer")) {
-                // 这里可以实现Bearer Token获取逻辑
-                log.warn("Registry requires Bearer token authentication: {}", authHeader);
-                throw new IOException("Registry requires Bearer token authentication");
+            if (encodedAuth != null && !encodedAuth.isEmpty()) {
+                // 尝试标准Basic Auth
+                connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
             }
-        }
 
-        return responseCode;
+            // 禁止自动重定向，防止跳转到恶意网站
+            connection.setInstanceFollowRedirects(false);
+
+            int responseCode = connection.getResponseCode();
+
+            // 如果是401未授权，可能需要特殊处理
+            if (responseCode == 401) {
+                // 获取WWW-Authenticate头，可能需要OAuth2流程
+                String authHeader = connection.getHeaderField("WWW-Authenticate");
+                if (authHeader != null && authHeader.startsWith("Bearer")) {
+                    // 这里可以实现Bearer Token获取逻辑
+                    log.warn("Registry requires Bearer token authentication: {}", authHeader);
+                    throw new IOException("Registry requires Bearer token authentication");
+                }
+            }
+
+            return responseCode;
+        } finally {
+            connection.disconnect();
+        }
     }
 
     @Operation(summary = "Get registry by ID")

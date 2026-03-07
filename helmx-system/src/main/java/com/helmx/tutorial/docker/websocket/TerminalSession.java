@@ -60,7 +60,10 @@ public class TerminalSession {
 
         // 检查容器是否正在运行
         try {
-            InspectContainerResponse containerInfo = dockerClient.inspectContainerCmd(containerId).exec();
+            InspectContainerResponse containerInfo;
+            try (var inspectCmd = dockerClient.inspectContainerCmd(containerId)) {
+                containerInfo = inspectCmd.exec();
+            }
             if (!Boolean.TRUE.equals(containerInfo.getState().getRunning())) {
                 log.error("Container {} was not running", containerId);
                 webSocketSession.sendMessage(new TextMessage("Error: Container is not running\r\n"));

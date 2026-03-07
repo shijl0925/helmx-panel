@@ -203,7 +203,7 @@ public class DockerEventsWebSocket extends TextWebSocketHandler {
             for (String param : query.split("&")) {
                 if (param.startsWith(name + "=")) {
                     try {
-                        return java.net.URLDecoder.decode(param.substring(name.length() + 1), "UTF-8");
+                        return java.net.URLDecoder.decode(param.substring(name.length() + 1), java.nio.charset.StandardCharsets.UTF_8);
                     } catch (Exception e) {
                         log.error("Failed to decode parameter: {}", name, e);
                     }

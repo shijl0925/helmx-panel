@@ -44,10 +44,11 @@ public class GitUtil {
     public static void deleteTempDirectory(Path tempDir) {
         try {
             if (tempDir != null && Files.exists(tempDir)) {
-                Files.walk(tempDir)
-                        .sorted(java.util.Comparator.reverseOrder())
-                        .map(Path::toFile)
-                        .forEach(java.io.File::delete);
+                try (java.util.stream.Stream<Path> walk = Files.walk(tempDir)) {
+                    walk.sorted(java.util.Comparator.reverseOrder())
+                            .map(Path::toFile)
+                            .forEach(java.io.File::delete);
+                }
                 log.info("Temporary directory deleted: {}", tempDir);
             }
         } catch (IOException e) {

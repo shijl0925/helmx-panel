@@ -118,7 +118,9 @@ public class DockerConnectionManager {
             // 异步验证连接，避免阻塞
             CompletableFuture.supplyAsync(() -> {
                 try {
-                    dockerClient.infoCmd().exec();
+                    try (var cmd = dockerClient.infoCmd()) {
+                        cmd.exec();
+                    }
                     return true;
                 } catch (Exception e) {
                     log.warn("Failed to validate Docker connection to {}: {}", host, e.getMessage());
@@ -145,7 +147,9 @@ public class DockerConnectionManager {
             DockerClient client = clientCache.get(key);
             if (client != null) {
                 // 使用 ping 命令，比 infoCmd 更轻量
-                client.pingCmd().exec();
+                try (var cmd = client.pingCmd()) {
+                    cmd.exec();
+                }
                 return true;
             }
             return false;

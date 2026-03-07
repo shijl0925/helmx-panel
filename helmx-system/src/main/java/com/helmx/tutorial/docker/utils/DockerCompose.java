@@ -264,15 +264,18 @@ public class DockerCompose {
             List<String> checkCommand = buildComposeCommand("-f", composeFile.toString(), "ps");
             ProcessBuilder checkProcessBuilder = new ProcessBuilder(checkCommand);
             checkProcessBuilder.directory(stackDirPath.toFile());
+            checkProcessBuilder.redirectErrorStream(true);
             Process checkProcess = checkProcessBuilder.start();
 
             StringBuilder output = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(checkProcess.getInputStream()))) {
+                    new InputStreamReader(checkProcess.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     output.append(line).append("\n");
                 }
+            } finally {
+                checkProcess.destroy();
             }
 
             int exitCode = checkProcess.waitFor();
@@ -324,14 +327,20 @@ public class DockerCompose {
             return true;
         }
 
+        Process process = null;
         try {
             ProcessBuilder processBuilder = new ProcessBuilder();
             processBuilder.command("docker-compose", "--version");
-            Process process = processBuilder.start();
+            processBuilder.redirectErrorStream(true);
+            process = processBuilder.start();
             return process.waitFor() == 0;
         } catch (Exception e) {
             log.debug("docker-compose command not available: {}", e.getMessage());
             return false;
+        } finally {
+            if (process != null) {
+                process.destroy();
+            }
         }
     }
 
@@ -339,13 +348,19 @@ public class DockerCompose {
      * 检查 docker-compose 插件是否可用
      */
     private boolean isDockerComposePluginAvailable() {
+        Process process = null;
         try {
             ProcessBuilder processBuilder = new ProcessBuilder();
             processBuilder.command("docker", "compose", "--version");
-            Process process = processBuilder.start();
+            processBuilder.redirectErrorStream(true);
+            process = processBuilder.start();
             return process.waitFor() == 0;
         } catch (Exception e) {
             return false;
+        } finally {
+            if (process != null) {
+                process.destroy();
+            }
         }
     }
 

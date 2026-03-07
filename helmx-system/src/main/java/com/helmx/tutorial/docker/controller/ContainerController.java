@@ -363,7 +363,7 @@ public class ContainerController {
                     }
 
                     try {
-                        String payload = new String(item.getPayload());
+                        String payload = new String(item.getPayload(), java.nio.charset.StandardCharsets.UTF_8);
                         log.info("Received log message, length: {}", payload.length());
                         // 限制单条消息长度
                         if (payload.length() > MAX_MESSAGE_LENGTH) {
