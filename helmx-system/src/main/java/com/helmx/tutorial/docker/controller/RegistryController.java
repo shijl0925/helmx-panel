@@ -108,7 +108,7 @@ public class RegistryController {
                 String message = "Registry authentication failed";
                 result.put("status", "failed");
                 result.put("message", message);
-                log.warn("Registry connection failed with HTTP code: {}", responseCode);
+                log.debug("Registry connection failed with HTTP code: {}", responseCode);
                 return ResponseUtil.failed(500, result, message);
             }
         } catch (IllegalArgumentException e) {

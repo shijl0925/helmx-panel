@@ -26,7 +26,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Autowired
     private DockerEventsWebSocket dockerEventsWebSocket;
 
-    @Value("${app.cors.allowed-origin:*}")
+    @Value("${app.cors.allowed-origin}")
     private String allowedOrigin;
 
     @Override
