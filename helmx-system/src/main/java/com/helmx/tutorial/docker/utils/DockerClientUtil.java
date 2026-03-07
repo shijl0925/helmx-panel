@@ -31,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -84,6 +85,15 @@ public class DockerClientUtil {
         }
 
         return connectionManager.getDockerClient(host);
+    }
+
+    // 获取当前DockerHttpClient（用于调用 docker-java 库未封装的 Docker API）
+    public com.github.dockerjava.transport.DockerHttpClient getCurrentDockerHttpClient() {
+        String host = currentHost.get();
+        if (host == null) {
+            throw new IllegalStateException("No Docker host specified. Please call setCurrentHost() first.");
+        }
+        return connectionManager.getDockerHttpClient(host);
     }
 
     // 获取当前Docker连接状态
@@ -1557,37 +1567,50 @@ public class DockerClientUtil {
     }
 
     /**
-     * 获取镜像历史
+     * 获取镜像历史（通过 Docker HTTP API）
      */
-    public List<Map<String, String>> getImageHistory(String imageId) {
-        try {
-            ProcessBuilder pb = new ProcessBuilder(
-                    "docker", "history", "--no-trunc", "--format",
-                    "{{.CreatedSince}}|||{{.CreatedBy}}|||{{.Size}}", imageId);
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
+    public List<ImageHistoryItem> getImageHistory(String imageId) {
+        com.github.dockerjava.transport.DockerHttpClient.Request request =
+                com.github.dockerjava.transport.DockerHttpClient.Request.builder()
+                        .method(com.github.dockerjava.transport.DockerHttpClient.Request.Method.GET)
+                        .path("/images/" + imageId + "/history")
+                        .build();
 
-            List<Map<String, String>> history = new ArrayList<>();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    String[] parts = line.split("\\|\\|\\|", 3);
-                    if (parts.length == 3) {
-                        Map<String, String> historyItem = new HashMap<>();
-                        historyItem.put("created", parts[0].trim());
-                        historyItem.put("layer", parts[1].trim());
-                        historyItem.put("size", parts[2].trim());
-                        history.add(historyItem);
-                    }
-                }
-            } finally {
-                process.destroy();
+        try (com.github.dockerjava.transport.DockerHttpClient.Response response =
+                     getCurrentDockerHttpClient().execute(request)) {
+            if (response.getStatusCode() != 200) {
+                log.warn("Failed to get image history for {}: HTTP {}", imageId, response.getStatusCode());
+                return new ArrayList<>();
             }
 
-            return history;
+            String json;
+            try (InputStream body = response.getBody()) {
+                json = new String(body.readAllBytes(), StandardCharsets.UTF_8);
+            }
+
+            List<JSONObject> rawList = JSON.parseArray(json, JSONObject.class);
+            return rawList.stream()
+                    .map(item -> {
+                        String createdBy = item.getString("CreatedBy");
+                        if (createdBy == null) {
+                            createdBy = "";
+                        }
+                        Long sizeBytes = item.getLong("Size");
+                        Long createdEpoch = item.getLong("Created");
+                        String id = item.getString("Id");
+                        String comment = item.getString("Comment");
+                        List<String> tags = item.getList("Tags", String.class);
+
+                        String created = createdEpoch != null
+                                ? Instant.ofEpochSecond(createdEpoch).toString()
+                                : "";
+                        String size = sizeBytes != null ? ByteUtils.formatBytes(sizeBytes) : "0 B";
+
+                        return new ImageHistoryItem(id, created, createdBy, size, tags, comment);
+                    })
+                    .collect(Collectors.toList());
         } catch (Exception e) {
-            log.warn("Failed to get image history via command line", e);
+            log.warn("Failed to get image history for {}", imageId, e);
             return new ArrayList<>();
         }
     }
