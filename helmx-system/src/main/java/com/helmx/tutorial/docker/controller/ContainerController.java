@@ -38,6 +38,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequestMapping("/api/v1/ops/containers")
 public class ContainerController {
 
+    private static final Set<String> VALID_CONTAINER_OPERATIONS = Set.of(
+            "start", "stop", "restart", "remove", "kill", "pause", "unpause"
+    );
+
     @Autowired
     private DockerClientUtil dockerClientUtil;
 
@@ -273,7 +277,7 @@ public class ContainerController {
         String containerId = criteria.getContainerId();
         Map<String, Object> result = new HashMap<>();
 
-        if (!Set.of("start", "stop", "restart", "remove", "kill", "pause", "unpause").contains(operation)) {
+        if (!VALID_CONTAINER_OPERATIONS.contains(operation)) {
             result.put("status", "failed");
             result.put("message", "Unknown operation: " + operation);
             return ResponseUtil.failed(HttpStatus.BAD_REQUEST.value(), result, (String) result.get("message"));
