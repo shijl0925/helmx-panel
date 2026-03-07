@@ -27,7 +27,8 @@ public class PasswordUtil {
     @PostConstruct
     private void init() {
         if (secretKeyValue == null || secretKeyValue.isBlank()) {
-            throw new IllegalStateException("docker.password.secret-key must be configured");
+            throw new IllegalStateException(
+                    "docker.password.secret-key must be configured via DOCKER_PASSWORD_SECRET_KEY or external configuration");
         }
         keyBytes = Base64.getDecoder().decode(secretKeyValue);
         int keyLen = keyBytes.length;

@@ -26,7 +26,7 @@ public class DockerHostValidator {
                 .eq(DockerEnv::getStatus, ACTIVE_STATUS);
 
         if (!dockerEnvMapper.exists(queryWrapper)) {
-            throw new IllegalArgumentException("Access to the specified host is not allowed");
+            throw new IllegalArgumentException("Access to host [" + host + "] is not allowed");
         }
     }
 }
