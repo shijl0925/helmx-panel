@@ -10,8 +10,10 @@ import java.time.Instant;
 @Slf4j
 @Component
 public class JwtTokenUtil {
+    private record CachedJwt(String token, Jwt jwt) {}
 
     private final JwtDecoder jwtDecoder;
+    private final ThreadLocal<CachedJwt> cachedJwtHolder = new ThreadLocal<>();
 
     public JwtTokenUtil(JwtDecoder jwtDecoder) {
         this.jwtDecoder = jwtDecoder;
@@ -29,8 +31,16 @@ public class JwtTokenUtil {
             if (token == null || token.isEmpty()) {
                 throw new IllegalArgumentException("Token cannot be null or empty");
             }
-            return jwtDecoder.decode(token);
+            CachedJwt cachedJwt = cachedJwtHolder.get();
+            if (cachedJwt != null && token.equals(cachedJwt.token())) {
+                return cachedJwt.jwt();
+            }
+
+            Jwt jwt = jwtDecoder.decode(token);
+            cachedJwtHolder.set(new CachedJwt(token, jwt));
+            return jwt;
         } catch (Exception e) {
+            cachedJwtHolder.remove();
             log.error("Failed to parse JWT token", e);
             throw new RuntimeException("Failed to parse JWT token", e);
         }
