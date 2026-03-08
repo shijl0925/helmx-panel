@@ -10,7 +10,6 @@ import java.time.Instant;
 @Slf4j
 @Component
 public class JwtTokenUtil {
-
     private final JwtDecoder jwtDecoder;
 
     public JwtTokenUtil(JwtDecoder jwtDecoder) {
@@ -59,13 +58,17 @@ public class JwtTokenUtil {
      * @return 如果未过期返回 true，否则返回 false
      */
     public boolean validateToken(String token) {
+        return getValidJwt(token) != null;
+    }
+
+    public Jwt getValidJwt(String token) {
         try {
             Jwt jwt = parseToken(token);
             Instant expiryDate = jwt.getExpiresAt();
-            return expiryDate != null && !expiryDate.isBefore(Instant.now());
+            return expiryDate != null && !expiryDate.isBefore(Instant.now()) ? jwt : null;
         } catch (Exception e) {
             log.error("Failed to validate token", e);
-            return false;
+            return null;
         }
     }
 
@@ -84,5 +87,28 @@ public class JwtTokenUtil {
             log.error("Failed to get claim from token", e);
             return null;
         }
+    }
+
+    public Long getUserIdFromToken(String token) {
+        return getUserIdFromJwt(parseToken(token));
+    }
+
+    public Long getUserIdFromJwt(Jwt jwt) {
+        if (jwt == null) {
+            return null;
+        }
+
+        Object userIdClaim = jwt.getClaim("userId");
+        if (userIdClaim instanceof Number number) {
+            return number.longValue();
+        }
+        if (userIdClaim != null) {
+            try {
+                return Long.valueOf(userIdClaim.toString());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid userId claim in token: {}", userIdClaim);
+            }
+        }
+        return null;
     }
 }

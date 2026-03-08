@@ -20,10 +20,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
@@ -37,6 +37,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RestController
 @RequestMapping("/api/v1/ops/containers")
 public class ContainerController {
+
+    private static final Set<String> VALID_CONTAINER_OPERATIONS = Set.of(
+            "start", "stop", "restart", "remove", "kill", "pause", "unpause"
+    );
 
     @Autowired
     private DockerClientUtil dockerClientUtil;
@@ -273,6 +277,12 @@ public class ContainerController {
         String containerId = criteria.getContainerId();
         Map<String, Object> result = new HashMap<>();
 
+        if (!VALID_CONTAINER_OPERATIONS.contains(operation)) {
+            result.put("status", "failed");
+            result.put("message", "Unknown operation: " + operation);
+            return ResponseUtil.failed(HttpStatus.BAD_REQUEST.value(), result, (String) result.get("message"));
+        }
+
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
 
@@ -288,7 +298,7 @@ public class ContainerController {
         String status = (String) result.get("status");
         String message = (String) result.remove("message");
 
-        if (status.equals("success")) {
+        if ("success".equals(status)) {
             return ResponseUtil.success(message, result);
         } else {
             log.error("Operate container failed: {}", message);
@@ -326,6 +336,8 @@ public class ContainerController {
         SseEmitter emitter = new SseEmitter(1800000L); // 设置30分钟超时时间
         dockerClientUtil.setCurrentHost(host);
 
+        LogContainerCmd cmd = null;
+
         // 注册超时和错误回调
         emitter.onTimeout(() -> {
             log.info("SSE emitter timeout for container: {}", containerId);
@@ -337,16 +349,19 @@ public class ContainerController {
             emitter.complete();
         });
 
-        try (LogContainerCmd cmd = dockerClientUtil.getCurrentDockerClient().logContainerCmd(containerId)
-                .withStdOut(true)
-                .withStdErr(true)
-                .withFollowStream(true)) {
+        try {
+            cmd = dockerClientUtil.getCurrentDockerClient().logContainerCmd(containerId)
+                    .withStdOut(true)
+                    .withStdErr(true)
+                    .withFollowStream(true);
 
             if (tail != 0) {
                 cmd.withTail(tail);
             } else {
                 cmd.withTailAll();
             }
+
+            LogContainerCmd activeCmd = cmd;
 
             cmd.exec(new ResultCallback.Adapter<Frame>() {
                 private final AtomicBoolean isClientConnected = new AtomicBoolean(true);
@@ -393,12 +408,14 @@ public class ContainerController {
 
                 @Override
                 public void onComplete() {
+                    closeLogCommand(activeCmd, containerId);
                     emitter.complete();
                 }
 
                 @Override
                 public void onError(Throwable throwable) {
                     log.error("Error streaming container logs", throwable);
+                    closeLogCommand(activeCmd, containerId);
                     emitter.completeWithError(throwable);
                 }
             });
@@ -406,6 +423,7 @@ public class ContainerController {
             // 当客户端断开连接时清理资源
             emitter.onCompletion(() -> {
                 try {
+                    closeLogCommand(activeCmd, containerId);
                     // 这里可能需要额外的清理逻辑
                     log.info("SSE connection completed for container: {}", containerId);
                 } catch (Exception e) {
@@ -415,6 +433,7 @@ public class ContainerController {
 
         } catch (Exception e) {
             log.error("Failed to start log streaming for container: {}", containerId, e);
+            closeLogCommand(cmd, containerId);
             emitter.completeWithError(e);
             return emitter;
         }
@@ -432,6 +451,17 @@ public class ContainerController {
             return userPermissions.contains("Ops:Container:Logs");
         }
         return false;
+    }
+
+    private void closeLogCommand(LogContainerCmd cmd, String containerId) {
+        if (cmd == null) {
+            return;
+        }
+        try {
+            cmd.close();
+        } catch (Exception e) {
+            log.debug("Failed to close log stream command for container: {}", containerId, e);
+        }
     }
 
     @Operation(summary = "Rename Docker Container")

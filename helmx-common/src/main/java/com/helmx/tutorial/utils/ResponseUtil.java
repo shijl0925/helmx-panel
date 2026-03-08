@@ -28,7 +28,6 @@ public class ResponseUtil {
         result.setMessage(message != null ? message : "failed");
         result.setData(data);
         result.setCode(code);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.status(code).body(result);
     }
 }
-

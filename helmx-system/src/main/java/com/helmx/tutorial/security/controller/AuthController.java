@@ -238,15 +238,14 @@ public class AuthController {
 
             // 验证并刷新token
             String newToken = jwtService.refreshToken(expiredToken);
-            if (newToken != null) {
-                Map<String, Object> jwtInfo = new HashMap<>();
-                jwtInfo.put("accessToken", newToken);
-                return ResponseUtil.success("Token refreshed successfully", jwtInfo);
-            } else {
-                return ResponseUtil.failed(401, null, "Unable to refresh token");
-            }
+            Map<String, Object> jwtInfo = new HashMap<>();
+            jwtInfo.put("accessToken", newToken);
+            return ResponseUtil.success("Token refreshed successfully", jwtInfo);
+        } catch (IllegalArgumentException e) {
+            logger.warn("Token refresh denied");
+            return ResponseUtil.failed(401, null, "Token refresh denied. Please login again.");
         } catch (Exception e) {
-            logger.error("Token refresh failed: {}", e.getMessage());
+            logger.error("Token refresh failed", e);
             return ResponseUtil.failed(500, null, "Token refresh failed");
         }
     }

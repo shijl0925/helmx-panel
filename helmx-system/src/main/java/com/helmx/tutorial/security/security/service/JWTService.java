@@ -8,10 +8,12 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +29,10 @@ public class JWTService {
 
     @Autowired
     private JwtDecoder jwtDecoder;
+
+    @Autowired
+    @Qualifier("refreshJwtDecoder")
+    private JwtDecoder refreshJwtDecoder;
 
     @Autowired
     private UserDetailsServiceImpl userDetailsService;
@@ -105,23 +111,39 @@ public class JWTService {
     }
 
     public String refreshToken(String expiredToken) {
+        if (expiredToken == null || expiredToken.isBlank()) {
+            throw new IllegalArgumentException("Token cannot be null or empty");
+        }
+
         try {
-            // 解析过期的token获取用户信息
-            Jwt decodedJwt = this.jwtDecoder.decode(expiredToken);
+            Jwt decodedJwt = this.refreshJwtDecoder.decode(expiredToken);
+            Instant expiryDate = decodedJwt.getExpiresAt();
+            if (expiryDate == null || !expiryDate.isBefore(Instant.now())) {
+                throw new IllegalArgumentException("Token is not eligible for refresh");
+            }
 
             String username = decodedJwt.getSubject();
-            //List<String> roles = decodedJwt.getClaimAsStringList("scope");
+            if (username == null || username.isBlank()) {
+                throw new IllegalArgumentException("Token subject is missing");
+            }
 
-            // 创建新的认证对象
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+            if (!userDetails.isEnabled()) {
+                throw new IllegalArgumentException("User account is disabled");
+            }
+
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-
-            // 生成新的token
             return generateToken(authentication);
+        } catch (IllegalArgumentException | UsernameNotFoundException e) {
+            logger.warn("Token refresh denied: {}", e.getMessage());
+            throw new IllegalArgumentException("Token refresh denied", e);
+        } catch (JwtException e) {
+            logger.warn("Token refresh denied due to invalid token");
+            throw new IllegalArgumentException("Token refresh denied", e);
         } catch (Exception e) {
-            logger.error("Failed to refresh token: {}", e.getMessage());
-            return null;
+            logger.error("Failed to refresh token", e);
+            throw new RuntimeException("Failed to refresh token", e);
         }
     }
 }

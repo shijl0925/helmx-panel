@@ -82,6 +82,8 @@ public class SpringSecurityConfig {
                         // 容器日志流
                         .requestMatchers("/api/v1/ops/containers/logs/stream").permitAll()
                         .requestMatchers("/api/v1/ops/containers/logs/stream/**").permitAll()
+                        // Docker 事件 WebSocket
+                        .requestMatchers("/api/v1/ops/events").permitAll()
                         // swagger 文档
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         // 静态资源等等
