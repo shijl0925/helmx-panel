@@ -59,14 +59,14 @@ public class RegistryController {
         // 检查名称是否重复
         LambdaQueryWrapper<Registry> nameQuery = new LambdaQueryWrapper<>();
         nameQuery.eq(Registry::getName, request.getName());
-        if (registryMapper.selectCount(nameQuery) > 0) {
+        if (registryMapper.exists(nameQuery)) {
             return ResponseUtil.failed(400, null, "Registry name already exists");
         }
 
         // 检查URL是否重复
         LambdaQueryWrapper<Registry> urlQuery = new LambdaQueryWrapper<>();
         urlQuery.eq(Registry::getUrl, request.getUrl());
-        if (registryMapper.selectCount(urlQuery) > 0) {
+        if (registryMapper.exists(urlQuery)) {
             return ResponseUtil.failed(400, null, "Registry url already exists");
         }
 

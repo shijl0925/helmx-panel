@@ -1,6 +1,8 @@
 package com.helmx.tutorial.docker.controller;
 
 import com.sun.net.httpserver.HttpServer;
+import com.helmx.tutorial.docker.dto.RegistryCreateRequest;
+import com.helmx.tutorial.docker.entity.Registry;
 import com.helmx.tutorial.docker.dto.RegistryConnectRequest;
 import com.helmx.tutorial.docker.mapper.RegistryMapper;
 import com.helmx.tutorial.docker.utils.PasswordUtil;
@@ -18,6 +20,10 @@ import java.net.InetSocketAddress;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class RegistryControllerTest {
@@ -73,5 +79,39 @@ class RegistryControllerTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void createRegistry_duplicateName_usesExistsCheckAndRejectsRequest() {
+        RegistryCreateRequest request = new RegistryCreateRequest();
+        request.setName("DockerHub");
+        request.setUrl("https://registry.example.com");
+
+        when(registryMapper.exists(any())).thenReturn(true);
+
+        ResponseEntity<Result> response = registryController.CreateRegistry(request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Registry name already exists", response.getBody().getMessage());
+        verify(registryMapper).exists(any());
+        verify(registryMapper, never()).insert(any(Registry.class));
+    }
+
+    @Test
+    void createRegistry_success_persistsRegistryAfterExistsChecksPass() {
+        RegistryCreateRequest request = new RegistryCreateRequest();
+        request.setName("DockerHub");
+        request.setUrl("https://registry.example.com");
+        request.setAuth(false);
+
+        when(registryMapper.exists(any())).thenReturn(false);
+
+        ResponseEntity<Result> response = registryController.CreateRegistry(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("DockerHub", ((Registry) response.getBody().getData()).getName());
+        verify(registryMapper).insert(any(Registry.class));
     }
 }
