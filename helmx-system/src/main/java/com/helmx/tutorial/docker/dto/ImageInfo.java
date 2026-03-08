@@ -10,9 +10,9 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 @Slf4j
 @Data
@@ -49,7 +49,7 @@ public class ImageInfo {
     private List<ImageHistoryItem> history;
 
     public ImageInfo(InspectImageResponse image) {
-        this.id = Objects.requireNonNull(image.getId()).split(":")[1];
+        this.id = extractIdentifier(image.getId());
         this.author = image.getAuthor();
         this.comment = image.getComment();
         this.repoTags = image.getRepoTags();
@@ -75,6 +75,17 @@ public class ImageInfo {
         }
         this.config = details;
 
-        this.layers = Objects.requireNonNull(image.getRootFS()).getLayers();
+        this.layers = image.getRootFS() != null ? image.getRootFS().getLayers() : Collections.emptyList();
+    }
+
+    private String extractIdentifier(String rawIdentifier) {
+        if (rawIdentifier == null || rawIdentifier.isBlank()) {
+            return rawIdentifier;
+        }
+        int delimiterIndex = rawIdentifier.indexOf(':');
+        if (delimiterIndex < 0 || delimiterIndex == rawIdentifier.length() - 1) {
+            return rawIdentifier;
+        }
+        return rawIdentifier.substring(delimiterIndex + 1);
     }
 }

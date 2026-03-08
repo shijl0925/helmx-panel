@@ -15,6 +15,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.net.URI;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -104,7 +105,12 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
     }
 
     private String extractParameterFromQuery(WebSocketSession session, String paramName, String defaultValue) {
-        String query = Objects.requireNonNull(session.getUri()).getQuery();
+        URI uri = session.getUri();
+        if (uri == null) {
+            log.warn("WebSocket session URI is null");
+            return defaultValue;
+        }
+        String query = uri.getQuery();
         if (query != null) {
             String[] params = query.split("&");
             for (String param : params) {
@@ -132,8 +138,10 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
         }
         // 提取路径中的containerId，例如：/api/v1/ops/containers/terminal/{containerId}
         String[] pathParts = path.split("/");
-        if (pathParts.length > 0) {
-            return pathParts[pathParts.length - 1];
+        for (int i = 0; i < pathParts.length; i++) {
+            if ("terminal".equals(pathParts[i]) && i + 1 < pathParts.length && !pathParts[i + 1].isBlank()) {
+                return pathParts[i + 1];
+            }
         }
         return null;
     }

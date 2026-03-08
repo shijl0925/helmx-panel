@@ -89,4 +89,38 @@ class ContainerTerminalWebSocketTest {
         verify(dockerHostValidator).validateHostAllowlist("tcp://blocked:2375");
         verify(dockerClientUtil, never()).clearCurrentHost();
     }
+
+    @Test
+    void afterConnectionEstablished_nullUri_closesSessionAsMissingToken() throws Exception {
+        when(session.getId()).thenReturn("session-3");
+        when(session.getUri()).thenReturn(null);
+
+        handler.afterConnectionEstablished(session);
+
+        verify(session).close(argThat(status ->
+                status.getCode() == CloseStatus.BAD_DATA.getCode()
+                        && "Missing token".equals(status.getReason())));
+        verifyNoInteractions(jwtTokenUtil, dockerHostValidator, userPermissionService);
+    }
+
+    @Test
+    void afterConnectionEstablished_trailingTerminalPath_closesSessionForInvalidContainerId() throws Exception {
+        when(session.getId()).thenReturn("session-4");
+        when(session.getUri()).thenReturn(new URI("ws://localhost/api/v1/ops/containers/terminal/?token=valid&host=tcp://docker:2375"));
+        Jwt jwt = Jwt.withTokenValue("valid")
+                .header("alg", "RS256")
+                .subject("alice")
+                .claim("userId", 7L)
+                .build();
+        when(jwtTokenUtil.getValidJwt("valid")).thenReturn(jwt);
+        when(jwtTokenUtil.getUserIdFromJwt(jwt)).thenReturn(7L);
+        when(userPermissionService.hasPermission(7L, "Ops:Container:Exec")).thenReturn(true);
+
+        handler.afterConnectionEstablished(session);
+
+        verify(session).close(argThat(status ->
+                status.getCode() == CloseStatus.BAD_DATA.getCode()
+                        && "Invalid container ID".equals(status.getReason())));
+        verify(dockerHostValidator, never()).validateHostAllowlist("tcp://docker:2375");
+    }
 }

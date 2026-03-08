@@ -19,6 +19,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.net.URI;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -217,7 +218,12 @@ public class DockerEventsWebSocket extends TextWebSocketHandler {
     }
 
     private String extractParam(WebSocketSession session, String name, String defaultValue) {
-        String query = Objects.requireNonNull(session.getUri()).getQuery();
+        URI uri = session.getUri();
+        if (uri == null) {
+            log.warn("WebSocket session URI is null");
+            return defaultValue;
+        }
+        String query = uri.getQuery();
         if (query != null) {
             for (String param : query.split("&")) {
                 if (param.startsWith(name + "=")) {

@@ -28,11 +28,22 @@ public class ImageDTO {
     private Boolean isUsed;
 
     public ImageDTO(Image image) {
-        this.id = image.getId().split(":")[1];
+        this.id = extractIdentifier(image.getId());
         this.tags = image.getRepoTags();
         this.size = ByteUtils.formatBytes(image.getSize());
         this.createdAt = Instant.ofEpochSecond(image.getCreated())
                 .atZone(ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    }
+
+    private String extractIdentifier(String rawIdentifier) {
+        if (rawIdentifier == null || rawIdentifier.isBlank()) {
+            return rawIdentifier;
+        }
+        int delimiterIndex = rawIdentifier.indexOf(':');
+        if (delimiterIndex < 0 || delimiterIndex == rawIdentifier.length() - 1) {
+            return rawIdentifier;
+        }
+        return rawIdentifier.substring(delimiterIndex + 1);
     }
 }

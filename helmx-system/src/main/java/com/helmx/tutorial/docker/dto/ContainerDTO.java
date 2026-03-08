@@ -49,11 +49,11 @@ public class ContainerDTO {
         // 容器ID
         this.id = container.getId();
         // 容器名称
-        this.name = container.getNames()[0].substring(1);
+        this.name = extractContainerName(container.getNames());
         // 容器状态
         this.state = container.getState();
         // 镜像ID
-        this.imageId = Objects.requireNonNull(container.getImageId()).split(":")[1];
+        this.imageId = extractIdentifier(container.getImageId());
         // 镜像名称
         this.image = container.getImage();
         // 创建时间
@@ -61,12 +61,17 @@ public class ContainerDTO {
         // 运行状态
         this.status = container.getStatus();
         // 容器网络
-        this.ipAddress = Objects.requireNonNull(container.getNetworkSettings()).getNetworks().values().stream()
+        Map<String, ContainerNetwork> networkMap = container.getNetworkSettings() != null
+                && container.getNetworkSettings().getNetworks() != null
+                ? container.getNetworkSettings().getNetworks()
+                : Collections.emptyMap();
+        this.ipAddress = networkMap.values().stream()
                 .map(ContainerNetwork::getIpAddress)
+                .filter(Objects::nonNull)
                 .collect(Collectors.joining(", "));
         // 容器端口
         ContainerPort[] ports = container.getPorts();
-        this.ports = Arrays.stream(ports).sequential()
+        this.ports = Arrays.stream(ports != null ? ports : new ContainerPort[0]).sequential()
                 .map(containerPort -> {
                     String privatePort = containerPort.getPrivatePort() != null ? containerPort.getPrivatePort().toString() : "";
                     String type = containerPort.getType() != null ? containerPort.getType() : "tcp";
@@ -93,6 +98,25 @@ public class ContainerDTO {
                 .collect(Collectors.joining(", "));
 
         // 网络
-        this.networks = container.getNetworkSettings().getNetworks().keySet().stream().toList();
+        this.networks = networkMap.keySet().stream().toList();
+    }
+
+    private String extractIdentifier(String rawIdentifier) {
+        if (rawIdentifier == null || rawIdentifier.isBlank()) {
+            return rawIdentifier;
+        }
+        int delimiterIndex = rawIdentifier.indexOf(':');
+        if (delimiterIndex < 0 || delimiterIndex == rawIdentifier.length() - 1) {
+            return rawIdentifier;
+        }
+        return rawIdentifier.substring(delimiterIndex + 1);
+    }
+
+    private String extractContainerName(String[] names) {
+        if (names == null || names.length == 0 || names[0] == null || names[0].isBlank()) {
+            return "";
+        }
+        String rawName = names[0];
+        return rawName.startsWith("/") ? rawName.substring(1) : rawName;
     }
 }
