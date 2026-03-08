@@ -5,9 +5,8 @@ import com.helmx.tutorial.docker.dto.PruneRequest;
 import com.helmx.tutorial.docker.dto.StatusRequest;
 import com.helmx.tutorial.docker.utils.ByteUtils;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
+import com.helmx.tutorial.security.security.service.UserPermissionService;
 import com.helmx.tutorial.dto.Result;
-import com.helmx.tutorial.system.mapper.UserMapper;
-import com.helmx.tutorial.system.service.UserService;
 import com.helmx.tutorial.utils.ResponseUtil;
 import com.helmx.tutorial.utils.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,7 +18,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 @Slf4j
 @RestController
@@ -30,10 +28,7 @@ public class HomeController {
     private DockerClientUtil dockerClientUtil;
 
     @Autowired
-    private UserService userService;
-
-    @Autowired
-    private UserMapper userMapper;
+    private UserPermissionService userPermissionService;
 
     // 添加健康检查端点
     @Operation(summary = "Health check endpoint")
@@ -131,15 +126,6 @@ public class HomeController {
             default -> "";
         };
         log.info("Checking permission for user {} and prune type {}, Permission: {}", userId, pruneType, permission);
-
-        if (userId != null && !pruneType.isEmpty()) {
-            if (userService.isSuperAdmin(userId)) {
-                return true;
-            }
-
-            Set<String> userPermissions = userMapper.selectUserPermissions(userId);
-            return userPermissions.contains(permission);
-        }
-        return false;
+        return !pruneType.isEmpty() && userPermissionService.hasPermission(userId, permission);
     }
 }

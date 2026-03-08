@@ -6,8 +6,7 @@ import com.github.dockerjava.api.command.LogContainerCmd;
 import com.github.dockerjava.api.model.Frame;
 import com.helmx.tutorial.docker.dto.*;
 import com.helmx.tutorial.dto.Result;
-import com.helmx.tutorial.system.mapper.UserMapper;
-import com.helmx.tutorial.system.service.UserService;
+import com.helmx.tutorial.security.security.service.UserPermissionService;
 import com.helmx.tutorial.utils.ResponseUtil;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.Container;
@@ -46,10 +45,7 @@ public class ContainerController {
     private DockerClientUtil dockerClientUtil;
 
     @Autowired
-    private UserService userService;
-
-    @Autowired
-    private UserMapper userMapper;
+    private UserPermissionService userPermissionService;
 
     private static final int MAX_MESSAGE_LENGTH = 8192; // 单条消息最大长度
 
@@ -442,15 +438,7 @@ public class ContainerController {
     }
 
     private boolean checkPermission(Long userId) {
-        if (userId != null) {
-            if (userService.isSuperAdmin(userId)) {
-                return true;
-            }
-
-            Set<String> userPermissions = userMapper.selectUserPermissions(userId);
-            return userPermissions.contains("Ops:Container:Logs");
-        }
-        return false;
+        return userPermissionService.hasPermission(userId, "Ops:Container:Logs");
     }
 
     private void closeLogCommand(LogContainerCmd cmd, String containerId) {

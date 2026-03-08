@@ -3,8 +3,7 @@ package com.helmx.tutorial.docker.websocket;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import com.helmx.tutorial.docker.utils.DockerHostValidator;
 
-import com.helmx.tutorial.system.mapper.UserMapper;
-import com.helmx.tutorial.system.service.UserService;
+import com.helmx.tutorial.security.security.service.UserPermissionService;
 import com.helmx.tutorial.utils.JwtTokenUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,7 +16,6 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -28,10 +26,7 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
     private DockerClientUtil dockerClientUtil;
 
     @Autowired
-    private UserService userService;
-
-    @Autowired
-    private UserMapper userMapper;
+    private UserPermissionService userPermissionService;
 
     @Autowired
     private DockerHostValidator dockerHostValidator;
@@ -105,15 +100,7 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
     }
 
     private boolean checkPermission(Long userId) {
-        if (userId != null) {
-            if (userService.isSuperAdmin(userId)) {
-                return true;
-            }
-
-            Set<String> userPermissions = userMapper.selectUserPermissions(userId);
-            return userPermissions.contains("Ops:Container:Exec");
-        }
-        return false;
+        return userPermissionService.hasPermission(userId, "Ops:Container:Exec");
     }
 
     private String extractParameterFromQuery(WebSocketSession session, String paramName, String defaultValue) {

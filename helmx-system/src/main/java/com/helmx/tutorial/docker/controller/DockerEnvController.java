@@ -86,14 +86,14 @@ public class DockerEnvController {
         // 检查名称是否重复
         LambdaQueryWrapper<DockerEnv> nameQuery = new LambdaQueryWrapper<>();
         nameQuery.eq(DockerEnv::getName, request.getName());
-        if (dockerEnvMapper.selectCount(nameQuery) > 0) {
+        if (dockerEnvMapper.exists(nameQuery)) {
             return ResponseUtil.failed(400, null, "The name already exists");
         }
 
         // 检查主机地址是否重复
         LambdaQueryWrapper<DockerEnv> hostQuery = new LambdaQueryWrapper<>();
         hostQuery.eq(DockerEnv::getHost, request.getHost());
-        if (dockerEnvMapper.selectCount(hostQuery) > 0) {
+        if (dockerEnvMapper.exists(hostQuery)) {
             return ResponseUtil.failed(400, null, "The url already exists");
         }
 
