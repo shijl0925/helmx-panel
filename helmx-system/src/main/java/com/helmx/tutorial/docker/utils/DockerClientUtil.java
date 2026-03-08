@@ -2285,40 +2285,43 @@ public class DockerClientUtil {
     /**
      * 从tar输入流中提取文件内容
      */
-    private byte[] extractFileFromTar(InputStream tarInputStream) throws IOException {
+    private void extractFileFromTar(InputStream tarInputStream, OutputStream outputStream) throws IOException {
         try (TarArchiveInputStream tarInput = new TarArchiveInputStream(tarInputStream)) {
             TarArchiveEntry entry;
             while ((entry = tarInput.getNextTarEntry()) != null) {
-                // 跳过目录条目
                 if (entry.isDirectory()) {
                     continue;
                 }
 
-                // 读取文件内容
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                 byte[] buffer = new byte[8192];
                 int bytesRead;
 
                 while ((bytesRead = tarInput.read(buffer)) != -1) {
                     outputStream.write(buffer, 0, bytesRead);
                 }
-
-                return outputStream.toByteArray();
+                outputStream.flush();
+                return;
             }
         }
-
-        // 如果没有找到文件条目，返回空字节数组
-        return new byte[0];
     }
 
     /**
      * 从容器复制文件到本地
      */
     public byte[] copyFileFromContainer(String containerId, String containerPath) {
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            copyFileFromContainer(containerId, containerPath, outputStream);
+            return outputStream.toByteArray();
+        } catch (IOException e) {
+            log.error("Unexpected error when buffering archive from container: {}", containerId, e);
+            throw new RuntimeException(e.getMessage(), e);
+        }
+    }
+
+    public void copyFileFromContainer(String containerId, String containerPath, OutputStream outputStream) {
         try (CopyArchiveFromContainerCmd cmd = getCurrentDockerClient().copyArchiveFromContainerCmd(containerId, containerPath)) {
             try (InputStream inputStream = cmd.exec()) {
-                // 解压tar文件获取实际文件内容
-                return extractFileFromTar(inputStream);
+                extractFileFromTar(inputStream, outputStream);
             }
         } catch (Exception e) {
             log.error("Unexpected error when copying archive from container: {}", containerId, e);

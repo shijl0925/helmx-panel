@@ -20,6 +20,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ContentDisposition;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -227,23 +229,31 @@ public class ContainerController {
     public ResponseEntity<?> copyFileFromContainer(@Valid @RequestBody ContainerCopyRequest request) {
         try {
             String host = request.getHost();
-            dockerClientUtil.setCurrentHost(host);
-
             String containerId = request.getContainerId();
             String containerPath = request.getContainerPath();
-
-            byte[] fileContent = dockerClientUtil.copyFileFromContainer(containerId, containerPath);
 
             // 提取文件名
             String fileName = containerPath.substring(containerPath.lastIndexOf("/") + 1);
 
+            final String hostForAsync = host;
+            final String containerIdForAsync = containerId;
+            final String containerPathForAsync = containerPath;
+
+            StreamingResponseBody stream = outputStream -> {
+                dockerClientUtil.setCurrentHost(hostForAsync);
+                try {
+                    dockerClientUtil.copyFileFromContainer(containerIdForAsync, containerPathForAsync, outputStream);
+                } finally {
+                    dockerClientUtil.clearCurrentHost();
+                }
+            };
+
             // 设置响应头，使浏览器能够下载文件
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentDispositionFormData("attachment", fileName);
-            headers.setContentLength(fileContent.length);
+            headers.setContentDisposition(ContentDisposition.attachment().filename(fileName).build());
 
-            return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
+            return new ResponseEntity<>(stream, headers, HttpStatus.OK);
         } catch (Exception e) {
             log.error("Failed to copy file from container: {}", request.getContainerId(), e);
             return ResponseUtil.failed(500, null, e.getMessage());
