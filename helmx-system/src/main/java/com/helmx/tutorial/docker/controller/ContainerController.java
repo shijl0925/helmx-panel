@@ -55,6 +55,13 @@ public class ContainerController {
 
     private static final int MAX_MESSAGE_LENGTH = 8192; // 单条消息最大长度
 
+    private String extractDownloadFileName(String containerPath) {
+        String fileName = containerPath.substring(containerPath.lastIndexOf("/") + 1)
+                .replaceAll("[^\\p{L}\\p{N}._-]+", "_")
+                .trim();
+        return fileName.isEmpty() || fileName.chars().allMatch(ch -> ch == '.') ? "download" : fileName;
+    }
+
     @Operation(summary = "Create Docker Container")
     @PostMapping("")
     @PreAuthorize("@va.check('Ops:Container:Create')")
@@ -233,16 +240,12 @@ public class ContainerController {
             String containerPath = request.getContainerPath();
 
             // 提取文件名
-            String fileName = containerPath.substring(containerPath.lastIndexOf("/") + 1);
-
-            final String hostForAsync = host;
-            final String containerIdForAsync = containerId;
-            final String containerPathForAsync = containerPath;
+            String fileName = extractDownloadFileName(containerPath);
 
             StreamingResponseBody stream = outputStream -> {
-                dockerClientUtil.setCurrentHost(hostForAsync);
+                dockerClientUtil.setCurrentHost(host);
                 try {
-                    dockerClientUtil.copyFileFromContainer(containerIdForAsync, containerPathForAsync, outputStream);
+                    dockerClientUtil.copyFileFromContainer(containerId, containerPath, outputStream);
                 } finally {
                     dockerClientUtil.clearCurrentHost();
                 }

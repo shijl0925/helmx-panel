@@ -2285,7 +2285,7 @@ public class DockerClientUtil {
     /**
      * 从tar输入流中提取文件内容
      */
-    private void extractFileFromTar(InputStream tarInputStream, OutputStream outputStream) throws IOException {
+    private void extractFileFromTar(InputStream tarInputStream, OutputStream outputStream, String containerPath) throws IOException {
         try (TarArchiveInputStream tarInput = new TarArchiveInputStream(tarInputStream)) {
             TarArchiveEntry entry;
             while ((entry = tarInput.getNextTarEntry()) != null) {
@@ -2303,6 +2303,7 @@ public class DockerClientUtil {
                 return;
             }
         }
+        throw new IOException("No file entry found in container archive at path: " + containerPath);
     }
 
     /**
@@ -2313,16 +2314,27 @@ public class DockerClientUtil {
             copyFileFromContainer(containerId, containerPath, outputStream);
             return outputStream.toByteArray();
         } catch (IOException e) {
-            log.error("Unexpected error when buffering archive from container: {}", containerId, e);
+            log.error("Unexpected error when copying file from container: {}", containerId, e);
             throw new RuntimeException(e.getMessage(), e);
         }
     }
 
-    public void copyFileFromContainer(String containerId, String containerPath, OutputStream outputStream) {
+    /**
+     * 从容器中复制文件并将解包后的文件内容直接写入输出流。
+     * 适用于下载等需要流式传输的场景，避免将整个文件一次性缓冲到内存中。
+     *
+     * @param containerId   容器ID
+     * @param containerPath 容器内文件路径
+     * @param outputStream  目标输出流；会写入解包后的实际文件内容
+     */
+    public void copyFileFromContainer(String containerId, String containerPath, OutputStream outputStream) throws IOException {
         try (CopyArchiveFromContainerCmd cmd = getCurrentDockerClient().copyArchiveFromContainerCmd(containerId, containerPath)) {
             try (InputStream inputStream = cmd.exec()) {
-                extractFileFromTar(inputStream, outputStream);
+                extractFileFromTar(inputStream, outputStream, containerPath);
             }
+        } catch (IOException e) {
+            log.error("I/O error when copying file from container: {}", containerId, e);
+            throw e;
         } catch (Exception e) {
             log.error("Unexpected error when copying archive from container: {}", containerId, e);
             throw new RuntimeException(e.getMessage(), e);

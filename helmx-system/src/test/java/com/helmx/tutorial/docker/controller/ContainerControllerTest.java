@@ -82,4 +82,16 @@ class ContainerControllerTest {
         inOrder.verify(dockerClientUtil).copyFileFromContainer(eq("container-1"), eq("/tmp/example.txt"), any(OutputStream.class));
         inOrder.verify(dockerClientUtil).clearCurrentHost();
     }
+
+    @Test
+    void copyFileFromContainer_sanitizesAndPreservesUnicodeFilename() {
+        ContainerCopyRequest request = new ContainerCopyRequest();
+        request.setHost("unix:///var/run/docker.sock");
+        request.setContainerId("container-1");
+        request.setContainerPath("/tmp/测试 文档.txt");
+
+        ResponseEntity<?> response = containerController.copyFileFromContainer(request);
+
+        assertEquals("测试_文档.txt", response.getHeaders().getContentDisposition().getFilename());
+    }
 }
