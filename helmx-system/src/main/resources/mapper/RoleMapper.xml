@@ -38,6 +38,16 @@
                  INNER JOIN tb_rbac_role_menus rm ON m.id = rm.menu_id
         WHERE rm.role_id = #{roleId}
     </select>
+
+    <select id="findMenusByRoleIds" resultType="com.helmx.tutorial.system.entity.Menu">
+        SELECT DISTINCT m.*
+        FROM tb_rbac_menus m
+                 INNER JOIN tb_rbac_role_menus rm ON m.id = rm.menu_id
+        WHERE rm.role_id IN
+        <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
+            #{roleId}
+        </foreach>
+    </select>
     <!-- 带条件的角色查询（使用 RoleQueryRequest 对象） -->
     <select id="findRolesByConditions" parameterType="com.helmx.tutorial.system.dto.RoleQueryRequest" resultMap="RoleResultMap">
         SELECT * FROM tb_rbac_roles

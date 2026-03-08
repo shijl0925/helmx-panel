@@ -209,33 +209,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public Set<Menu> getUserMenus(Long userId) {
-        Set<Menu> result = new HashSet<>();
-
-        // 添加空值检查
         if (userId == null) {
-            return result;
+            return new HashSet<>();
         }
 
         Set<Long> roleIds = getUserRoleIds(userId);
         if (roleIds == null || roleIds.isEmpty()) {
-            return result;
+            return new HashSet<>();
         }
 
-        // 批量查询所有角色，避免N+1查询问题
-        List<Role> roles = roleMapper.selectBatchIds(roleIds);
-        if (roles == null || roles.isEmpty()) {
-            return result;
-        }
-
-        for (Role role : roles) {
-            Set<Menu> menus = roleMapper.findMenusByRoleId(role.getId());
-            // 避免不必要的addAll操作
-            if (menus != null && !menus.isEmpty()) {
-                result.addAll(menus);
-            }
-        }
-
-        return result;
+        Set<Menu> menus = roleMapper.findMenusByRoleIds(roleIds);
+        return menus != null ? menus : new HashSet<>();
     }
 
     @Override
