@@ -10,10 +10,7 @@ import java.time.Instant;
 @Slf4j
 @Component
 public class JwtTokenUtil {
-    private record CachedJwt(String token, Jwt jwt) {}
-
     private final JwtDecoder jwtDecoder;
-    private final ThreadLocal<CachedJwt> cachedJwtHolder = new ThreadLocal<>();
 
     public JwtTokenUtil(JwtDecoder jwtDecoder) {
         this.jwtDecoder = jwtDecoder;
@@ -31,16 +28,8 @@ public class JwtTokenUtil {
             if (token == null || token.isEmpty()) {
                 throw new IllegalArgumentException("Token cannot be null or empty");
             }
-            CachedJwt cachedJwt = cachedJwtHolder.get();
-            if (cachedJwt != null && token.equals(cachedJwt.token())) {
-                return cachedJwt.jwt();
-            }
-
-            Jwt jwt = jwtDecoder.decode(token);
-            cachedJwtHolder.set(new CachedJwt(token, jwt));
-            return jwt;
+            return jwtDecoder.decode(token);
         } catch (Exception e) {
-            cachedJwtHolder.remove();
             log.error("Failed to parse JWT token", e);
             throw new RuntimeException("Failed to parse JWT token", e);
         }
@@ -69,13 +58,17 @@ public class JwtTokenUtil {
      * @return 如果未过期返回 true，否则返回 false
      */
     public boolean validateToken(String token) {
+        return getValidJwt(token) != null;
+    }
+
+    public Jwt getValidJwt(String token) {
         try {
             Jwt jwt = parseToken(token);
             Instant expiryDate = jwt.getExpiresAt();
-            return expiryDate != null && !expiryDate.isBefore(Instant.now());
+            return expiryDate != null && !expiryDate.isBefore(Instant.now()) ? jwt : null;
         } catch (Exception e) {
             log.error("Failed to validate token", e);
-            return false;
+            return null;
         }
     }
 
@@ -97,7 +90,15 @@ public class JwtTokenUtil {
     }
 
     public Long getUserIdFromToken(String token) {
-        Object userIdClaim = getClaimFromToken(token, "userId");
+        return getUserIdFromJwt(parseToken(token));
+    }
+
+    public Long getUserIdFromJwt(Jwt jwt) {
+        if (jwt == null) {
+            return null;
+        }
+
+        Object userIdClaim = jwt.getClaim("userId");
         if (userIdClaim instanceof Number number) {
             return number.longValue();
         }

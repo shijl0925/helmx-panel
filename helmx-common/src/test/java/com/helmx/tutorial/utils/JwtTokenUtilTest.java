@@ -12,9 +12,12 @@ import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,7 +34,7 @@ class JwtTokenUtilTest {
     }
 
     @Test
-    void validateToken_thenGetUserId_reusesDecodedJwtForSameToken() {
+    void getValidJwt_thenGetUserIdFromJwt_decodesOnlyOnce() {
         Jwt jwt = Jwt.withTokenValue("token-1")
                 .header("alg", "RS256")
                 .subject("alice")
@@ -41,10 +44,11 @@ class JwtTokenUtilTest {
                 .build();
         when(jwtDecoder.decode("token-1")).thenReturn(jwt);
 
-        assertEquals(true, jwtTokenUtil.validateToken("token-1"));
-        assertEquals(7L, jwtTokenUtil.getUserIdFromToken("token-1"));
+        Jwt validJwt = jwtTokenUtil.getValidJwt("token-1");
 
-        verify(jwtDecoder, times(1)).decode("token-1");
+        assertNotNull(validJwt);
+        assertEquals(7L, jwtTokenUtil.getUserIdFromJwt(validJwt));
+        verify(jwtDecoder).decode("token-1");
     }
 
     @Test
@@ -79,5 +83,26 @@ class JwtTokenUtilTest {
         assertThrows(RuntimeException.class, () -> jwtTokenUtil.parseToken("bad-token"));
 
         verify(jwtDecoder, times(2)).decode("bad-token");
+    }
+
+    @Test
+    void getValidJwt_expiredToken_returnsNull() {
+        Jwt expiredJwt = Jwt.withTokenValue("expired")
+                .header("alg", "RS256")
+                .subject("alice")
+                .issuedAt(Instant.now().minusSeconds(3600))
+                .expiresAt(Instant.now().minusSeconds(1))
+                .claim("userId", 7L)
+                .build();
+        when(jwtDecoder.decode("expired")).thenReturn(expiredJwt);
+
+        assertNull(jwtTokenUtil.getValidJwt("expired"));
+        verify(jwtDecoder).decode("expired");
+    }
+
+    @Test
+    void getUserIdFromJwt_nullJwt_returnsNullWithoutDecoding() {
+        assertNull(jwtTokenUtil.getUserIdFromJwt(null));
+        verifyNoInteractions(jwtDecoder);
     }
 }

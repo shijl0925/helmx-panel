@@ -9,6 +9,7 @@ import com.helmx.tutorial.utils.JwtTokenUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.NonNull;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -52,13 +53,14 @@ public class ContainerTerminalWebSocket extends TextWebSocketHandler {
             return;
         }
 
-        if (!jwtTokenUtil.validateToken(token)) {
+        Jwt jwt = jwtTokenUtil.getValidJwt(token);
+        if (jwt == null) {
             session.close(CloseStatus.POLICY_VIOLATION.withReason("Invalid or expired token"));
             return;
         }
 
         // 获取当前用户名, 检查权限
-        Long userId = jwtTokenUtil.getUserIdFromToken(token);
+        Long userId = jwtTokenUtil.getUserIdFromJwt(jwt);
         if (!checkPermission(userId)) {
             log.warn("User {} does not have permission to access terminal", userId);
             session.close(CloseStatus.BAD_DATA.withReason("Forbidden"));

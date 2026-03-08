@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
@@ -60,7 +61,7 @@ class ContainerTerminalWebSocketTest {
     void afterConnectionEstablished_invalidToken_closesSession() throws Exception {
         when(session.getId()).thenReturn("session-1");
         when(session.getUri()).thenReturn(new URI("ws://localhost/api/v1/ops/containers/terminal/container-1?token=expired&host=tcp://docker:2375"));
-        when(jwtTokenUtil.validateToken("expired")).thenReturn(false);
+        when(jwtTokenUtil.getValidJwt("expired")).thenReturn(null);
 
         handler.afterConnectionEstablished(session);
 
@@ -74,8 +75,13 @@ class ContainerTerminalWebSocketTest {
     void afterConnectionEstablished_unauthorizedHost_closesSession() throws Exception {
         when(session.getId()).thenReturn("session-2");
         when(session.getUri()).thenReturn(new URI("ws://localhost/api/v1/ops/containers/terminal/container-1?token=valid&host=tcp://blocked:2375"));
-        when(jwtTokenUtil.validateToken("valid")).thenReturn(true);
-        when(jwtTokenUtil.getUserIdFromToken("valid")).thenReturn(7L);
+        Jwt jwt = Jwt.withTokenValue("valid")
+                .header("alg", "RS256")
+                .subject("alice")
+                .claim("userId", 7L)
+                .build();
+        when(jwtTokenUtil.getValidJwt("valid")).thenReturn(jwt);
+        when(jwtTokenUtil.getUserIdFromJwt(jwt)).thenReturn(7L);
         when(userService.isSuperAdmin(7L)).thenReturn(true);
         doThrow(new IllegalArgumentException("blocked"))
                 .when(dockerHostValidator).validateHostAllowlist("tcp://blocked:2375");
