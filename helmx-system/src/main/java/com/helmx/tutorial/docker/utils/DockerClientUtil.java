@@ -2285,41 +2285,56 @@ public class DockerClientUtil {
     /**
      * 从tar输入流中提取文件内容
      */
-    private byte[] extractFileFromTar(InputStream tarInputStream) throws IOException {
+    private void extractFileFromTar(InputStream tarInputStream, OutputStream outputStream, String containerPath) throws IOException {
         try (TarArchiveInputStream tarInput = new TarArchiveInputStream(tarInputStream)) {
             TarArchiveEntry entry;
             while ((entry = tarInput.getNextTarEntry()) != null) {
-                // 跳过目录条目
                 if (entry.isDirectory()) {
                     continue;
                 }
 
-                // 读取文件内容
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                 byte[] buffer = new byte[8192];
                 int bytesRead;
 
                 while ((bytesRead = tarInput.read(buffer)) != -1) {
                     outputStream.write(buffer, 0, bytesRead);
                 }
-
-                return outputStream.toByteArray();
+                outputStream.flush();
+                return;
             }
         }
-
-        // 如果没有找到文件条目，返回空字节数组
-        return new byte[0];
+        throw new IOException("No file entry found in container archive at path: " + containerPath);
     }
 
     /**
      * 从容器复制文件到本地
      */
     public byte[] copyFileFromContainer(String containerId, String containerPath) {
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            copyFileFromContainer(containerId, containerPath, outputStream);
+            return outputStream.toByteArray();
+        } catch (IOException e) {
+            log.error("Unexpected error when copying file from container: {}", containerId, e);
+            throw new RuntimeException(e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 从容器中复制文件并将解包后的文件内容直接写入输出流。
+     * 适用于下载等需要流式传输的场景，避免将整个文件一次性缓冲到内存中。
+     *
+     * @param containerId   容器ID
+     * @param containerPath 容器内文件路径
+     * @param outputStream  目标输出流；会写入解包后的实际文件内容
+     */
+    public void copyFileFromContainer(String containerId, String containerPath, OutputStream outputStream) throws IOException {
         try (CopyArchiveFromContainerCmd cmd = getCurrentDockerClient().copyArchiveFromContainerCmd(containerId, containerPath)) {
             try (InputStream inputStream = cmd.exec()) {
-                // 解压tar文件获取实际文件内容
-                return extractFileFromTar(inputStream);
+                extractFileFromTar(inputStream, outputStream, containerPath);
             }
+        } catch (IOException e) {
+            log.error("I/O error when copying file from container: {}", containerId, e);
+            throw e;
         } catch (Exception e) {
             log.error("Unexpected error when copying archive from container: {}", containerId, e);
             throw new RuntimeException(e.getMessage(), e);
