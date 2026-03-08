@@ -80,7 +80,7 @@ public class ImageInfo {
 
     private String extractIdentifier(String rawIdentifier) {
         if (rawIdentifier == null || rawIdentifier.isBlank()) {
-            return rawIdentifier;
+            return "";
         }
         int delimiterIndex = rawIdentifier.indexOf(':');
         if (delimiterIndex < 0 || delimiterIndex == rawIdentifier.length() - 1) {
