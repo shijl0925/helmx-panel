@@ -5,6 +5,7 @@ import com.helmx.tutorial.system.service.UserService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Set;
@@ -20,7 +21,7 @@ class UserPermissionServiceTest {
         UserService userService = mock(UserService.class);
         UserMapper userMapper = mock(UserMapper.class);
         MutableClock clock = new MutableClock(Instant.parse("2026-03-08T00:00:00Z"));
-        UserPermissionService service = new UserPermissionService(userService, userMapper, clock);
+        UserPermissionService service = new UserPermissionService(userService, userMapper, clock, Duration.ofSeconds(2), 16);
 
         when(userService.isSuperAdmin(1L)).thenReturn(false);
         when(userMapper.selectUserPermissions(1L)).thenReturn(Set.of("Ops:Container:Logs", "Ops:Container:Exec"));
@@ -37,7 +38,7 @@ class UserPermissionServiceTest {
         UserService userService = mock(UserService.class);
         UserMapper userMapper = mock(UserMapper.class);
         MutableClock clock = new MutableClock(Instant.parse("2026-03-08T00:00:00Z"));
-        UserPermissionService service = new UserPermissionService(userService, userMapper, clock);
+        UserPermissionService service = new UserPermissionService(userService, userMapper, clock, Duration.ofSeconds(2), 16);
 
         when(userService.isSuperAdmin(2L)).thenReturn(false);
         when(userMapper.selectUserPermissions(2L))
@@ -58,7 +59,7 @@ class UserPermissionServiceTest {
     void hasPermission_shortCircuitsForSuperAdmin() {
         UserService userService = mock(UserService.class);
         UserMapper userMapper = mock(UserMapper.class);
-        UserPermissionService service = new UserPermissionService(userService, userMapper);
+        UserPermissionService service = new UserPermissionService(userService, userMapper, Clock.systemUTC(), Duration.ofSeconds(2), 16);
 
         when(userService.isSuperAdmin(3L)).thenReturn(true);
 

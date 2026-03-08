@@ -2,8 +2,7 @@ package com.helmx.tutorial.docker.websocket;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import com.helmx.tutorial.docker.utils.DockerHostValidator;
-import com.helmx.tutorial.system.mapper.UserMapper;
-import com.helmx.tutorial.system.service.UserService;
+import com.helmx.tutorial.security.security.service.UserPermissionService;
 import com.helmx.tutorial.utils.JwtTokenUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,10 +30,7 @@ class ContainerTerminalWebSocketTest {
     private DockerClientUtil dockerClientUtil;
 
     @Mock
-    private UserService userService;
-
-    @Mock
-    private UserMapper userMapper;
+    private UserPermissionService userPermissionService;
 
     @Mock
     private DockerHostValidator dockerHostValidator;
@@ -51,8 +47,7 @@ class ContainerTerminalWebSocketTest {
     void setUp() {
         handler = new ContainerTerminalWebSocket();
         ReflectionTestUtils.setField(handler, "dockerClientUtil", dockerClientUtil);
-        ReflectionTestUtils.setField(handler, "userService", userService);
-        ReflectionTestUtils.setField(handler, "userMapper", userMapper);
+        ReflectionTestUtils.setField(handler, "userPermissionService", userPermissionService);
         ReflectionTestUtils.setField(handler, "dockerHostValidator", dockerHostValidator);
         ReflectionTestUtils.setField(handler, "jwtTokenUtil", jwtTokenUtil);
     }
@@ -68,7 +63,7 @@ class ContainerTerminalWebSocketTest {
         verify(session).close(argThat(status ->
                 status.getCode() == CloseStatus.POLICY_VIOLATION.getCode()
                         && "Invalid or expired token".equals(status.getReason())));
-        verifyNoInteractions(dockerHostValidator, userService, userMapper);
+        verifyNoInteractions(dockerHostValidator, userPermissionService);
     }
 
     @Test
@@ -82,7 +77,7 @@ class ContainerTerminalWebSocketTest {
                 .build();
         when(jwtTokenUtil.getValidJwt("valid")).thenReturn(jwt);
         when(jwtTokenUtil.getUserIdFromJwt(jwt)).thenReturn(7L);
-        when(userService.isSuperAdmin(7L)).thenReturn(true);
+        when(userPermissionService.hasPermission(7L, "Ops:Container:Exec")).thenReturn(true);
         doThrow(new IllegalArgumentException("blocked"))
                 .when(dockerHostValidator).validateHostAllowlist("tcp://blocked:2375");
 
