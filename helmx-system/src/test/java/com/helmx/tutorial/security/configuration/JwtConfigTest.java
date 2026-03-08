@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 class JwtConfigTest {
@@ -25,7 +26,7 @@ class JwtConfigTest {
             JwtDecoderConsumer consumer = context.getBean(JwtDecoderConsumer.class);
 
             assertSame(primaryDecoder, consumer.jwtDecoder());
-            org.junit.jupiter.api.Assertions.assertNotSame(refreshDecoder, consumer.jwtDecoder());
+            assertNotSame(refreshDecoder, consumer.jwtDecoder());
         });
     }
 
