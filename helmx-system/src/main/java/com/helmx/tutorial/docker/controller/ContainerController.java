@@ -233,34 +233,31 @@ public class ContainerController {
     @Operation(summary = "Copy file from container")
     @PostMapping("/copy/from")
     @PreAuthorize("@va.check('Ops:Container:Download')")
-    public ResponseEntity<?> copyFileFromContainer(@Valid @RequestBody ContainerCopyRequest request) {
-        try {
-            String host = request.getHost();
-            String containerId = request.getContainerId();
-            String containerPath = request.getContainerPath();
+    public ResponseEntity<StreamingResponseBody> copyFileFromContainer(@Valid @RequestBody ContainerCopyRequest request) {
+        String host = request.getHost();
+        String containerId = request.getContainerId();
+        String containerPath = request.getContainerPath();
 
-            // 提取文件名
-            String fileName = extractDownloadFileName(containerPath);
+        // 提取文件名
+        String fileName = extractDownloadFileName(containerPath);
 
-            StreamingResponseBody stream = outputStream -> {
-                dockerClientUtil.setCurrentHost(host);
-                try {
-                    dockerClientUtil.copyFileFromContainer(containerId, containerPath, outputStream);
-                } finally {
-                    dockerClientUtil.clearCurrentHost();
-                }
-            };
+        StreamingResponseBody stream = outputStream -> {
+            dockerClientUtil.setCurrentHost(host);
+            try {
+                dockerClientUtil.copyFileFromContainer(containerId, containerPath, outputStream);
+            } finally {
+                dockerClientUtil.clearCurrentHost();
+            }
+        };
 
-            // 设置响应头，使浏览器能够下载文件
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentDisposition(ContentDisposition.attachment().filename(fileName).build());
+        // 设置响应头，使浏览器能够下载文件
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        headers.setContentDisposition(ContentDisposition.attachment().filename(fileName).build());
 
-            return new ResponseEntity<>(stream, headers, HttpStatus.OK);
-        } catch (Exception e) {
-            log.error("Failed to copy file from container: {}", request.getContainerId(), e);
-            return ResponseUtil.failed(500, null, e.getMessage());
-        }
+        return ResponseEntity.status(HttpStatus.OK)
+                .headers(headers)
+                .body(stream);
     }
 
     @Operation(summary = "Copy file to container")

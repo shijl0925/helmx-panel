@@ -12,7 +12,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.ByteArrayOutputStream;
@@ -27,6 +32,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 
 @ExtendWith(MockitoExtension.class)
 class ContainerControllerTest {
@@ -66,7 +77,7 @@ class ContainerControllerTest {
             return null;
         }).when(dockerClientUtil).copyFileFromContainer(eq("container-1"), eq("/tmp/example.txt"), any(OutputStream.class));
 
-        ResponseEntity<?> response = containerController.copyFileFromContainer(request);
+        ResponseEntity<StreamingResponseBody> response = containerController.copyFileFromContainer(request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("attachment; filename=\"example.txt\"", response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION));
@@ -90,8 +101,40 @@ class ContainerControllerTest {
         request.setContainerId("container-1");
         request.setContainerPath("/tmp/测试 文档.txt");
 
-        ResponseEntity<?> response = containerController.copyFileFromContainer(request);
+        ResponseEntity<StreamingResponseBody> response = containerController.copyFileFromContainer(request);
 
         assertEquals("测试_文档.txt", response.getHeaders().getContentDisposition().getFilename());
+    }
+
+    @Test
+    void copyFileFromContainer_mockMvcStreamsOctetStreamResponse() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(containerController).build();
+
+        doAnswer(invocation -> {
+            OutputStream outputStream = invocation.getArgument(2);
+            outputStream.write("downloaded-content".getBytes(StandardCharsets.UTF_8));
+            return null;
+        }).when(dockerClientUtil).copyFileFromContainer(eq("container-1"), eq("/tmp/example.txt"), any(OutputStream.class));
+
+        MvcResult mvcResult = mockMvc.perform(post("/api/v1/ops/containers/copy/from")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1",
+                                  "containerPath": "/tmp/example.txt"
+                                }
+                                """))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        MockHttpServletResponse response = mockMvc.perform(asyncDispatch(mvcResult))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"example.txt\""))
+                .andExpect(content().contentType(MediaType.APPLICATION_OCTET_STREAM))
+                .andReturn()
+                .getResponse();
+
+        assertEquals("downloaded-content", response.getContentAsString(StandardCharsets.UTF_8));
     }
 }
