@@ -2,6 +2,7 @@ package com.helmx.tutorial.security.security.service;
 
 import com.helmx.tutorial.system.mapper.UserMapper;
 import com.helmx.tutorial.system.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -41,6 +42,7 @@ public class UserPermissionService {
     private final ConcurrentHashMap<Long, CacheEntry<Boolean>> superAdminCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, CacheEntry<Set<String>>> permissionCache = new ConcurrentHashMap<>();
 
+    @Autowired
     public UserPermissionService(
             UserService userService,
             UserMapper userMapper,

@@ -3,6 +3,7 @@ package com.helmx.tutorial.security.security.service;
 import com.helmx.tutorial.system.mapper.UserMapper;
 import com.helmx.tutorial.system.service.UserService;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -15,6 +16,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
 class UserPermissionServiceTest {
+
+    private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+            .withBean(UserService.class, () -> mock(UserService.class))
+            .withBean(UserMapper.class, () -> mock(UserMapper.class))
+            .withBean(UserPermissionService.class);
+
+    @Test
+    void springContextCreatesUserPermissionServiceBean() {
+        contextRunner.run(context -> assertTrue(context.containsBean("userPermissionService")));
+    }
 
     @Test
     void hasAllPermissions_reusesCachedPermissionQueriesWithinTtl() {
