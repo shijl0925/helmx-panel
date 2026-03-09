@@ -2307,8 +2307,7 @@ public class DockerClientUtil {
             }
         }
 
-        // 如果没有找到文件条目，返回空字节数组
-        return new byte[0];
+        throw new IOException("No file entry found in container archive");
     }
 
     /**

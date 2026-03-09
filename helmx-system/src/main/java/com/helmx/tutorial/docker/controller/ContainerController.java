@@ -19,6 +19,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ContentDisposition;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -221,8 +222,8 @@ public class ContainerController {
     @PostMapping("/copy/from")
     @PreAuthorize("@va.check('Ops:Container:Download')")
     public ResponseEntity<?> copyFileFromContainer(@Valid @RequestBody ContainerCopyRequest request) {
+        String host = request.getHost();
         try {
-            String host = request.getHost();
             dockerClientUtil.setCurrentHost(host);
 
             String containerId = request.getContainerId();
@@ -231,18 +232,20 @@ public class ContainerController {
             byte[] fileContent = dockerClientUtil.copyFileFromContainer(containerId, containerPath);
 
             // 提取文件名
-            String fileName = containerPath.substring(containerPath.lastIndexOf("/") + 1);
+            String fileName = sanitizeDownloadFileName(containerPath);
 
             // 设置响应头，使浏览器能够下载文件
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentDispositionFormData("attachment", fileName);
+            headers.setContentDisposition(ContentDisposition.attachment().filename(fileName).build());
             headers.setContentLength(fileContent.length);
 
             return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
         } catch (Exception e) {
             log.error("Failed to copy file from container: {}", request.getContainerId(), e);
-            return ResponseUtil.failed(500, null, e.getMessage());
+            return ResponseUtil.failed(500, null, "Failed to copy file from container");
+        } finally {
+            dockerClientUtil.clearCurrentHost();
         }
     }
 
@@ -261,8 +264,23 @@ public class ContainerController {
             return ResponseUtil.success("File copied successfully to container");
         } catch (Exception e) {
             log.error("Failed to copy file to container: {}", containerId, e);
-            return ResponseUtil.failed(500, null, "Failed to copy file to container: " + e.getMessage());
+            return ResponseUtil.failed(500, null, "Failed to copy file to container");
+        } finally {
+            dockerClientUtil.clearCurrentHost();
         }
+    }
+
+    private String sanitizeDownloadFileName(String containerPath) {
+        if (containerPath == null || containerPath.isBlank()) {
+            return "download.bin";
+        }
+        int lastSlashIndex = containerPath.lastIndexOf('/');
+        String rawName = lastSlashIndex >= 0 ? containerPath.substring(lastSlashIndex + 1) : containerPath;
+        String sanitized = rawName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        if (sanitized.isBlank() || sanitized.chars().allMatch(ch -> ch == '.')) {
+            return "download.bin";
+        }
+        return sanitized;
     }
 
     @Operation(summary = "Operate Docker Container")
