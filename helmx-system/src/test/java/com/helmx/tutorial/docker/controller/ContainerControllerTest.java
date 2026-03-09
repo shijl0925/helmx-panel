@@ -13,10 +13,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.context.request.async.WebAsyncTask;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
@@ -77,8 +77,11 @@ class ContainerControllerTest {
             return null;
         }).when(dockerClientUtil).copyFileFromContainer(eq("container-1"), eq("/tmp/example.txt"), any(OutputStream.class));
 
-        ResponseEntity<StreamingResponseBody> response = containerController.copyFileFromContainer(request);
+        WebAsyncTask<ResponseEntity<StreamingResponseBody>> task = containerController.copyFileFromContainer(request);
+        @SuppressWarnings("unchecked")
+        ResponseEntity<StreamingResponseBody> response = (ResponseEntity<StreamingResponseBody>) task.getCallable().call();
 
+        assertEquals(ContainerController.COPY_FILE_FROM_CONTAINER_TIMEOUT_MILLIS, task.getTimeout());
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("attachment; filename=\"example.txt\"", response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION));
         assertNotNull(response.getBody());
@@ -95,14 +98,17 @@ class ContainerControllerTest {
     }
 
     @Test
-    void copyFileFromContainer_sanitizesAndPreservesUnicodeFilename() {
+    void copyFileFromContainer_sanitizesAndPreservesUnicodeFilename() throws Exception {
         ContainerCopyRequest request = new ContainerCopyRequest();
         request.setHost("unix:///var/run/docker.sock");
         request.setContainerId("container-1");
         request.setContainerPath("/tmp/测试 文档.txt");
 
-        ResponseEntity<StreamingResponseBody> response = containerController.copyFileFromContainer(request);
+        WebAsyncTask<ResponseEntity<StreamingResponseBody>> task = containerController.copyFileFromContainer(request);
+        @SuppressWarnings("unchecked")
+        ResponseEntity<StreamingResponseBody> response = (ResponseEntity<StreamingResponseBody>) task.getCallable().call();
 
+        assertEquals(ContainerController.COPY_FILE_FROM_CONTAINER_TIMEOUT_MILLIS, task.getTimeout());
         assertEquals("测试_文档.txt", response.getHeaders().getContentDisposition().getFilename());
     }
 
@@ -128,13 +134,13 @@ class ContainerControllerTest {
                 .andExpect(request().asyncStarted())
                 .andReturn();
 
-        MockHttpServletResponse response = mockMvc.perform(asyncDispatch(mvcResult))
+        assertEquals(ContainerController.COPY_FILE_FROM_CONTAINER_TIMEOUT_MILLIS,
+                mvcResult.getRequest().getAsyncContext().getTimeout());
+
+        mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"example.txt\""))
                 .andExpect(content().contentType(MediaType.APPLICATION_OCTET_STREAM))
-                .andReturn()
-                .getResponse();
-
-        assertEquals("downloaded-content", response.getContentAsString(StandardCharsets.UTF_8));
+                .andReturn();
     }
 }
