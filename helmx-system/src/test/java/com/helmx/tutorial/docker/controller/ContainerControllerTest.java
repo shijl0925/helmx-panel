@@ -67,6 +67,23 @@ class ContainerControllerTest {
     }
 
     @Test
+    void copyFileFromContainer_normalizesDotHeavyFilename() {
+        ContainerCopyRequest request = new ContainerCopyRequest();
+        request.setHost("unix:///var/run/docker.sock");
+        request.setContainerId("container-3");
+        request.setContainerPath("/tmp/...hidden..tar...");
+
+        byte[] content = "demo".getBytes();
+        when(dockerClientUtil.copyFileFromContainer("container-3", "/tmp/...hidden..tar...")).thenReturn(content);
+
+        ResponseEntity<?> response = containerController.copyFileFromContainer(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("attachment; filename=\"hidden.tar\"", response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION));
+        verify(dockerClientUtil).clearCurrentHost();
+    }
+
+    @Test
     void copyFileFromContainer_failureReturnsGenericMessage_andClearsHost() {
         ContainerCopyRequest request = new ContainerCopyRequest();
         request.setHost("unix:///var/run/docker.sock");

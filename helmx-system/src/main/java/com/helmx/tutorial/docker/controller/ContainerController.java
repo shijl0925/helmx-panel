@@ -276,8 +276,10 @@ public class ContainerController {
         }
         int lastSlashIndex = containerPath.lastIndexOf('/');
         String rawName = lastSlashIndex >= 0 ? containerPath.substring(lastSlashIndex + 1) : containerPath;
-        String sanitized = rawName.replaceAll("[^a-zA-Z0-9._-]", "_");
-        if (sanitized.isBlank() || sanitized.chars().allMatch(ch -> ch == '.')) {
+        String sanitized = rawName.replaceAll("[^a-zA-Z0-9._-]", "_")
+                .replaceAll("\\.{2,}", ".")
+                .replaceAll("^\\.+|\\.+$", "");
+        if (sanitized.isBlank() || sanitized.chars().noneMatch(Character::isLetterOrDigit)) {
             return "download.bin";
         }
         return sanitized;
