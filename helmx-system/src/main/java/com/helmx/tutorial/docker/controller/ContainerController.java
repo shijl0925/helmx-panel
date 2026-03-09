@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.context.request.async.WebAsyncTask;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
@@ -42,6 +43,7 @@ public class ContainerController {
     private static final Set<String> VALID_CONTAINER_OPERATIONS = Set.of(
             "start", "stop", "restart", "remove", "kill", "pause", "unpause"
     );
+    static final long COPY_FILE_FROM_CONTAINER_TIMEOUT_MILLIS = 5000L;
 
     @Autowired
     private DockerClientUtil dockerClientUtil;
@@ -229,7 +231,7 @@ public class ContainerController {
     @Operation(summary = "Copy file from container")
     @PostMapping("/copy/from")
     @PreAuthorize("@va.check('Ops:Container:Download')")
-    public ResponseEntity<StreamingResponseBody> copyFileFromContainer(@Valid @RequestBody ContainerCopyRequest request) {
+    public WebAsyncTask<ResponseEntity<StreamingResponseBody>> copyFileFromContainer(@Valid @RequestBody ContainerCopyRequest request) {
         String host = request.getHost();
         String containerId = request.getContainerId();
         String containerPath = request.getContainerPath();
@@ -251,9 +253,9 @@ public class ContainerController {
         headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
         headers.setContentDisposition(ContentDisposition.attachment().filename(fileName).build());
 
-        return ResponseEntity.status(HttpStatus.OK)
+        return new WebAsyncTask<>(COPY_FILE_FROM_CONTAINER_TIMEOUT_MILLIS, () -> ResponseEntity.status(HttpStatus.OK)
                 .headers(headers)
-                .body(stream);
+                .body(stream));
     }
 
     @Operation(summary = "Copy file to container")
