@@ -2285,7 +2285,7 @@ public class DockerClientUtil {
     /**
      * 从tar输入流中提取文件内容
      */
-    private byte[] extractFileFromTar(InputStream tarInputStream) throws IOException {
+    byte[] extractFileFromTar(InputStream tarInputStream) throws IOException {
         try (TarArchiveInputStream tarInput = new TarArchiveInputStream(tarInputStream)) {
             TarArchiveEntry entry;
             while ((entry = tarInput.getNextTarEntry()) != null) {

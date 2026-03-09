@@ -274,8 +274,8 @@ public class ContainerController {
         if (containerPath == null || containerPath.isBlank()) {
             return "download.bin";
         }
-        int lastSlashIndex = containerPath.lastIndexOf('/');
-        String rawName = lastSlashIndex >= 0 ? containerPath.substring(lastSlashIndex + 1) : containerPath;
+        int lastSeparatorIndex = Math.max(containerPath.lastIndexOf('/'), containerPath.lastIndexOf('\\'));
+        String rawName = lastSeparatorIndex >= 0 ? containerPath.substring(lastSeparatorIndex + 1) : containerPath;
         String sanitized = rawName.replaceAll("[^a-zA-Z0-9._-]", "_")
                 .replaceAll("\\.{2,}", ".")
                 .replaceAll("^\\.+|\\.+$", "");

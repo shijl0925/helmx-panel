@@ -84,6 +84,22 @@ class ContainerControllerTest {
     }
 
     @Test
+    void copyFileFromContainer_usesLastWindowsStylePathSegment() {
+        ContainerCopyRequest request = new ContainerCopyRequest();
+        request.setHost("unix:///var/run/docker.sock");
+        request.setContainerId("container-4");
+        request.setContainerPath("C:\\temp\\..\\demo.txt");
+
+        byte[] content = "demo".getBytes();
+        when(dockerClientUtil.copyFileFromContainer("container-4", "C:\\temp\\..\\demo.txt")).thenReturn(content);
+
+        ResponseEntity<?> response = containerController.copyFileFromContainer(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("attachment; filename=\"demo.txt\"", response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION));
+    }
+
+    @Test
     void copyFileFromContainer_failureReturnsGenericMessage_andClearsHost() {
         ContainerCopyRequest request = new ContainerCopyRequest();
         request.setHost("unix:///var/run/docker.sock");
