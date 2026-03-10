@@ -52,6 +52,7 @@ public class ContainerController {
     private UserPermissionService userPermissionService;
 
     private static final int MAX_MESSAGE_LENGTH = 8192; // 单条消息最大长度
+    private static final long SSE_TIMEOUT_MS = 1800000L; // 30-minute SSE timeout
 
     private String extractDownloadFileName(String containerPath) {
         String fileName = containerPath.substring(containerPath.lastIndexOf("/") + 1)
@@ -341,7 +342,7 @@ public class ContainerController {
             throw new SecurityException("Permission denied: User does not have access to container logs");
         }
 
-        SseEmitter emitter = new SseEmitter(1800000L); // 设置30分钟超时时间
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS); // 30-minute timeout
         dockerClientUtil.setCurrentHost(host);
 
         LogContainerCmd cmd = null;
@@ -741,5 +742,152 @@ public class ContainerController {
             log.error("Failed to write file to container: {}", message);
             return ResponseUtil.failed(500, result, message);
         }
+    }
+
+    @Operation(summary = "Export Docker Container filesystem as a TAR archive")
+    @PostMapping("/export")
+    @PreAuthorize("@va.check('Ops:Container:Export')")
+    public ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> exportContainer(
+            @Valid @RequestBody ContainerExportRequest request) {
+        String containerId = request.getContainerId();
+        String host = request.getHost();
+        String filename = (request.getFilename() != null && !request.getFilename().isBlank())
+                ? request.getFilename()
+                : "container-" + containerId + ".tar";
+
+        final String hostForAsync = host;
+        final String containerIdForAsync = containerId;
+
+        org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody stream = outputStream -> {
+            dockerClientUtil.setCurrentHost(hostForAsync);
+            try (java.io.InputStream containerInputStream = dockerClientUtil.exportContainer(containerIdForAsync)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = containerInputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+                outputStream.flush();
+            } catch (Exception e) {
+                log.error("Error streaming container export data for container: {}", containerIdForAsync, e);
+                throw e;
+            }
+        };
+
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                .header("Content-Type", "application/x-tar")
+                .body(stream);
+    }
+
+    @Operation(summary = "Prune stopped Docker Containers to reclaim disk space")
+    @PostMapping("/prune")
+    @PreAuthorize("@va.check('Ops:Container:Prune')")
+    public ResponseEntity<Result> pruneContainers(@Valid @RequestBody StatusRequest request) {
+        String host = request.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        Map<String, Object> result = dockerClientUtil.pruneCmd("CONTAINERS");
+        String status = (String) result.get("status");
+        String message = (String) result.get("message");
+
+        if ("success".equals(status)) {
+            return ResponseUtil.success(message, result);
+        } else {
+            log.error("Prune containers failed: {}", message);
+            return ResponseUtil.failed(500, result, message);
+        }
+    }
+
+    @Operation(summary = "Stream real-time Docker Container stats via SSE")
+    @org.springframework.web.bind.annotation.GetMapping(
+            value = "/stats/stream/{containerId}",
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamContainerStats(
+            @RequestParam String host,
+            @PathVariable String containerId,
+            @RequestParam String token) {
+        Long userId = SecurityUtils.getCurrentUserId(token);
+        if (!checkStatsPermission(userId)) {
+            log.warn("User {} does not have permission to stream container stats", userId);
+            throw new SecurityException("Permission denied: User does not have access to container stats");
+        }
+
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS); // 30-minute timeout
+        dockerClientUtil.setCurrentHost(host);
+
+        emitter.onTimeout(() -> {
+            log.info("Stats SSE emitter timeout for container: {}", containerId);
+            emitter.complete();
+        });
+
+        emitter.onError((Throwable t) -> {
+            log.error("Stats SSE emitter error for container: {}", containerId, t);
+            emitter.complete();
+        });
+
+        try {
+            com.github.dockerjava.api.command.StatsCmd statsCmd =
+                    dockerClientUtil.getCurrentDockerClient().statsCmd(containerId).withNoStream(false);
+
+            final AtomicBoolean emitterActive = new AtomicBoolean(true);
+
+            statsCmd.exec(new com.github.dockerjava.api.async.ResultCallback.Adapter<com.github.dockerjava.api.model.Statistics>() {
+                @Override
+                public void onNext(com.github.dockerjava.api.model.Statistics stats) {
+                    if (!emitterActive.get()) {
+                        try {
+                            close();
+                        } catch (Exception e) {
+                            log.error("Error closing stats command", e);
+                        }
+                        return;
+                    }
+                    try {
+                        String payload = DockerClientUtil.toJSON(stats).toJSONString();
+                        emitter.send(SseEmitter.event().data(payload));
+                    } catch (IllegalStateException e) {
+                        log.debug("Stats SSE emitter already completed for container: {}", containerId);
+                        emitterActive.set(false);
+                        try {
+                            close();
+                        } catch (Exception ce) {
+                            log.error("Error closing stats command", ce);
+                        }
+                    } catch (Exception e) {
+                        log.error("Error sending stats via SSE for container: {}", containerId, e);
+                        emitterActive.set(false);
+                        try {
+                            close();
+                        } catch (Exception ce) {
+                            log.error("Error closing stats command", ce);
+                        }
+                    }
+                }
+
+                @Override
+                public void onComplete() {
+                    emitter.complete();
+                }
+
+                @Override
+                public void onError(Throwable throwable) {
+                    log.error("Error streaming container stats for container: {}", containerId, throwable);
+                    emitter.completeWithError(throwable);
+                }
+            });
+
+            emitter.onCompletion(() ->
+                    log.info("Stats SSE connection completed for container: {}", containerId));
+
+        } catch (Exception e) {
+            log.error("Failed to start stats streaming for container: {}", containerId, e);
+            emitter.completeWithError(e);
+        }
+
+        return emitter;
+    }
+
+    private boolean checkStatsPermission(Long userId) {
+        return userPermissionService.hasPermission(userId, "Ops:Container:Stats");
     }
 }

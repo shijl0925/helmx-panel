@@ -358,4 +358,20 @@ public class ImageController {
                 .body(stream);
     }
 
+    @Operation(summary = "Search Docker Hub for images")
+    @PostMapping("/hub/search")
+    @PreAuthorize("@va.check('Ops:Image:List')")
+    public ResponseEntity<Result> searchDockerHubImages(@Valid @RequestBody ImageHubSearchRequest criteria) {
+        String host = criteria.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        int limit = criteria.getLimit() != null && criteria.getLimit() > 0 ? criteria.getLimit() : 25;
+        List<Map<String, Object>> items = dockerClientUtil.searchImagesOnHub(criteria.getTerm(), limit);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", items.size());
+        result.put("items", items);
+
+        return ResponseUtil.success(result);
+    }
 }
