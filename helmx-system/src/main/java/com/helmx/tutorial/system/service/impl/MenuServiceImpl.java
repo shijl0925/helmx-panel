@@ -13,6 +13,22 @@ import java.util.*;
 
 @Service
 public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements MenuService {
+    private static final Comparator<Menu> MENU_SORT_COMPARATOR = (m1, m2) -> {
+        Integer order1 = m1.getSort();
+        Integer order2 = m2.getSort();
+
+        if (order1 == null && order2 == null) {
+            return 0;
+        }
+        if (order1 == null) {
+            return 1;
+        }
+        if (order2 == null) {
+            return -1;
+        }
+        return order1.compareTo(order2);
+    };
+
     @Autowired
     private MenuMapper menuMapper;
 
@@ -24,70 +40,53 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
     @Override
     public List<Menu> buildMenuTree() {
         List<Menu> allMenus = menuMapper.selectList(null);
-        return buildMenuTreeRecursive(allMenus, null);
+        return buildMenuTree(allMenus);
     }
 
     @Override
     public List<Menu> buildMenuTree(List<Menu> menus) {
-        return buildMenuTreeRecursive(menus, null);
+        if (menus == null || menus.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Map<Long, List<Menu>> childrenByParentId = new HashMap<>();
+        for (Menu menu : menus) {
+            menu.setChildren(new ArrayList<>());
+            menu.setMeta(buildMeta(menu));
+            childrenByParentId.computeIfAbsent(normalizeParentId(menu.getParentId()), key -> new ArrayList<>())
+                    .add(menu);
+        }
+
+        return buildMenuTreeRecursive(childrenByParentId, null);
     }
 
     /**
      * 递归构建菜单树
-     * @param menus 所有菜单列表
+     * @param childrenByParentId 按父菜单ID分组后的菜单列表
      * @param parentId 父菜单ID
      * @return 菜单树
      */
-    private List<Menu> buildMenuTreeRecursive(List<Menu> menus, Long parentId) {
-        List<Menu> children = new ArrayList<>();
+    private List<Menu> buildMenuTreeRecursive(Map<Long, List<Menu>> childrenByParentId, Long parentId) {
+        List<Menu> children = new ArrayList<>(
+                childrenByParentId.getOrDefault(normalizeParentId(parentId), Collections.emptyList()));
 
-        if (menus == null || menus.isEmpty()) {
-            return children;
+        children.sort(MENU_SORT_COMPARATOR);
+        for (Menu menu : children) {
+            menu.setChildren(buildMenuTreeRecursive(childrenByParentId, menu.getId()));
         }
-
-        for (Menu menu : menus) {
-            // 查找指定父ID的子菜单
-            Long menuParentId = menu.getParentId();
-            boolean isMatch;
-            if (parentId == null) {
-                // 当查找顶层菜单时，匹配parent_id为null或0的菜单
-                isMatch = menuParentId == null || menuParentId == 0;
-            } else {
-                // 正常比较
-                isMatch = Objects.equals(menuParentId, parentId);
-            }
-            if (isMatch) {
-                // 递归查找该菜单的子菜单
-                List<Menu> subChildren = buildMenuTreeRecursive(menus, menu.getId());
-                menu.setChildren(subChildren);
-
-                Map<String, Object> meta = new HashMap<>();
-                meta.put("title", menu.getTitle());
-                meta.put("icon", menu.getIcon());
-                meta.put("sort", menu.getSort());
-                menu.setMeta(meta);
-
-                children.add(menu);
-            }
-        }
-
-        // 按order字段排序
-        children.sort((m1, m2) -> {
-            Integer order1 = m1.getSort();
-            Integer order2 = m2.getSort();
-
-            if (order1 == null && order2 == null) {
-                return 0;
-            }
-            if (order1 == null) {
-                return 1;
-            }
-            if (order2 == null) {
-                return -1;
-            }
-            return order1.compareTo(order2);
-        });
 
         return children;
+    }
+
+    private Long normalizeParentId(Long parentId) {
+        return parentId == null || parentId == 0L ? null : parentId;
+    }
+
+    private Map<String, Object> buildMeta(Menu menu) {
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("title", menu.getTitle());
+        meta.put("icon", menu.getIcon());
+        meta.put("sort", menu.getSort());
+        return meta;
     }
 }

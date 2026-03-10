@@ -5,10 +5,13 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -68,7 +71,18 @@ public class JwtConfig {
     }
 
     @Bean
+    @Primary
     public JwtDecoder jwtDecoder() throws Exception {
+        return buildJwtDecoder(true);
+    }
+
+    @Bean
+    @Qualifier("refreshJwtDecoder")
+    public JwtDecoder refreshJwtDecoder() throws Exception {
+        return buildJwtDecoder(false);
+    }
+
+    private JwtDecoder buildJwtDecoder(boolean validateTimestamps) throws Exception {
         // 加载公钥
         Resource publicKeyResource = resourceLoader.getResource(publicKeyPath);
         String publicKeyStr = StreamUtils.copyToString(publicKeyResource.getInputStream(), StandardCharsets.UTF_8);
@@ -79,8 +93,11 @@ public class JwtConfig {
         // 创建 RSA 密钥对
         RSAKey rsaKey = new RSAKey.Builder(publicKey).build();
 
-        // 返回 NimbusJwtDecoder 实例
-        return NimbusJwtDecoder.withPublicKey(rsaKey.toRSAPublicKey()).build();
+        NimbusJwtDecoder jwtDecoder = NimbusJwtDecoder.withPublicKey(rsaKey.toRSAPublicKey()).build();
+        if (!validateTimestamps) {
+            jwtDecoder.setJwtValidator(token -> OAuth2TokenValidatorResult.success());
+        }
+        return jwtDecoder;
     }
 
     /**

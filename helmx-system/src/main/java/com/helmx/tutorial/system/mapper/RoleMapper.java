@@ -21,6 +21,7 @@ public interface RoleMapper extends BaseMapper<Role> {
     Set<Role> findRolesByUserId(Long userId);
     Set<Long> findMenuIdsByRoleId(Long roleId);
     Set<Menu> findMenusByRoleId(Long roleId);
+    Set<Menu> findMenusByRoleIds(@Param("roleIds") Set<Long> roleIds);
 
     /*
      * 根据条件查询角色列表

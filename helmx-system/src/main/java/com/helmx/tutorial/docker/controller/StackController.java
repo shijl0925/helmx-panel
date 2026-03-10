@@ -74,7 +74,7 @@ public class StackController {
         // 检查名称是否重复
         LambdaQueryWrapper<Stack> nameQuery = new LambdaQueryWrapper<>();
         nameQuery.eq(Stack::getName, request.getName());
-        if (stackMapper.selectCount(nameQuery) > 0) {
+        if (stackMapper.exists(nameQuery)) {
             return ResponseUtil.failed(400, null, "Stack name already exists");
         }
 

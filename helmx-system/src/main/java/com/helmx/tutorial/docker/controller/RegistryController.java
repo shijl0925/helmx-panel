@@ -59,14 +59,14 @@ public class RegistryController {
         // 检查名称是否重复
         LambdaQueryWrapper<Registry> nameQuery = new LambdaQueryWrapper<>();
         nameQuery.eq(Registry::getName, request.getName());
-        if (registryMapper.selectCount(nameQuery) > 0) {
+        if (registryMapper.exists(nameQuery)) {
             return ResponseUtil.failed(400, null, "Registry name already exists");
         }
 
         // 检查URL是否重复
         LambdaQueryWrapper<Registry> urlQuery = new LambdaQueryWrapper<>();
         urlQuery.eq(Registry::getUrl, request.getUrl());
-        if (registryMapper.selectCount(urlQuery) > 0) {
+        if (registryMapper.exists(urlQuery)) {
             return ResponseUtil.failed(400, null, "Registry url already exists");
         }
 
@@ -105,13 +105,22 @@ public class RegistryController {
                 return ResponseUtil.success("Registry connection successful", result);
             } else {
                 // 连接失败
-                String message = "Registry connection failed with code: " + responseCode;
+                String message = (responseCode == 401 || responseCode == 403)
+                        ? "Registry authentication failed"
+                        : "Registry connection failed";
                 result.put("status", "failed");
                 result.put("message", message);
+                log.debug("Registry connection failed with HTTP code: {}", responseCode);
                 return ResponseUtil.failed(500, result, message);
             }
+        } catch (IllegalArgumentException e) {
+            log.warn("Registry connection test rejected due to malformed registry URL");
+            result.put("status", "failed");
+            result.put("message", "Invalid registry URL format");
+            return ResponseUtil.failed(400, result, "Invalid registry URL format");
         } catch (Exception e) {
-            String message = "Registry connection test failed: " + e.getMessage();
+            String message = "Registry connection test failed";
+            log.error("Registry connection test failed", e);
             result.put("status", "failed");
             result.put("message", message);
             return ResponseUtil.failed(500, result, message);

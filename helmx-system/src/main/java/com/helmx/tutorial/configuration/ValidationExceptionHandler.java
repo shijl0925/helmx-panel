@@ -18,5 +18,9 @@ public class ValidationExceptionHandler {
         });
         return ResponseUtil.failed(400, null, errorMessage.toString());
     }
-}
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Result> handleIllegalArgumentException(IllegalArgumentException ex) {
+        return ResponseUtil.failed(400, null, ex.getMessage());
+    }
+}

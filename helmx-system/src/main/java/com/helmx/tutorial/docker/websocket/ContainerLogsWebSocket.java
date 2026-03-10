@@ -6,12 +6,13 @@ import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.LogContainerCmd;
 import com.github.dockerjava.api.model.Frame;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
-import com.helmx.tutorial.system.mapper.UserMapper;
-import com.helmx.tutorial.system.service.UserService;
-import com.helmx.tutorial.utils.SecurityUtils;
+import com.helmx.tutorial.docker.utils.DockerHostValidator;
+import com.helmx.tutorial.security.security.service.UserPermissionService;
+import com.helmx.tutorial.utils.JwtTokenUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.NonNull;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -19,7 +20,6 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -30,10 +30,13 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
     private DockerClientUtil dockerClientUtil;
 
     @Autowired
-    private UserService userService;
+    private UserPermissionService userPermissionService;
 
     @Autowired
-    private UserMapper userMapper;
+    private DockerHostValidator dockerHostValidator;
+
+    @Autowired
+    private JwtTokenUtil jwtTokenUtil;
 
     private final Map<String, LogContainerCmd> activeCommands = new ConcurrentHashMap<>();
 
@@ -56,11 +59,24 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
 
         String token = request.getString("token");
 
+        Jwt jwt = jwtTokenUtil.getValidJwt(token);
+        if (jwt == null) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("Invalid or expired token"));
+            return;
+        }
+
         // 获取当前用户名, 检查权限
-        Long userId = SecurityUtils.getCurrentUserId(token);
+        Long userId = jwtTokenUtil.getUserIdFromJwt(jwt);
         if (!checkPermission(userId)) {
             log.warn("User {} does not have permission to access terminal", userId);
             session.close(CloseStatus.BAD_DATA.withReason("Forbidden"));
+            return;
+        }
+
+        try {
+            dockerHostValidator.validateHostAllowlist(host);
+        } catch (IllegalArgumentException ex) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("Unauthorized host"));
             return;
         }
 
@@ -168,14 +184,7 @@ public class ContainerLogsWebSocket extends TextWebSocketHandler {
     }
 
     private boolean checkPermission(Long userId) {
-        if (userId != null) {
-            if (userService.isSuperAdmin(userId)) {
-                return true;
-            }
-
-            Set<String> userPermissions = userMapper.selectUserPermissions(userId);
-            return userPermissions.contains("Ops:Container:Logs");
-        }
-        return false;
+        return userPermissionService.hasPermission(userId, "Ops:Container:Logs");
     }
+
 }

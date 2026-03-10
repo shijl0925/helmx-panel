@@ -1,27 +1,20 @@
 package com.helmx.tutorial.security.configuration;
 
-import com.helmx.tutorial.system.mapper.UserMapper;
-import com.helmx.tutorial.system.service.UserService;
+import com.helmx.tutorial.security.security.service.UserPermissionService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import com.helmx.tutorial.utils.SecurityUtils;
 
-import java.util.*;
-
 @Slf4j
 @Service(value = "va")
 public class AuthorityConfig {
 
-    private final UserService userService;
+    private final UserPermissionService userPermissionService;
 
-    private final UserMapper userMapper;
-
-    public AuthorityConfig(UserService userService, UserMapper userMapper) {
-        this.userService = userService;
-        this.userMapper = userMapper;
+    public AuthorityConfig(UserPermissionService userPermissionService) {
+        this.userPermissionService = userPermissionService;
     }
 
     /**
@@ -46,18 +39,6 @@ public class AuthorityConfig {
         if (userId == null) {
             return false;
         }
-
-        // 获取当前用户的角色名称
-        List<String> roleNames = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
-        log.info("roleNames：{}", roleNames);
-
-        // 超级管理员直接返回true
-        if (userService.isSuperAdmin(userId)) {
-            return true;
-        }
-
-        // 直接使用 UserMapper 查询用户权限
-        Set<String> userPermissions = userMapper.selectUserPermissions(userId);
-        return userPermissions.containsAll(Arrays.asList(permissions));
+        return userPermissionService.hasAllPermissions(userId, permissions);
     }
 }

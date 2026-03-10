@@ -122,27 +122,42 @@ class UserServiceImplTest {
     void getUserMenus_userHasRoles_returnsMenusFromAllRoles() {
         Role role = makeRole(1L, "Admin");
         when(roleMapper.findRolesByUserId(1L)).thenReturn(Set.of(role));
-        when(roleMapper.selectBatchIds(anyCollection())).thenReturn(List.of(role));
 
         Menu m1 = makeMenu(100L, "Users");
         Menu m2 = makeMenu(101L, "Roles");
-        when(roleMapper.findMenusByRoleId(1L)).thenReturn(new HashSet<>(Set.of(m1, m2)));
+        when(roleMapper.findMenusByRoleIds(Set.of(1L))).thenReturn(new HashSet<>(Set.of(m1, m2)));
 
         Set<Menu> result = userService.getUserMenus(1L);
 
         assertEquals(2, result.size());
+        verify(roleMapper).findMenusByRoleIds(Set.of(1L));
+        verify(roleMapper, never()).findMenusByRoleId(anyLong());
     }
 
     @Test
     void getUserMenus_roleHasNoMenus_returnsEmptySet() {
         Role role = makeRole(1L, "User");
         when(roleMapper.findRolesByUserId(1L)).thenReturn(Set.of(role));
-        when(roleMapper.selectBatchIds(anyCollection())).thenReturn(List.of(role));
-        when(roleMapper.findMenusByRoleId(1L)).thenReturn(Collections.emptySet());
+        when(roleMapper.findMenusByRoleIds(Set.of(1L))).thenReturn(Collections.emptySet());
 
         Set<Menu> result = userService.getUserMenus(1L);
 
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void getUserMenus_multipleRoles_queriesMenusOnce() {
+        Role admin = makeRole(1L, "Admin");
+        Role user = makeRole(2L, "User");
+        Menu sharedMenu = makeMenu(100L, "Dashboard");
+        when(roleMapper.findRolesByUserId(1L)).thenReturn(Set.of(admin, user));
+        when(roleMapper.findMenusByRoleIds(Set.of(1L, 2L))).thenReturn(Set.of(sharedMenu));
+
+        Set<Menu> result = userService.getUserMenus(1L);
+
+        assertEquals(1, result.size());
+        verify(roleMapper).findMenusByRoleIds(Set.of(1L, 2L));
+        verify(roleMapper, never()).findMenusByRoleId(anyLong());
     }
 
     // ---- updateUserRoles ----

@@ -18,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -184,6 +185,20 @@ class UserServiceAdditionalTest {
         when(roleMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
 
         assertThrows(RuntimeException.class, () -> userService.registerUser(req));
+    }
+
+    @Test
+    void registerUser_isTransactional() throws NoSuchMethodException {
+        assertTrue(UserServiceImpl.class
+                .getMethod("registerUser", SignupRequest.class)
+                .isAnnotationPresent(Transactional.class));
+    }
+
+    @Test
+    void updateUserRoles_isTransactional() throws NoSuchMethodException {
+        assertTrue(UserServiceImpl.class
+                .getMethod("updateUserRoles", Long.class, Set.class)
+                .isAnnotationPresent(Transactional.class));
     }
 
     // helper

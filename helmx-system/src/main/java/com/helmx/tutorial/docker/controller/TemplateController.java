@@ -75,7 +75,7 @@ public class TemplateController {
         // 检查名称是否重复
         LambdaQueryWrapper<Template> nameQuery = new LambdaQueryWrapper<>();
         nameQuery.eq(Template::getName, request.getName());
-        if (templateMapper.selectCount(nameQuery) > 0) {
+        if (templateMapper.exists(nameQuery)) {
             return ResponseUtil.failed(400, null, "Template name already exists");
         }
 
