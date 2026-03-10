@@ -5,26 +5,37 @@ import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.ContainerNetwork;
 import com.github.dockerjava.api.model.ContainerNetworkSettings;
 import com.github.dockerjava.api.model.ContainerPort;
+import com.helmx.tutorial.docker.dto.ContainerExecResponse;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
+import com.helmx.tutorial.dto.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -35,13 +46,59 @@ class ContainerControllerIntegrationTest {
     @Mock
     private DockerClientUtil dockerClientUtil;
 
+    private ContainerController controller;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        ContainerController controller = new ContainerController();
+        controller = new ContainerController();
         ReflectionTestUtils.setField(controller, "dockerClientUtil", dockerClientUtil);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+    }
+
+    @Test
+    void createDockerContainer_successReturnsCreatedContainer() throws Exception {
+        Map<String, Object> result = new HashMap<>();
+        result.put("status", "success");
+        result.put("message", "Container created successfully");
+        result.put("containerId", "container-1");
+        when(dockerClientUtil.createContainer(any())).thenReturn(result);
+
+        mockMvc.perform(post("/api/v1/ops/containers")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "name": "demo-app",
+                                  "image": "nginx:latest"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("Container created successfully"))
+                .andExpect(jsonPath("$.data.containerId").value("container-1"));
+    }
+
+    @Test
+    void createDockerContainer_failureReturnsInternalServerError() throws Exception {
+        Map<String, Object> result = new HashMap<>();
+        result.put("status", "failed");
+        result.put("message", "Create failed");
+        when(dockerClientUtil.createContainer(any())).thenReturn(result);
+
+        mockMvc.perform(post("/api/v1/ops/containers")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "name": "demo-app",
+                                  "image": "nginx:latest"
+                                }
+                                """))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.message").value("Create failed"))
+                .andExpect(jsonPath("$.data.status").value("failed"));
     }
 
     @Test
@@ -122,6 +179,25 @@ class ContainerControllerIntegrationTest {
     }
 
     @Test
+    void getContainerLogs_returnsLogPayload() throws Exception {
+        when(dockerClientUtil.getContainerLogs("container-1", 200)).thenReturn("line-1\nline-2");
+
+        mockMvc.perform(post("/api/v1/ops/containers/logs")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1",
+                                  "tail": 200
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("Get container logs successfully!"))
+                .andExpect(jsonPath("$.data").value("line-1\nline-2"));
+    }
+
+    @Test
     void operateDockerContainer_successRemovesMessageFromPayload() throws Exception {
         Map<String, Object> result = new HashMap<>();
         result.put("status", "success");
@@ -166,6 +242,23 @@ class ContainerControllerIntegrationTest {
     }
 
     @Test
+    void copyFileToContainer_successReturnsConfirmation() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "example.txt", "text/plain", "demo".getBytes()
+        );
+
+        mockMvc.perform(multipart("/api/v1/ops/containers/copy/to")
+                        .file(file)
+                        .param("host", "unix:///var/run/docker.sock")
+                        .param("containerId", "container-1")
+                        .param("containerPath", "/tmp/example.txt"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data").value("File copied successfully to container"));
+    }
+
+    @Test
     void bulkOperateContainers_returnsPartialCompletionCounts() throws Exception {
         List<Map<String, Object>> results = List.of(
                 Map.of("containerId", "container-1", "status", "success"),
@@ -190,6 +283,120 @@ class ContainerControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.failCount").value(1))
                 .andExpect(jsonPath("$.data.results[1].containerId").value("container-2"))
                 .andExpect(jsonPath("$.data.results[1].status").value("failed"));
+    }
+
+    @Test
+    void renameDockerContainer_successReturnsUpdatedMessage() throws Exception {
+        when(dockerClientUtil.renameContainer(any()))
+                .thenReturn(new HashMap<>(Map.of("status", "success", "message", "Container renamed")));
+
+        mockMvc.perform(post("/api/v1/ops/containers/rename")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1",
+                                  "newName": "renamed-app"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("Container renamed"))
+                .andExpect(jsonPath("$.data.status").value("success"));
+    }
+
+    @Test
+    void updateDockerContainer_successReturnsNewContainerId() throws Exception {
+        Map<String, Object> result = new HashMap<>();
+        result.put("status", "success");
+        result.put("message", "Container updated");
+        result.put("newContainerId", "container-2");
+        when(dockerClientUtil.updateContainer(any())).thenReturn(result);
+
+        mockMvc.perform(post("/api/v1/ops/containers/update")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1",
+                                  "name": "demo-app",
+                                  "image": "nginx:latest"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("Container updated"))
+                .andExpect(jsonPath("$.data.newContainerId").value("container-2"));
+    }
+
+    @Test
+    void updateContainerNetworks_disconnectsRemovedAndConnectsNewNetwork() throws Exception {
+        when(dockerClientUtil.getContainerNetworks("container-1")).thenReturn(new HashSet<>(Set.of("bridge", "legacy")));
+        when(dockerClientUtil.disconnectNetwork("legacy", "container-1"))
+                .thenReturn(Map.of("status", "success"));
+        when(dockerClientUtil.connectNetwork("blue", "container-1"))
+                .thenReturn(Map.of("status", "success"));
+
+        mockMvc.perform(post("/api/v1/ops/containers/networks")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1",
+                                  "networks": ["bridge", "blue"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data").value("Networks updated successfully"));
+
+        verify(dockerClientUtil).disconnectNetwork("legacy", "container-1");
+        verify(dockerClientUtil).connectNetwork("blue", "container-1");
+        verify(dockerClientUtil, never()).disconnectNetwork("bridge", "container-1");
+    }
+
+    @Test
+    void disconnectContainerNetwork_successReturnsConfirmation() throws Exception {
+        when(dockerClientUtil.disconnectNetwork("bridge", "container-1")).thenReturn(Map.of("status", "success"));
+
+        mockMvc.perform(post("/api/v1/ops/containers/disconnect")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1",
+                                  "network": "bridge"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data").value("Network disconnected successfully"));
+    }
+
+    @Test
+    void executeCommandInContainer_successReturnsCommandOutput() throws Exception {
+        ContainerExecResponse response = new ContainerExecResponse();
+        response.setExecId("exec-1");
+        response.setStatus("success");
+        response.setOutput("hello");
+        when(dockerClientUtil.execCommand(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/ops/containers/exec")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1",
+                                  "command": ["echo", "hello"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("Command executed successfully"))
+                .andExpect(jsonPath("$.data.execId").value("exec-1"))
+                .andExpect(jsonPath("$.data.output").value("hello"));
     }
 
     @Test
@@ -235,6 +442,54 @@ class ContainerControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(500))
                 .andExpect(jsonPath("$.message").value("permission denied"))
                 .andExpect(jsonPath("$.data.status").value("failed"));
+    }
+
+    @Test
+    void updateContainerResources_successReturnsConfirmation() throws Exception {
+        when(dockerClientUtil.updateContainerResources(any()))
+                .thenReturn(new HashMap<>(Map.of(
+                        "status", "success",
+                        "message", "Container resources updated successfully"
+                )));
+
+        mockMvc.perform(post("/api/v1/ops/containers/resources")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1",
+                                  "cpuShares": 512,
+                                  "memory": 1048576
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("Container resources updated successfully"))
+                .andExpect(jsonPath("$.data.status").value("success"));
+    }
+
+    @Test
+    void getContainerDiff_returnsFilesystemChanges() throws Exception {
+        when(dockerClientUtil.getContainerDiff("container-1"))
+                .thenReturn(List.of(
+                        Map.of("path", "/app/config.yml", "kind", 0, "kindLabel", "Modified"),
+                        Map.of("path", "/app/new.txt", "kind", 1, "kindLabel", "Added")
+                ));
+
+        mockMvc.perform(post("/api/v1/ops/containers/diff")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.containerId").value("container-1"))
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.changes[0].kindLabel").value("Modified"))
+                .andExpect(jsonPath("$.data.changes[1].path").value("/app/new.txt"));
     }
 
     private Container createContainer(String id, String name, long created, String state, String image, String imageId) {

@@ -11,25 +11,43 @@ import com.helmx.tutorial.docker.utils.ImageBuildTask;
 import com.helmx.tutorial.docker.utils.ImageBuildTaskManager;
 import com.helmx.tutorial.docker.utils.ImagePullTask;
 import com.helmx.tutorial.docker.utils.ImagePullTaskManager;
+import com.helmx.tutorial.docker.utils.ImagePushTask;
 import com.helmx.tutorial.docker.utils.ImagePushTaskManager;
+import com.helmx.tutorial.dto.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -44,11 +62,12 @@ class ImageControllerIntegrationTest {
     private final ImagePushTaskManager imagePushTaskManager = new ImagePushTaskManager();
     private final ImageBuildTaskManager imageBuildTaskManager = new ImageBuildTaskManager();
 
+    private ImageController controller;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        ImageController controller = new ImageController();
+        controller = new ImageController();
         ReflectionTestUtils.setField(controller, "dockerClientUtil", dockerClientUtil);
         ReflectionTestUtils.setField(controller, "imagePullTaskManager", imagePullTaskManager);
         ReflectionTestUtils.setField(controller, "imagePushTaskManager", imagePushTaskManager);
@@ -143,6 +162,25 @@ class ImageControllerIntegrationTest {
     }
 
     @Test
+    void pullDockerImage_returnsPullResult() throws Exception {
+        when(dockerClientUtil.pullImageIfNotExists("nginx:latest", false))
+                .thenReturn(Map.of("status", "success", "taskId", "pull-1"));
+
+        mockMvc.perform(post("/api/v1/ops/images/pull")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "imageName": "nginx:latest"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("success"))
+                .andExpect(jsonPath("$.data.taskId").value("pull-1"));
+    }
+
+    @Test
     void getDockerImagePullTaskStatus_returnsTaskMetadata() throws Exception {
         ImagePullTask task = new ImagePullTask();
         task.setTaskId("pull-1");
@@ -167,6 +205,52 @@ class ImageControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.startTime[2]").value(10))
                 .andExpect(jsonPath("$.data.startTime[3]").value(1))
                 .andExpect(jsonPath("$.data.startTime[4]").value(0));
+    }
+
+    @Test
+    void pushDockerImage_returnsPushResult() throws Exception {
+        when(dockerClientUtil.pushImage("registry.example.com/demo/app:1.0"))
+                .thenReturn(Map.of("status", "success", "taskId", "push-1"));
+
+        mockMvc.perform(post("/api/v1/ops/images/push")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "imageName": "registry.example.com/demo/app:1.0"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("success"))
+                .andExpect(jsonPath("$.data.taskId").value("push-1"));
+    }
+
+    @Test
+    void getDockerImagePushTaskStatus_returnsTaskMetadata() throws Exception {
+        ImagePushTask task = new ImagePushTask();
+        task.setTaskId("push-1");
+        task.setStatus("RUNNING");
+        task.setMessage("Pushing image");
+        task.setStartTime(LocalDateTime.of(2026, 3, 10, 1, 10, 0));
+        imagePushTaskManager.addTask("push-1", task);
+
+        mockMvc.perform(post("/api/v1/ops/images/push/task/status")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "taskId": "push-1"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("RUNNING"))
+                .andExpect(jsonPath("$.data.message").value("Pushing image"))
+                .andExpect(jsonPath("$.data.startTime[0]").value(2026))
+                .andExpect(jsonPath("$.data.startTime[1]").value(3))
+                .andExpect(jsonPath("$.data.startTime[2]").value(10))
+                .andExpect(jsonPath("$.data.startTime[3]").value(1))
+                .andExpect(jsonPath("$.data.startTime[4]").value(10));
     }
 
     @Test
@@ -196,6 +280,58 @@ class ImageControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.endTime[2]").value(10))
                 .andExpect(jsonPath("$.data.endTime[3]").value(1))
                 .andExpect(jsonPath("$.data.endTime[4]").value(5));
+    }
+
+    @Test
+    void buildDockerImage_deduplicatesTagsAndReturnsSuccess() throws Exception {
+        when(dockerClientUtil.buildImage(
+                eq("FROM eclipse-temurin:21"),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                any(Set.class),
+                eq(null),
+                eq(true),
+                eq(false),
+                eq(null),
+                eq(null),
+                any()
+        )).thenReturn(Map.of("status", "success", "taskId", "build-2"));
+
+        MockMultipartFile dockerfileArchive = new MockMultipartFile("files", "Dockerfile", "text/plain", "FROM base".getBytes());
+
+        mockMvc.perform(multipart("/api/v1/ops/images/build")
+                        .file(dockerfileArchive)
+                        .param("host", "unix:///var/run/docker.sock")
+                        .param("dockerfile", "FROM eclipse-temurin:21")
+                        .param("tags", "demo/app:1.0", "demo/app:1.0", "demo/app:latest")
+                        .param("pull", "true")
+                        .param("noCache", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("success"))
+                .andExpect(jsonPath("$.data.taskId").value("build-2"));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Set<String>> tagsCaptor = ArgumentCaptor.forClass(Set.class);
+        verify(dockerClientUtil).buildImage(
+                eq("FROM eclipse-temurin:21"),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                tagsCaptor.capture(),
+                eq(null),
+                eq(true),
+                eq(false),
+                eq(null),
+                eq(null),
+                any()
+        );
+        assertEquals(Set.of("demo/app:1.0", "demo/app:latest"), tagsCaptor.getValue());
     }
 
     @Test
@@ -236,6 +372,49 @@ class ImageControllerIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Image removed failed! image in use"))
                 .andExpect(jsonPath("$.data.status").value("failed"))
                 .andExpect(jsonPath("$.data.message").value("image in use"));
+    }
+
+    @Test
+    void importDockerImage_successReturnsResult() throws Exception {
+        when(dockerClientUtil.importImage(any()))
+                .thenReturn(Map.of("status", "success", "imageId", "sha256:imported"));
+
+        MockMultipartFile imageTar = new MockMultipartFile("file", "image.tar", "application/x-tar", "archive".getBytes());
+
+        mockMvc.perform(multipart("/api/v1/ops/images/import")
+                        .file(imageTar)
+                        .param("host", "unix:///var/run/docker.sock"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("success"))
+                .andExpect(jsonPath("$.data.imageId").value("sha256:imported"));
+    }
+
+    @Test
+    void exportDockerImage_streamsArchiveAndClearsHost() throws Exception {
+        when(dockerClientUtil.exportImage("demo/app:1.0"))
+                .thenReturn(new ByteArrayInputStream("tar-content".getBytes()));
+
+        com.helmx.tutorial.docker.dto.ExportImageRequest request = new com.helmx.tutorial.docker.dto.ExportImageRequest();
+        request.setHost("unix:///var/run/docker.sock");
+        request.setImageName("demo/app:1.0");
+        request.setFilename("demo-app.tar");
+
+        ResponseEntity<StreamingResponseBody> response = controller.exportDockerImage(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("attachment; filename=\"demo-app.tar\"", response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION));
+        assertEquals("application/x-tar", response.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE));
+        assertNotNull(response.getBody());
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        response.getBody().writeTo(outputStream);
+        assertEquals("tar-content", outputStream.toString());
+
+        var inOrder = inOrder(dockerClientUtil);
+        inOrder.verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        inOrder.verify(dockerClientUtil).exportImage("demo/app:1.0");
+        inOrder.verify(dockerClientUtil).clearCurrentHost();
     }
 
     private Image createImage(String id, String[] repoTags, long size, long created) {
