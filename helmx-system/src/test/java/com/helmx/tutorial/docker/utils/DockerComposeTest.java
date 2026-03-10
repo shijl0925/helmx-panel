@@ -34,12 +34,12 @@ class DockerComposeTest {
         DockerCompose dockerCompose = new DockerCompose();
         Process process = Mockito.mock(Process.class);
 
-        when(process.waitFor(eq(120L), any(TimeUnit.class))).thenReturn(false);
+        when(process.waitFor(eq(120L), eq(TimeUnit.SECONDS))).thenReturn(false);
 
         assertThrows(RuntimeException.class,
                 () -> dockerCompose.waitForProcess(process, 120L, "docker-compose down command timeout during cleanup"));
 
-        verify(process, times(1)).waitFor(eq(120L), any(TimeUnit.class));
+        verify(process, times(1)).waitFor(eq(120L), eq(TimeUnit.SECONDS));
         verify(process, times(1)).destroyForcibly();
         verify(process, never()).exitValue();
     }

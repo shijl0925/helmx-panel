@@ -357,6 +357,7 @@ public class DockerCompose {
 
     /**
      * Wait for a process to finish with timeout and return exit code without double-waiting.
+     * Package-private for testing.
      */
     int waitForProcess(Process process, long timeoutSeconds, String timeoutMessage) throws InterruptedException {
         boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
