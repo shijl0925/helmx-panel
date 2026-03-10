@@ -39,6 +39,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
@@ -178,6 +179,11 @@ class ImageControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.status").value("success"))
                 .andExpect(jsonPath("$.data.taskId").value("pull-1"));
+
+        var inOrder = inOrder(dockerClientUtil);
+        inOrder.verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        inOrder.verify(dockerClientUtil).pullImageIfNotExists("nginx:latest", false);
+        inOrder.verify(dockerClientUtil).clearCurrentHost();
     }
 
     @Test
@@ -224,6 +230,11 @@ class ImageControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.status").value("success"))
                 .andExpect(jsonPath("$.data.taskId").value("push-1"));
+
+        var inOrder = inOrder(dockerClientUtil);
+        inOrder.verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        inOrder.verify(dockerClientUtil).pushImage("registry.example.com/demo/app:1.0");
+        inOrder.verify(dockerClientUtil).clearCurrentHost();
     }
 
     @Test
@@ -332,6 +343,69 @@ class ImageControllerIntegrationTest {
                 any()
         );
         assertEquals(Set.of("demo/app:1.0", "demo/app:latest"), tagsCaptor.getValue());
+
+        var inOrder = inOrder(dockerClientUtil);
+        inOrder.verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        inOrder.verify(dockerClientUtil).buildImage(
+                eq("FROM eclipse-temurin:21"),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                any(Set.class),
+                eq(null),
+                eq(true),
+                eq(false),
+                eq(null),
+                eq(null),
+                any()
+        );
+        inOrder.verify(dockerClientUtil).clearCurrentHost();
+    }
+
+    @Test
+    void buildDockerImage_whenDockerClientThrows_stillClearsHost() {
+        doThrow(new RuntimeException("build failed")).when(dockerClientUtil).buildImage(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+        );
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> controller.buildDockerImage(
+                "unix:///var/run/docker.sock",
+                "FROM eclipse-temurin:21",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new String[]{"demo/app:1.0"},
+                null
+        ));
+
+        assertEquals("build failed", exception.getMessage());
+        var inOrder = inOrder(dockerClientUtil);
+        inOrder.verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        inOrder.verify(dockerClientUtil).buildImage(
+                eq("FROM eclipse-temurin:21"),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                any(Set.class),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null)
+        );
+        inOrder.verify(dockerClientUtil).clearCurrentHost();
     }
 
     @Test

@@ -146,11 +146,13 @@ public class ImageController {
     @PreAuthorize("@va.check('Ops:Image:Pull')")
     public ResponseEntity<Result> PullDockerImage(@Valid @RequestBody ImagePullRequest criteria) throws InterruptedException {
         String host = criteria.getHost();
-        dockerClientUtil.setCurrentHost(host);
-
-        Map<String, String> result = dockerClientUtil.pullImageIfNotExists(criteria.getImageName(), false);
-
-        return ResponseUtil.success(result);
+        try {
+            dockerClientUtil.setCurrentHost(host);
+            Map<String, String> result = dockerClientUtil.pullImageIfNotExists(criteria.getImageName(), false);
+            return ResponseUtil.success(result);
+        } finally {
+            dockerClientUtil.clearCurrentHost();
+        }
     }
 
     @Operation(summary = "Get Docker Image pull task status")
@@ -177,11 +179,13 @@ public class ImageController {
     @PreAuthorize("@va.check('Ops:Image:Push')")
     public ResponseEntity<Result> PushDockerImage(@Valid @RequestBody ImagePushRequest criteria) {
         String host = criteria.getHost();
-        dockerClientUtil.setCurrentHost(host);
-
-        Map<String, String> result = dockerClientUtil.pushImage(criteria.getImageName());
-
-        return ResponseUtil.success(result);
+        try {
+            dockerClientUtil.setCurrentHost(host);
+            Map<String, String> result = dockerClientUtil.pushImage(criteria.getImageName());
+            return ResponseUtil.success(result);
+        } finally {
+            dockerClientUtil.clearCurrentHost();
+        }
     }
 
     @Operation(summary = "Get Docker Image push task status")
@@ -257,25 +261,28 @@ public class ImageController {
             @RequestParam() String[] tags,
             @RequestParam(value = "files", required = false) MultipartFile[] files
     ) {
-        dockerClientUtil.setCurrentHost(host);
-
-        Set<String> tagSet = new HashSet<>(Arrays.asList(tags));
-        Map<String, String> result = dockerClientUtil.buildImage(
-                dockerfile,
-                dockerfilePath,
-                gitUrl,
-                branch,
-                username,
-                password,
-                tagSet,
-                buildArgs,
-                pull,
-                noCache,
-                labels,
-                envs,
-                files
-        );
-        return ResponseUtil.success(result);
+        try {
+            dockerClientUtil.setCurrentHost(host);
+            Set<String> tagSet = new HashSet<>(Arrays.asList(tags));
+            Map<String, String> result = dockerClientUtil.buildImage(
+                    dockerfile,
+                    dockerfilePath,
+                    gitUrl,
+                    branch,
+                    username,
+                    password,
+                    tagSet,
+                    buildArgs,
+                    pull,
+                    noCache,
+                    labels,
+                    envs,
+                    files
+            );
+            return ResponseUtil.success(result);
+        } finally {
+            dockerClientUtil.clearCurrentHost();
+        }
     }
 
     @Operation(summary = "Get Docker Image build task status")

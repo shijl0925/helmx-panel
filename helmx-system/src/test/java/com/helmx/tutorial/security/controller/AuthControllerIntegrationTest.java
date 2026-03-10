@@ -16,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -160,6 +161,29 @@ class AuthControllerIntegrationTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Failed to create user"))
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
+    void register_mapsDatabaseDuplicateUsernameRaceToBadRequest() throws Exception {
+        when(userService.existsByUsername(anyString())).thenReturn(false);
+        when(userService.existsByEmail(anyString())).thenReturn(false);
+        doThrow(new DataIntegrityViolationException("duplicate username"))
+                .when(userService).registerUser(any());
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "demo",
+                                  "email": "demo@example.com",
+                                  "password": "secret12",
+                                  "phone": "13800138000",
+                                  "nickname": "Demo"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Error: Username is already taken!"))
                 .andExpect(jsonPath("$.code").value(400));
     }
 
