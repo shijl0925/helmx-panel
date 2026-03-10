@@ -105,6 +105,8 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
                                   Map<Long, List<Menu>> childrenByParentId,
                                   Set<Menu> visited,
                                   Set<Menu> visiting) {
+        // Track the current traversal path so disconnected self/cyclic menu data
+        // cannot recurse forever while we rebuild a safe tree structure.
         if (!visiting.add(menu)) {
             return;
         }
@@ -115,6 +117,8 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
 
         List<Menu> safeChildren = new ArrayList<>();
         for (Menu child : children) {
+            // Skip the back-edge entirely so the serialized response does not
+            // retain a cyclic child reference even though recursion is stopped.
             if (visiting.contains(child)) {
                 continue;
             }
