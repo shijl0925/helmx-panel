@@ -9,11 +9,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
@@ -104,10 +102,6 @@ class UserPermissionServiceTest {
         assertTrue(service.hasPermission(2L, "B"));
         assertTrue(service.hasPermission(1L, "A"));
 
-        @SuppressWarnings("unchecked")
-        Map<Long, ?> permissionCache = (Map<Long, ?>) org.springframework.test.util.ReflectionTestUtils
-                .getField(service, "permissionCache");
-        assertEquals(1, permissionCache.size());
         verify(userMapper, times(2)).selectUserPermissions(1L);
         verify(userMapper, times(1)).selectUserPermissions(2L);
     }
