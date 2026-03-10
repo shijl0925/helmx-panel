@@ -188,6 +188,40 @@ class UserServiceAdditionalTest {
     }
 
     @Test
+    void registerUser_insertReturnsZero_throwsIllegalArgumentException() {
+        SignupRequest req = new SignupRequest();
+        req.setUsername("charlie");
+        req.setEmail("charlie@example.com");
+        req.setPassword("pass123");
+
+        when(encoder.encode("pass123")).thenReturn("hashed");
+        when(userMapper.insert(any(User.class))).thenReturn(0);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> userService.registerUser(req));
+
+        assertEquals("Failed to create user", exception.getMessage());
+        verifyNoInteractions(roleMapper, userRoleMapper);
+    }
+
+    @Test
+    void registerUser_missingGeneratedId_throwsIllegalArgumentException() {
+        SignupRequest req = new SignupRequest();
+        req.setUsername("dave");
+        req.setEmail("dave@example.com");
+        req.setPassword("pass123");
+
+        when(encoder.encode("pass123")).thenReturn("hashed");
+        when(userMapper.insert(any(User.class))).thenReturn(1);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> userService.registerUser(req));
+
+        assertEquals("Failed to create user", exception.getMessage());
+        verifyNoInteractions(roleMapper, userRoleMapper);
+    }
+
+    @Test
     void registerUser_isTransactional() throws NoSuchMethodException {
         assertTrue(UserServiceImpl.class
                 .getMethod("registerUser", SignupRequest.class)

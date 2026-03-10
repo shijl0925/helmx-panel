@@ -1,5 +1,6 @@
 package com.helmx.tutorial.security.controller;
 
+import com.helmx.tutorial.configuration.ValidationExceptionHandler;
 import com.helmx.tutorial.security.security.UserSessionManager;
 import com.helmx.tutorial.security.security.service.JWTService;
 import com.helmx.tutorial.system.entity.Menu;
@@ -37,7 +38,9 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -82,7 +85,9 @@ class AuthControllerIntegrationTest {
         ReflectionTestUtils.setField(controller, "jwtService", jwtService);
         ReflectionTestUtils.setField(controller, "session", session);
         ReflectionTestUtils.setField(controller, "userSessionManager", userSessionManager);
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new ValidationExceptionHandler())
+                .build();
     }
 
     @AfterEach
@@ -133,6 +138,28 @@ class AuthControllerIntegrationTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Error: Username is already taken!"))
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
+    void register_returnsBadRequestWhenServiceRejectsInconsistentUserCreation() throws Exception {
+        when(userService.existsByUsername(anyString())).thenReturn(false);
+        when(userService.existsByEmail(anyString())).thenReturn(false);
+        doThrow(new IllegalArgumentException("Failed to create user")).when(userService).registerUser(any());
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "demo",
+                                  "email": "demo@example.com",
+                                  "password": "secret12",
+                                  "phone": "13800138000",
+                                  "nickname": "Demo"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Failed to create user"))
                 .andExpect(jsonPath("$.code").value(400));
     }
 

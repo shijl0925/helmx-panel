@@ -54,7 +54,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setNickname(signUpRequest.getNickname());
 
         // 保存用户到数据库，获取生成的用户ID
-        userMapper.insert(user);
+        int insertedRows = userMapper.insert(user);
+        if (insertedRows <= 0 || user.getId() == null) {
+            throw new IllegalArgumentException("Failed to create user");
+        }
         Long userId = user.getId();
 
         this.updateUserRoles(userId, null);

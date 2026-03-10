@@ -9,9 +9,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
@@ -64,6 +66,50 @@ class UserPermissionServiceTest {
 
         verify(userService, times(2)).isSuperAdmin(2L);
         verify(userMapper, times(2)).selectUserPermissions(2L);
+    }
+
+    @Test
+    void hasAnyPermission_detectsPermissionChangeAfterTtlExpires() {
+        UserService userService = mock(UserService.class);
+        UserMapper userMapper = mock(UserMapper.class);
+        MutableClock clock = new MutableClock(Instant.parse("2026-03-08T00:00:00Z"));
+        UserPermissionService service = new UserPermissionService(userService, userMapper, clock, Duration.ofSeconds(2), 16);
+
+        when(userService.isSuperAdmin(4L)).thenReturn(false);
+        when(userMapper.selectUserPermissions(4L))
+                .thenReturn(Set.of("Ops:Events:List"))
+                .thenReturn(Set.of("Ops:Container:List"));
+
+        assertTrue(service.hasAnyPermission(4L, "Ops:Events:List"));
+        assertFalse(service.hasAnyPermission(4L, "Ops:Container:List"));
+
+        clock.advanceSeconds(3);
+
+        assertTrue(service.hasAnyPermission(4L, "Ops:Container:List"));
+        verify(userMapper, times(2)).selectUserPermissions(4L);
+    }
+
+    @Test
+    void hasPermission_evictsOldestPermissionCacheEntryWhenCapacityIsExceeded() {
+        UserService userService = mock(UserService.class);
+        UserMapper userMapper = mock(UserMapper.class);
+        MutableClock clock = new MutableClock(Instant.parse("2026-03-08T00:00:00Z"));
+        UserPermissionService service = new UserPermissionService(userService, userMapper, clock, Duration.ofSeconds(10), 1);
+
+        when(userService.isSuperAdmin(anyLong())).thenReturn(false);
+        when(userMapper.selectUserPermissions(1L)).thenReturn(Set.of("A"));
+        when(userMapper.selectUserPermissions(2L)).thenReturn(Set.of("B"));
+
+        assertTrue(service.hasPermission(1L, "A"));
+        assertTrue(service.hasPermission(2L, "B"));
+        assertTrue(service.hasPermission(1L, "A"));
+
+        @SuppressWarnings("unchecked")
+        Map<Long, ?> permissionCache = (Map<Long, ?>) org.springframework.test.util.ReflectionTestUtils
+                .getField(service, "permissionCache");
+        assertEquals(1, permissionCache.size());
+        verify(userMapper, times(2)).selectUserPermissions(1L);
+        verify(userMapper, times(1)).selectUserPermissions(2L);
     }
 
     @Test
