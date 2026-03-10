@@ -5,12 +5,20 @@ import com.helmx.tutorial.system.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
@@ -107,6 +115,47 @@ class UserPermissionServiceTest {
     }
 
     @Test
+    void evictIfNeeded_serializesConcurrentEvictionAcrossDifferentUserLocks() throws Exception {
+        UserPermissionService service = new UserPermissionService(
+                mock(UserService.class),
+                mock(UserMapper.class),
+                Clock.systemUTC(),
+                Duration.ofSeconds(10),
+                1
+        );
+
+        Method evictIfNeeded = UserPermissionService.class
+                .getDeclaredMethod("evictIfNeeded", ConcurrentHashMap.class, long.class);
+        evictIfNeeded.setAccessible(true);
+
+        Constructor<?> cacheEntryCtor = Class
+                .forName("com.helmx.tutorial.security.security.service.UserPermissionService$CacheEntry")
+                .getDeclaredConstructor(Object.class, long.class);
+        cacheEntryCtor.setAccessible(true);
+
+        CountDownLatch removeStarted = new CountDownLatch(2);
+        AtomicInteger removeCalls = new AtomicInteger();
+        CoordinatedCache<Long, Object> cache = new CoordinatedCache<>(removeStarted, removeCalls);
+        long now = Instant.parse("2026-03-08T00:00:00Z").toEpochMilli();
+
+        cache.put(0L, cacheEntryCtor.newInstance(Set.of("seed"), now + 10_000));
+
+        Runnable firstWrite = () -> runConcurrentEvictionWrite(service, evictIfNeeded, cacheEntryCtor, cache, now, 1L, "A");
+        Runnable secondWrite = () -> runConcurrentEvictionWrite(service, evictIfNeeded, cacheEntryCtor, cache, now, 2L, "B");
+
+        Thread threadA = new Thread(firstWrite, "permission-evict-a");
+        Thread threadB = new Thread(secondWrite, "permission-evict-b");
+
+        threadA.start();
+        threadB.start();
+        threadA.join();
+        threadB.join();
+
+        assertEquals(1, cache.size());
+        assertTrue(removeCalls.get() >= 2);
+    }
+
+    @Test
     void hasPermission_shortCircuitsForSuperAdmin() {
         UserService userService = mock(UserService.class);
         UserMapper userMapper = mock(UserMapper.class);
@@ -146,6 +195,46 @@ class UserPermissionServiceTest {
 
         private void advanceSeconds(long seconds) {
             instant = instant.plusSeconds(seconds);
+        }
+    }
+
+    private static void runConcurrentEvictionWrite(
+            UserPermissionService service,
+            Method evictIfNeeded,
+            Constructor<?> cacheEntryCtor,
+            ConcurrentHashMap<Long, Object> cache,
+            long now,
+            long userId,
+            String permission
+    ) {
+        assertDoesNotThrow(() -> {
+            evictIfNeeded.invoke(service, cache, now);
+            cache.put(userId, cacheEntryCtor.newInstance(Set.of(permission), now + 10_000));
+        });
+    }
+
+    private static final class CoordinatedCache<K, V> extends ConcurrentHashMap<K, V> {
+        private final CountDownLatch removeStarted;
+        private final AtomicInteger removeCalls;
+
+        private CoordinatedCache(CountDownLatch removeStarted, AtomicInteger removeCalls) {
+            this.removeStarted = removeStarted;
+            this.removeCalls = removeCalls;
+        }
+
+        @Override
+        public boolean remove(Object key, Object value) {
+            int call = removeCalls.incrementAndGet();
+            if (call <= 2) {
+                removeStarted.countDown();
+                try {
+                    removeStarted.await(200, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(e);
+                }
+            }
+            return super.remove(key, value);
         }
     }
 }
