@@ -3028,4 +3028,131 @@ public class DockerClientUtil {
         mappings.sort(Comparator.comparingInt(ContainerPortMapping::getPublicPort));
         return mappings;
     }
+
+    /**
+     * 获取所有容器的健康检查状态
+     */
+    public List<ContainerHealthStatus> getContainerHealthStatuses(Boolean all) {
+        List<Container> containers;
+        try (ListContainersCmd cmd = getCurrentDockerClient().listContainersCmd()
+                .withShowAll(Boolean.TRUE.equals(all))) {
+            containers = cmd.exec();
+        }
+
+        List<ContainerHealthStatus> statuses = new ArrayList<>();
+        for (Container container : containers) {
+            ContainerHealthStatus status = new ContainerHealthStatus();
+            status.setContainerId(container.getId().substring(0, 12));
+            status.setContainerName(
+                    (container.getNames() != null && container.getNames().length > 0)
+                            ? container.getNames()[0].substring(1)
+                            : container.getId().substring(0, 12));
+            status.setImage(container.getImage());
+            status.setState(container.getState());
+
+            try {
+                InspectContainerResponse detail = inspectContainer(container.getId());
+                InspectContainerResponse.ContainerState state = detail.getState();
+                HealthState hs = (state != null) ? state.getHealth() : null;
+                if (hs != null) {
+                    status.setHealth(hs.getStatus() != null ? hs.getStatus() : "none");
+                    status.setFailingStreak(hs.getFailingStreak() != null ? hs.getFailingStreak() : 0);
+                    List<HealthStateLog> logs = hs.getLog();
+                    if (logs != null && !logs.isEmpty()) {
+                        status.setLastCheck(logs.getLast().getStart());
+                    }
+                } else {
+                    status.setHealth("none");
+                    status.setFailingStreak(0);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to inspect container {} for health status: {}", container.getId(), e.getMessage());
+                status.setHealth("none");
+                status.setFailingStreak(0);
+            }
+
+            statuses.add(status);
+        }
+        return statuses;
+    }
+
+    /**
+     * 获取网络拓扑：每个网络及其连接的容器
+     */
+    public List<NetworkTopologyNode> getNetworkTopology() {
+        List<Network> networks;
+        try (ListNetworksCmd cmd = getCurrentDockerClient().listNetworksCmd()) {
+            networks = cmd.exec();
+        }
+
+        return networks.stream().map(network -> {
+            NetworkTopologyNode node = new NetworkTopologyNode();
+            node.setNetworkId(network.getId());
+            node.setName(network.getName());
+            node.setDriver(network.getDriver());
+            node.setScope(network.getScope());
+
+            if (network.getIpam() != null && network.getIpam().getConfig() != null
+                    && !network.getIpam().getConfig().isEmpty()) {
+                Network.Ipam.Config cfg = network.getIpam().getConfig().getFirst();
+                node.setSubnet(cfg.getSubnet());
+                node.setGateway(cfg.getGateway());
+            }
+
+            Map<String, Network.ContainerNetworkConfig> containerMap = network.getContainers();
+            if (containerMap != null) {
+                node.setContainers(containerMap.entrySet().stream().map(entry -> {
+                    Map<String, String> c = new HashMap<>();
+                    c.put("containerId", entry.getKey().length() >= 12
+                            ? entry.getKey().substring(0, 12) : entry.getKey());
+                    Network.ContainerNetworkConfig cfg = entry.getValue();
+                    c.put("name", cfg.getName() != null ? cfg.getName() : "");
+                    c.put("ipv4Address", cfg.getIpv4Address() != null ? cfg.getIpv4Address() : "");
+                    c.put("macAddress", cfg.getMacAddress() != null ? cfg.getMacAddress() : "");
+                    return c;
+                }).toList());
+            } else {
+                node.setContainers(Collections.emptyList());
+            }
+
+            return node;
+        }).toList();
+    }
+
+    /**
+     * 获取镜像磁盘使用情况
+     */
+    public List<ImageUsageItem> getImageDiskUsage() {
+        List<Image> images = listImages();
+        List<Container> containers = listContainers();
+        Set<String> usedImageIds = containers.stream()
+                .map(Container::getImageId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        return images.stream()
+                .filter(img -> img.getRepoTags() != null
+                        && Arrays.stream(img.getRepoTags()).noneMatch("<none>:<none>"::equals))
+                .map(img -> {
+                    ImageUsageItem item = new ImageUsageItem();
+                    String fullId = img.getId() != null ? img.getId() : "";
+                    String shortId = fullId.startsWith("sha256:") && fullId.length() >= 19
+                            ? fullId.substring(7, 19)
+                            : (fullId.length() >= 12 ? fullId.substring(0, 12) : fullId);
+                    item.setId(shortId);
+                    item.setFullId(fullId);
+                    item.setRepoTags(img.getRepoTags() != null
+                            ? Arrays.asList(img.getRepoTags()) : Collections.emptyList());
+                    long sz = img.getSize() != null ? img.getSize() : 0L;
+                    long vsz = img.getVirtualSize() != null ? img.getVirtualSize() : 0L;
+                    item.setSize(sz);
+                    item.setSizeHuman(ByteUtils.formatBytes(sz));
+                    item.setVirtualSize(vsz);
+                    item.setVirtualSizeHuman(ByteUtils.formatBytes(vsz));
+                    item.setIsUsed(usedImageIds.contains(img.getId()));
+                    return item;
+                })
+                .sorted(Comparator.comparingLong(ImageUsageItem::getVirtualSize).reversed())
+                .toList();
+    }
 }

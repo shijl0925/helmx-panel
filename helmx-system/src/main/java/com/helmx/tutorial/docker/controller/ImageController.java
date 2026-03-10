@@ -424,4 +424,27 @@ public class ImageController {
         }
         return ResponseUtil.success("All images removed successfully", result);
     }
+
+    @Operation(summary = "Get image disk usage summary")
+    @PostMapping("/usage")
+    @PreAuthorize("@va.check('Ops:Image:List')")
+    public ResponseEntity<Result> getImageDiskUsage(@Valid @RequestBody ImageUsageRequest criteria) {
+        String host = criteria.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        List<ImageUsageItem> items = dockerClientUtil.getImageDiskUsage();
+
+        long totalSize = items.stream().mapToLong(ImageUsageItem::getSize).sum();
+        long totalVirtualSize = items.stream().mapToLong(ImageUsageItem::getVirtualSize).sum();
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", items.size());
+        result.put("totalSize", totalSize);
+        result.put("totalSizeHuman", com.helmx.tutorial.docker.utils.ByteUtils.formatBytes(totalSize));
+        result.put("totalVirtualSize", totalVirtualSize);
+        result.put("totalVirtualSizeHuman", com.helmx.tutorial.docker.utils.ByteUtils.formatBytes(totalVirtualSize));
+        result.put("items", items);
+
+        return ResponseUtil.success(result);
+    }
 }

@@ -1,5 +1,7 @@
 package com.helmx.tutorial.docker.controller;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.helmx.tutorial.docker.dto.RegistryConnectRequest;
@@ -18,9 +20,12 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -219,5 +224,98 @@ public class RegistryController {
         registryMapper.deleteById(id);
 
         return ResponseUtil.success(null);
+    }
+
+    @Operation(summary = "Browse image repositories and tags in a registry")
+    @GetMapping("/{id}/catalog")
+    @PreAuthorize("@va.check('Ops:Registry:List')")
+    public ResponseEntity<Result> GetRegistryCatalog(@PathVariable Long id) {
+        Registry registry = registryMapper.selectById(id);
+        if (registry == null) {
+            return ResponseUtil.failed(404, null, "Registry not found");
+        }
+
+        String encodedAuth = null;
+        if (Boolean.TRUE.equals(registry.getAuth())
+                && registry.getUsername() != null && registry.getPassword() != null) {
+            String plainPassword = passwordUtil.decrypt(registry.getPassword());
+            String auth = registry.getUsername() + ":" + plainPassword;
+            encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
+        }
+
+        try {
+            // Step 1: fetch repository list from /v2/_catalog
+            List<String> repositories = fetchRegistryCatalog(registry.getUrl(), encodedAuth);
+
+            // Step 2: fetch tags for each repository
+            List<Map<String, Object>> catalog = new ArrayList<>();
+            for (String repo : repositories) {
+                List<String> tags = fetchRepositoryTags(registry.getUrl(), repo, encodedAuth);
+                Map<String, Object> repoEntry = new HashMap<>();
+                repoEntry.put("name", repo);
+                repoEntry.put("tags", tags);
+                catalog.add(repoEntry);
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("total", catalog.size());
+            result.put("repositories", catalog);
+            return ResponseUtil.success(result);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid registry URL format for registry {}: {}", id, registry.getUrl());
+            return ResponseUtil.failed(400, null, "Invalid registry URL format");
+        } catch (Exception e) {
+            log.error("Failed to fetch catalog for registry {}: {}", id, e.getMessage());
+            return ResponseUtil.failed(500, null, "Failed to fetch registry catalog: " + e.getMessage());
+        }
+    }
+
+    private List<String> fetchRegistryCatalog(String registryUrl, String encodedAuth) throws IOException {
+        String responseBody = callRegistryApi(registryUrl, "/v2/_catalog", encodedAuth);
+        JSONObject json = JSON.parseObject(responseBody);
+        List<String> repos = json.getList("repositories", String.class);
+        return repos != null ? repos : new ArrayList<>();
+    }
+
+    private List<String> fetchRepositoryTags(String registryUrl, String repository, String encodedAuth)
+            throws IOException {
+        try {
+            String responseBody = callRegistryApi(registryUrl, "/v2/" + repository + "/tags/list", encodedAuth);
+            JSONObject json = JSON.parseObject(responseBody);
+            List<String> tags = json.getList("tags", String.class);
+            return tags != null ? tags : new ArrayList<>();
+        } catch (Exception e) {
+            log.warn("Failed to fetch tags for repository {}: {}", repository, e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    private String callRegistryApi(String registryUrl, String path, String encodedAuth) throws IOException {
+        URI uri = URI.create(registryUrl + path);
+        URL url = uri.toURL();
+
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        try {
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setInstanceFollowRedirects(false);
+            if (encodedAuth != null) {
+                connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
+            }
+
+            int code = connection.getResponseCode();
+            if (code == 200) {
+                try (InputStream in = connection.getInputStream()) {
+                    return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                }
+            } else {
+                throw new IOException("Registry API returned HTTP " + code + " for " + path);
+            }
+        } finally {
+            connection.disconnect();
+        }
     }
 }

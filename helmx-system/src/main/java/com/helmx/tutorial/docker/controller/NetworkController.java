@@ -222,4 +222,15 @@ public class NetworkController {
     private java.util.Date getNetworkCreatedDate(Network network) {
         return network.getCreated() != null ? network.getCreated() : new java.util.Date(0);
     }
+
+    @Operation(summary = "Get network topology: each network with its connected containers")
+    @PostMapping("/topology")
+    @PreAuthorize("@va.check('Ops:Network:List')")
+    public ResponseEntity<Result> getNetworkTopology(@Valid @RequestBody NetworkTopologyRequest criteria) {
+        String host = criteria.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        List<NetworkTopologyNode> topology = dockerClientUtil.getNetworkTopology();
+        return ResponseUtil.success(topology);
+    }
 }
