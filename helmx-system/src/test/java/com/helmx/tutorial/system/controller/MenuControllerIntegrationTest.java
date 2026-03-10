@@ -3,6 +3,7 @@ package com.helmx.tutorial.system.controller;
 import com.helmx.tutorial.system.entity.Menu;
 import com.helmx.tutorial.system.mapper.MenuMapper;
 import com.helmx.tutorial.system.service.MenuService;
+import com.helmx.tutorial.system.service.impl.MenuServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.hamcrest.Matchers.hasSize;
@@ -117,5 +119,45 @@ class MenuControllerIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(404))
                 .andExpect(jsonPath("$.message").value("Menu not found"));
+    }
+
+    @Test
+    void getAllMenus_includesOrphanAndSelfReferencingMenusAsStableTopLevelItems() throws Exception {
+        MenuServiceImpl realMenuService = new MenuServiceImpl();
+        ReflectionTestUtils.setField(realMenuService, "menuMapper", menuMapper);
+
+        MenuController controller = new MenuController();
+        ReflectionTestUtils.setField(controller, "menuService", realMenuService);
+        ReflectionTestUtils.setField(controller, "menuMapper", menuMapper);
+        MockMvc localMockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+
+        Menu root = new Menu();
+        root.setId(1L);
+        root.setName("Root");
+        root.setSort(1);
+
+        Menu orphan = new Menu();
+        orphan.setId(2L);
+        orphan.setName("Orphan");
+        orphan.setParentId(999L);
+        orphan.setSort(2);
+
+        Menu selfReferencing = new Menu();
+        selfReferencing.setId(3L);
+        selfReferencing.setName("Self");
+        selfReferencing.setParentId(3L);
+        selfReferencing.setSort(3);
+
+        when(menuMapper.selectList(any())).thenReturn(new ArrayList<>(List.of(root, orphan, selfReferencing)));
+
+        localMockMvc.perform(get("/api/v1/rbac/menus"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data", hasSize(3)))
+                .andExpect(jsonPath("$.data[0].name").value("Root"))
+                .andExpect(jsonPath("$.data[1].name").value("Orphan"))
+                .andExpect(jsonPath("$.data[2].name").value("Self"))
+                .andExpect(jsonPath("$.data[1].children", hasSize(0)))
+                .andExpect(jsonPath("$.data[2].children", hasSize(0)));
     }
 }
