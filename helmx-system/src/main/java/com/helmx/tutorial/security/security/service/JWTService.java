@@ -61,8 +61,8 @@ public class JWTService {
         // 获取并验证用户名
         String username = authentication.getName();
         if (username == null || username.isBlank()) {
-            logger.error("Authentication name is null or empty");
-            throw new IllegalArgumentException("Username cannot be null or empty");
+            logger.error("Authentication name is null, empty, or blank");
+            throw new IllegalArgumentException("Username cannot be null, empty, or blank");
         }
 
         Long userId = 0L;
@@ -123,7 +123,7 @@ public class JWTService {
         try {
             Jwt decodedJwt = this.refreshJwtDecoder.decode(expiredToken);
             Instant expiryDate = decodedJwt.getExpiresAt();
-            if (expiryDate == null || expiryDate.isBefore(Instant.now())) {
+            if (expiryDate == null || !expiryDate.isBefore(Instant.now())) {
                 throw new IllegalArgumentException("Token is not eligible for refresh");
             }
 

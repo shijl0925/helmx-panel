@@ -54,12 +54,12 @@ class JWTServiceTest {
     }
 
     @Test
-    void refreshToken_nonExpiredTokenForEnabledUser_returnsNewToken() {
+    void refreshToken_expiredTokenForEnabledUser_returnsNewToken() {
         Jwt expiredJwt = Jwt.withTokenValue("expired-token")
                 .header("alg", "RS256")
                 .subject("alice")
                 .issuedAt(Instant.now().minusSeconds(3600))
-                .expiresAt(Instant.now().plusSeconds(3600))
+                .expiresAt(Instant.now().minusSeconds(60))
                 .claim("scope", "ROLE_USER")
                 .build();
         UserDetailsImpl userDetails = new UserDetailsImpl(
@@ -88,17 +88,17 @@ class JWTServiceTest {
     }
 
     @Test
-    void refreshToken_expiredToken_throwsIllegalArgumentException() {
+    void refreshToken_nonExpiredToken_throwsIllegalArgumentException() {
         Jwt activeJwt = Jwt.withTokenValue("active-token")
                 .header("alg", "RS256")
                 .subject("alice")
-                .issuedAt(Instant.now().minusSeconds(3600))
-                .expiresAt(Instant.now().minusSeconds(60))
+                .issuedAt(Instant.now().minusSeconds(60))
+                .expiresAt(Instant.now().plusSeconds(3600))
                 .claim("scope", "ROLE_USER")
                 .build();
-        when(refreshJwtDecoder.decode("expired-token")).thenReturn(activeJwt);
+        when(refreshJwtDecoder.decode("active-token")).thenReturn(activeJwt);
 
-        assertThrows(IllegalArgumentException.class, () -> jwtService.refreshToken("expired-token"));
+        assertThrows(IllegalArgumentException.class, () -> jwtService.refreshToken("active-token"));
         verify(userDetailsService, never()).loadUserByUsername(any());
     }
 
@@ -108,7 +108,7 @@ class JWTServiceTest {
                 .header("alg", "RS256")
                 .subject("alice")
                 .issuedAt(Instant.now().minusSeconds(3600))
-                .expiresAt(Instant.now().plusSeconds(3600))
+                .expiresAt(Instant.now().minusSeconds(60))
                 .claim("scope", "ROLE_USER")
                 .build();
         UserDetailsImpl disabledUser = new UserDetailsImpl(
@@ -138,7 +138,7 @@ class JWTServiceTest {
                 .header("alg", "RS256")
                 .subject("missing-user")
                 .issuedAt(Instant.now().minusSeconds(3600))
-                .expiresAt(Instant.now().plusSeconds(3600))
+                .expiresAt(Instant.now().minusSeconds(60))
                 .claim("scope", "ROLE_USER")
                 .build();
         when(refreshJwtDecoder.decode("expired-token")).thenReturn(expiredJwt);
