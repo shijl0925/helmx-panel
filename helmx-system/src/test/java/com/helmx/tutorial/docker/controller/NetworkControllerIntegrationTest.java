@@ -11,6 +11,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Instant;
 import java.util.Date;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -43,8 +44,8 @@ class NetworkControllerIntegrationTest {
 
     @Test
     void searchDockerNetworks_returnsSortedDtosWithUsageState() throws Exception {
-        Network newer = createNetwork("network-2", "beta", new Date(2_000L));
-        Network older = createNetwork("network-1", "alpha", new Date(1_000L));
+        Network newer = createNetwork("network-2", "beta", Date.from(Instant.parse("2026-03-10T00:00:02Z")));
+        Network older = createNetwork("network-1", "alpha", Date.from(Instant.parse("2026-03-10T00:00:01Z")));
 
         when(dockerClientUtil.listNetworks("app")).thenReturn(new ArrayList<>(List.of(older, newer)));
         when(dockerClientUtil.isNetworkInUse("network-1")).thenReturn(false);
