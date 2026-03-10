@@ -1,0 +1,143 @@
+package com.helmx.tutorial.docker.controller;
+
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.helmx.tutorial.docker.entity.DockerEnv;
+import com.helmx.tutorial.docker.mapper.DockerEnvMapper;
+import com.helmx.tutorial.docker.service.DockerEnvService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@ExtendWith(MockitoExtension.class)
+class DockerEnvControllerIntegrationTest {
+
+    @Mock
+    private DockerEnvService dockerEnvService;
+
+    @Mock
+    private DockerEnvMapper dockerEnvMapper;
+
+    private MockMvc mockMvc;
+
+    @BeforeEach
+    void setUp() {
+        DockerEnvController controller = new DockerEnvController();
+        ReflectionTestUtils.setField(controller, "dockerEnvService", dockerEnvService);
+        ReflectionTestUtils.setField(controller, "dockerEnvMapper", dockerEnvMapper);
+        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+    }
+
+    @Test
+    void getAllDockerEnvs_returnsActiveEnvironmentList() throws Exception {
+        DockerEnv env = createEnv(1L, "prod", "Production", "tcp://docker:2376", 1, true);
+        when(dockerEnvMapper.selectList(any())).thenReturn(List.of(env));
+
+        mockMvc.perform(get("/api/v1/ops/envs/all"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].id").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("prod"))
+                .andExpect(jsonPath("$.data[0].tlsVerify").value(true));
+    }
+
+    @Test
+    void searchDockerEnvs_returnsPagedDtos() throws Exception {
+        DockerEnv env = createEnv(2L, "staging", "Staging", "tcp://staging:2376", 1, false);
+        when(dockerEnvMapper.selectPage(any(Page.class), any())).thenAnswer(invocation -> {
+            Page<DockerEnv> page = invocation.getArgument(0);
+            page.setRecords(List.of(env));
+            page.setTotal(1);
+            return page;
+        });
+
+        mockMvc.perform(get("/api/v1/ops/envs")
+                        .param("name", "stag")
+                        .param("page", "2")
+                        .param("pageSize", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.current").value(2))
+                .andExpect(jsonPath("$.data.size").value(5))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").value("staging"))
+                .andExpect(jsonPath("$.data.items[0].host").value("tcp://staging:2376"));
+    }
+
+    @Test
+    void createDockerEnv_persistsTlsVerifyAndDefaultRemark() throws Exception {
+        when(dockerEnvMapper.exists(any())).thenReturn(false);
+        doAnswer(invocation -> {
+            DockerEnv env = invocation.getArgument(0);
+            env.setId(9L);
+            return 1;
+        }).when(dockerEnvMapper).insert(any(DockerEnv.class));
+
+        mockMvc.perform(post("/api/v1/ops/envs")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "dev",
+                                  "host": "tcp://dev:2376",
+                                  "tlsVerify": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.id").value(9))
+                .andExpect(jsonPath("$.data.name").value("dev"))
+                .andExpect(jsonPath("$.data.tlsVerify").value(true))
+                .andExpect(jsonPath("$.data.remark").value(""));
+
+        ArgumentCaptor<DockerEnv> captor = ArgumentCaptor.forClass(DockerEnv.class);
+        verify(dockerEnvMapper).insert(captor.capture());
+        assertEquals(true, captor.getValue().getTlsVerify());
+        assertEquals("", captor.getValue().getRemark());
+    }
+
+    @Test
+    void updateDockerEnv_returnsNotFoundWhenMissing() throws Exception {
+        when(dockerEnvService.getById(99L)).thenReturn(null);
+
+        mockMvc.perform(put("/api/v1/ops/envs/99")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "missing"
+                                }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.message").value("Env not found"));
+    }
+
+    private DockerEnv createEnv(Long id, String name, String remark, String host, Integer status, Boolean tlsVerify) {
+        DockerEnv env = new DockerEnv();
+        env.setId(id);
+        env.setName(name);
+        env.setRemark(remark);
+        env.setHost(host);
+        env.setStatus(status);
+        env.setTlsVerify(tlsVerify);
+        return env;
+    }
+}
