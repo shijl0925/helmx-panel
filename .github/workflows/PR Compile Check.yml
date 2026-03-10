@@ -2,7 +2,6 @@ name: PR Compile Check
 
 on:
   pull_request:
-    branches: [ "main" ]
 
 jobs:
   compile:
@@ -20,11 +19,11 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Compile with Maven
-        run: mvn compile --batch-mode --show-version --errors
+      - name: Compile with Maven Wrapper
+        run: ./mvnw --no-transfer-progress --batch-mode --show-version --errors compile
 
   unit-test:
-    name: Unit Tests
+    name: Test Suite
     runs-on: ubuntu-latest
 
     steps:
@@ -38,5 +37,5 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Run unit tests
-        run: mvn test --batch-mode --show-version --errors
+      - name: Run Maven tests
+        run: ./mvnw --no-transfer-progress --batch-mode --show-version --errors test

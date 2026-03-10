@@ -770,6 +770,8 @@ public class ContainerController {
             } catch (Exception e) {
                 log.error("Error streaming container export data for container: {}", containerIdForAsync, e);
                 throw e;
+            } finally {
+                dockerClientUtil.clearCurrentHost();
             }
         };
 

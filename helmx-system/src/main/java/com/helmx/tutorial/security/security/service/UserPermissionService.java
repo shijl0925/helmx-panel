@@ -39,6 +39,7 @@ public class UserPermissionService {
     private final Duration cacheTtl;
     private final int maxEntries;
     private final Object[] cacheLocks;
+    private final Object evictionLock = new Object();
     private final ConcurrentHashMap<Long, CacheEntry<Boolean>> superAdminCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, CacheEntry<Set<String>>> permissionCache = new ConcurrentHashMap<>();
 
@@ -144,16 +145,18 @@ public class UserPermissionService {
     }
 
     private <T> void evictIfNeeded(ConcurrentHashMap<Long, CacheEntry<T>> cache, long now) {
-        cache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
-        int overflow = cache.size() - maxEntries + 1;
-        if (overflow <= 0) {
-            return;
+        synchronized (evictionLock) {
+            cache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
+            int overflow = cache.size() - maxEntries + 1;
+            if (overflow <= 0) {
+                return;
+            }
+            List<Map.Entry<Long, CacheEntry<T>>> oldestEntries = cache.entrySet().stream()
+                    .sorted(Comparator.comparingLong(entry -> entry.getValue().expiresAt()))
+                    .limit(overflow)
+                    .toList();
+            oldestEntries.forEach(entry -> cache.remove(entry.getKey(), entry.getValue()));
         }
-        List<Map.Entry<Long, CacheEntry<T>>> oldestEntries = cache.entrySet().stream()
-                .sorted(Comparator.comparingLong(entry -> entry.getValue().expiresAt()))
-                .limit(overflow)
-                .toList();
-        oldestEntries.forEach(entry -> cache.remove(entry.getKey(), entry.getValue()));
     }
 
     private Object lockFor(Long userId) {

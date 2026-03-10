@@ -57,7 +57,13 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
                     .add(menu);
         }
 
-        return buildMenuTreeRecursive(childrenByParentId, null);
+        List<Menu> menuTree = new ArrayList<>();
+        Set<Menu> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        addRootMenus(menuTree, childrenByParentId.getOrDefault(null, Collections.emptyList()), childrenByParentId, visited);
+        addDisconnectedMenus(menuTree, menus, childrenByParentId, visited);
+
+        return menuTree;
     }
 
     /**
@@ -66,16 +72,62 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
      * @param parentId 父菜单ID
      * @return 菜单树
      */
-    private List<Menu> buildMenuTreeRecursive(Map<Long, List<Menu>> childrenByParentId, Long parentId) {
-        List<Menu> children = new ArrayList<>(
-                childrenByParentId.getOrDefault(normalizeParentId(parentId), Collections.emptyList()));
+    private void addRootMenus(List<Menu> menuTree,
+                              List<Menu> roots,
+                              Map<Long, List<Menu>> childrenByParentId,
+                              Set<Menu> visited) {
+        List<Menu> sortedRoots = new ArrayList<>(roots);
+        sortedRoots.sort(MENU_SORT_COMPARATOR);
+        for (Menu root : sortedRoots) {
+            if (visited.add(root)) {
+                populateChildren(root, childrenByParentId, visited, Collections.newSetFromMap(new IdentityHashMap<>()));
+                menuTree.add(root);
+            }
+        }
+    }
 
-        children.sort(MENU_SORT_COMPARATOR);
-        for (Menu menu : children) {
-            menu.setChildren(buildMenuTreeRecursive(childrenByParentId, menu.getId()));
+    private void addDisconnectedMenus(List<Menu> menuTree,
+                                      List<Menu> menus,
+                                      Map<Long, List<Menu>> childrenByParentId,
+                                      Set<Menu> visited) {
+        List<Menu> remainingMenus = new ArrayList<>(menus);
+        remainingMenus.sort(MENU_SORT_COMPARATOR);
+        for (Menu menu : remainingMenus) {
+            if (!visited.add(menu)) {
+                continue;
+            }
+            populateChildren(menu, childrenByParentId, visited, Collections.newSetFromMap(new IdentityHashMap<>()));
+            menuTree.add(menu);
+        }
+    }
+
+    private void populateChildren(Menu menu,
+                                  Map<Long, List<Menu>> childrenByParentId,
+                                  Set<Menu> visited,
+                                  Set<Menu> visiting) {
+        // Track the current traversal path so disconnected self/cyclic menu data
+        // cannot recurse forever while we rebuild a safe tree structure.
+        if (!visiting.add(menu)) {
+            return;
         }
 
-        return children;
+        List<Menu> children = new ArrayList<>(
+                childrenByParentId.getOrDefault(normalizeParentId(menu.getId()), Collections.emptyList()));
+        children.sort(MENU_SORT_COMPARATOR);
+
+        List<Menu> safeChildren = new ArrayList<>();
+        for (Menu child : children) {
+            // Skip the back-edge entirely so the serialized response does not
+            // retain a cyclic child reference even though recursion is stopped.
+            if (visiting.contains(child)) {
+                continue;
+            }
+            visited.add(child);
+            populateChildren(child, childrenByParentId, visited, visiting);
+            safeChildren.add(child);
+        }
+        menu.setChildren(safeChildren);
+        visiting.remove(menu);
     }
 
     private Long normalizeParentId(Long parentId) {

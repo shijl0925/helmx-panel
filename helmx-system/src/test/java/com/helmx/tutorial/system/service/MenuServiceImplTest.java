@@ -159,6 +159,30 @@ class MenuServiceImplTest {
         assertEquals("C-order2", children.get(1).getName());
     }
 
+    @Test
+    void buildMenuTree_orphanedMenu_isReturnedAsTopLevelMenu() {
+        Menu root = makeMenu(1L, "Root", null, 1);
+        Menu orphan = makeMenu(2L, "Orphan", 999L, 2);
+
+        List<Menu> result = menuService.buildMenuTree(Arrays.asList(root, orphan));
+
+        assertEquals(2, result.size());
+        assertEquals("Root", result.get(0).getName());
+        assertEquals("Orphan", result.get(1).getName());
+        assertTrue(result.get(1).getChildren().isEmpty());
+    }
+
+    @Test
+    void buildMenuTree_selfReferencingMenu_isReturnedWithoutInfiniteRecursion() {
+        Menu selfReferencing = makeMenu(7L, "Self", 7L, 1);
+
+        List<Menu> result = menuService.buildMenuTree(List.of(selfReferencing));
+
+        assertEquals(1, result.size());
+        assertEquals("Self", result.get(0).getName());
+        assertTrue(result.get(0).getChildren().isEmpty());
+    }
+
     // ---- helpers ----
 
     private Menu makeMenu(Long id, String name, Long parentId, Integer sort) {

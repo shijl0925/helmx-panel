@@ -26,11 +26,13 @@ import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -142,5 +144,54 @@ class ContainerControllerTest {
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"example.txt\""))
                 .andExpect(content().contentType(MediaType.APPLICATION_OCTET_STREAM))
                 .andReturn();
+    }
+
+    @Test
+    void exportContainer_streamsArchiveAndClearsHost() throws Exception {
+        when(dockerClientUtil.exportContainer("container-1"))
+                .thenReturn(new java.io.ByteArrayInputStream("tar-content".getBytes(StandardCharsets.UTF_8)));
+
+        com.helmx.tutorial.docker.dto.ContainerExportRequest request = new com.helmx.tutorial.docker.dto.ContainerExportRequest();
+        request.setHost("unix:///var/run/docker.sock");
+        request.setContainerId("container-1");
+        request.setFilename("container-1.tar");
+
+        ResponseEntity<StreamingResponseBody> response = containerController.exportContainer(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("attachment; filename=\"container-1.tar\"", response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION));
+        assertEquals("application/x-tar", response.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE));
+        assertNotNull(response.getBody());
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        response.getBody().writeTo(outputStream);
+        assertEquals("tar-content", outputStream.toString(StandardCharsets.UTF_8));
+
+        InOrder inOrder = inOrder(dockerClientUtil);
+        inOrder.verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        inOrder.verify(dockerClientUtil).exportContainer("container-1");
+        inOrder.verify(dockerClientUtil).clearCurrentHost();
+    }
+
+    @Test
+    void exportContainer_clearsHostWhenStreamingFails() {
+        when(dockerClientUtil.exportContainer("container-1"))
+                .thenThrow(new RuntimeException("stream failed"));
+
+        com.helmx.tutorial.docker.dto.ContainerExportRequest request = new com.helmx.tutorial.docker.dto.ContainerExportRequest();
+        request.setHost("unix:///var/run/docker.sock");
+        request.setContainerId("container-1");
+        request.setFilename("container-1.tar");
+
+        ResponseEntity<StreamingResponseBody> response = containerController.exportContainer(request);
+
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> response.getBody().writeTo(new ByteArrayOutputStream()));
+        assertEquals("stream failed", exception.getMessage());
+
+        InOrder inOrder = inOrder(dockerClientUtil);
+        inOrder.verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        inOrder.verify(dockerClientUtil).exportContainer("container-1");
+        inOrder.verify(dockerClientUtil).clearCurrentHost();
     }
 }
