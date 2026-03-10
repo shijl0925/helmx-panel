@@ -242,6 +242,25 @@ public class ImageController {
         }
     }
 
+    @Operation(summary = "Prune stopped Docker Images to reclaim disk space")
+    @PostMapping("/prune")
+    @PreAuthorize("@va.check('Ops:Image:Prune')")
+    public ResponseEntity<Result> pruneImages(@Valid @RequestBody StatusRequest request) {
+        String host = request.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        Map<String, Object> result = dockerClientUtil.pruneCmd("IMAGES");
+        String status = (String) result.get("status");
+        String message = (String) result.get("message");
+
+        if ("success".equals(status)) {
+            return ResponseUtil.success(message, result);
+        } else {
+            log.error("Prune images failed: {}", message);
+            return ResponseUtil.failed(500, result, message);
+        }
+    }
+
     @Operation(summary = "Build Docker Image")
     @PostMapping(value = "/build")
     @PreAuthorize("@va.check('Ops:Image:Build')")
