@@ -366,6 +366,18 @@ class ImageControllerIntegrationTest {
 
     @Test
     void buildDockerImage_whenDockerClientThrows_stillClearsHost() {
+        String dockerfilePath = null;
+        String gitUrl = null;
+        String branch = null;
+        String username = null;
+        String password = null;
+        String buildArgs = null;
+        String envs = null;
+        Boolean pull = null;
+        Boolean noCache = null;
+        String labels = null;
+        org.springframework.web.multipart.MultipartFile[] files = null;
+
         doThrow(new RuntimeException("build failed")).when(dockerClientUtil).buildImage(
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
         );
@@ -373,18 +385,18 @@ class ImageControllerIntegrationTest {
         RuntimeException exception = assertThrows(RuntimeException.class, () -> controller.buildDockerImage(
                 "unix:///var/run/docker.sock",
                 "FROM eclipse-temurin:21",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                dockerfilePath,
+                gitUrl,
+                branch,
+                username,
+                password,
+                buildArgs,
+                envs,
+                pull,
+                noCache,
+                labels,
                 new String[]{"demo/app:1.0"},
-                null
+                files
         ));
 
         assertEquals("build failed", exception.getMessage());
@@ -392,18 +404,18 @@ class ImageControllerIntegrationTest {
         inOrder.verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
         inOrder.verify(dockerClientUtil).buildImage(
                 eq("FROM eclipse-temurin:21"),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null),
+                eq(dockerfilePath),
+                eq(gitUrl),
+                eq(branch),
+                eq(username),
+                eq(password),
                 any(Set.class),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null)
+                eq(buildArgs),
+                eq(pull),
+                eq(noCache),
+                eq(labels),
+                eq(envs),
+                eq(files)
         );
         inOrder.verify(dockerClientUtil).clearCurrentHost();
     }
