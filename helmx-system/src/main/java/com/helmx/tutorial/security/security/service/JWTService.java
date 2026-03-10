@@ -60,7 +60,7 @@ public class JWTService {
 
         // 获取并验证用户名
         String username = authentication.getName();
-        if (username == null || username.isEmpty()) {
+        if (username == null || username.isBlank()) {
             logger.error("Authentication name is null or empty");
             throw new IllegalArgumentException("Username cannot be null or empty");
         }
@@ -83,6 +83,11 @@ public class JWTService {
                 })
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.joining(" "));
+
+        if (expirationHours <= 0) {
+            logger.error("Configured JWT expiration-hours is not positive: {}", expirationHours);
+            throw new IllegalStateException("JWT expiration-hours must be positive");
+        }
 
         // 构造 JWT 声明集
         JwtClaimsSet.Builder claimsBuilder = JwtClaimsSet.builder()
@@ -118,7 +123,7 @@ public class JWTService {
         try {
             Jwt decodedJwt = this.refreshJwtDecoder.decode(expiredToken);
             Instant expiryDate = decodedJwt.getExpiresAt();
-            if (expiryDate == null || !expiryDate.isBefore(Instant.now())) {
+            if (expiryDate == null || expiryDate.isBefore(Instant.now())) {
                 throw new IllegalArgumentException("Token is not eligible for refresh");
             }
 
