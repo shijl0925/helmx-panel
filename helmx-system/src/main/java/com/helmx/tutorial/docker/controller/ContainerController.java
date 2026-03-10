@@ -888,13 +888,6 @@ public class ContainerController {
     }
 
     private boolean checkStatsPermission(Long userId) {
-        if (userId != null) {
-            if (userService.isSuperAdmin(userId)) {
-                return true;
-            }
-            Set<String> userPermissions = userMapper.selectUserPermissions(userId);
-            return userPermissions.contains("Ops:Container:Stats");
-        }
-        return false;
+        return userPermissionService.hasPermission(userId, "Ops:Container:Stats");
     }
 }

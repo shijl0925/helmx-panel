@@ -374,21 +374,4 @@ public class ImageController {
 
         return ResponseUtil.success(result);
     }
-
-    /**
-     * 验证主机是否被允许访问
-     * @param host 主机地址
-     * @return 是否允许访问
-     */
-    private boolean isHostAllowed(String host) {
-        if (host == null || host.isEmpty()) {
-            return false;
-        }
-
-        LambdaQueryWrapper<DockerEnv> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(DockerEnv::getHost, host);
-        queryWrapper.eq(DockerEnv::getStatus, 1);
-
-        return dockerEnvMapper.exists(queryWrapper);
-    }
 }
