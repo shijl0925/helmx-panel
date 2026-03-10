@@ -25,6 +25,8 @@ import static org.mockito.Mockito.*;
 
 class UserPermissionServiceTest {
 
+    private static final long CONCURRENT_REMOVE_SYNC_TIMEOUT_MILLIS = 1_000L;
+
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withBean(UserService.class, () -> mock(UserService.class))
             .withBean(UserMapper.class, () -> mock(UserMapper.class))
@@ -152,7 +154,7 @@ class UserPermissionServiceTest {
         threadB.join();
 
         assertEquals(1, cache.size());
-        assertTrue(removeCalls.get() >= 2);
+        assertEquals(2, removeCalls.get());
     }
 
     @Test
@@ -228,7 +230,7 @@ class UserPermissionServiceTest {
             if (call <= 2) {
                 removeStarted.countDown();
                 try {
-                    removeStarted.await(200, TimeUnit.MILLISECONDS);
+                    removeStarted.await(CONCURRENT_REMOVE_SYNC_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new AssertionError(e);
