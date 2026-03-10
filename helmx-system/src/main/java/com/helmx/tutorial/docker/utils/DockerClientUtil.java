@@ -329,6 +329,16 @@ public class DockerClientUtil {
     private static final int MAX_LOG_SIZE_BYTES = 1048576; // 1MB
     private static final int LOG_RETAIN_SIZE_BYTES = 524288; // 512KB
 
+    // Constants for temporary volume operations
+    private static final String VOLUME_BACKUP_MOUNT_PATH = "/backup-data";
+    private static final String VOLUME_BACKUP_CONTAINER_PREFIX = "helmx-backup-";
+    private static final String VOLUME_CLONE_SRC_MOUNT = "/source";
+    private static final String VOLUME_CLONE_DST_MOUNT = "/target";
+    private static final String VOLUME_CLONE_CONTAINER_PREFIX = "helmx-clone-";
+    private static final long VOLUME_CLONE_TIMEOUT_SECONDS = 60L;
+    private static final String DEFAULT_BIND_IP = "0.0.0.0";
+    private static final String DEFAULT_PORT_TYPE = "tcp";
+
     /**
      * 获取容器日志
      */
@@ -2850,5 +2860,172 @@ public class DockerClientUtil {
             tarOutputStream.finish();
         }
         return new ByteArrayInputStream(tarOutput.toByteArray());
+    }
+
+    /**
+     * 备份存储卷：通过临时容器将卷内容导出为 TAR 流
+     */
+    public InputStream backupVolume(String volumeName, String path) {
+        DockerClient client = getCurrentDockerClient();
+        String backupPath = (path == null || path.isBlank()) ? "/" : path;
+        String containerName = VOLUME_BACKUP_CONTAINER_PREFIX + volumeName + "-" + System.currentTimeMillis();
+
+        Volume vol = new Volume(VOLUME_BACKUP_MOUNT_PATH);
+        Bind bind = new Bind(volumeName, vol);
+
+        String containerId;
+        try (CreateContainerCmd cmd = client.createContainerCmd("busybox")
+                .withName(containerName)
+                .withCmd("true")
+                .withHostConfig(HostConfig.newHostConfig().withBinds(bind))) {
+            containerId = cmd.exec().getId();
+        }
+
+        // Resolve the copy path inside the container
+        String normalizedBackupPath = backupPath.startsWith("/") ? backupPath : "/" + backupPath;
+        String copyPath = "/".equals(normalizedBackupPath) ? VOLUME_BACKUP_MOUNT_PATH : VOLUME_BACKUP_MOUNT_PATH + normalizedBackupPath;
+
+        InputStream tarStream;
+        try (CopyArchiveFromContainerCmd copyCmd = client.copyArchiveFromContainerCmd(containerId, copyPath)) {
+            tarStream = copyCmd.exec();
+        }
+
+        final String finalContainerId = containerId;
+        return new FilterInputStream(tarStream) {
+            @Override
+            public void close() throws IOException {
+                try {
+                    super.close();
+                } finally {
+                    try {
+                        client.removeContainerCmd(finalContainerId).withForce(true).exec();
+                    } catch (Exception ignored) {
+                        log.warn("Failed to remove temporary backup container: {}", finalContainerId);
+                    }
+                }
+            }
+        };
+    }
+
+    /**
+     * 克隆存储卷：将源卷的数据复制到目标卷
+     */
+    public Map<String, Object> cloneVolume(String sourceName, String targetName, String driver) {
+        Map<String, Object> result = new HashMap<>();
+        DockerClient client = getCurrentDockerClient();
+
+        // Create the target volume
+        try (CreateVolumeCmd createCmd = client.createVolumeCmd()
+                .withName(targetName)
+                .withDriver(driver != null && !driver.isBlank() ? driver : "local")) {
+            createCmd.exec();
+        } catch (Exception e) {
+            result.put("status", "failed");
+            result.put("message", "Failed to create target volume: " + e.getMessage());
+            return result;
+        }
+
+        String containerName = VOLUME_CLONE_CONTAINER_PREFIX + System.currentTimeMillis();
+        Volume srcVol = new Volume(VOLUME_CLONE_SRC_MOUNT);
+        Volume dstVol = new Volume(VOLUME_CLONE_DST_MOUNT);
+        Bind srcBind = new Bind(sourceName, srcVol);
+        Bind dstBind = new Bind(targetName, dstVol);
+
+        String containerId = null;
+        try {
+            try (CreateContainerCmd cmd = client.createContainerCmd("busybox")
+                    .withName(containerName)
+                    .withCmd("sh", "-c", "cp -a " + VOLUME_CLONE_SRC_MOUNT + "/. " + VOLUME_CLONE_DST_MOUNT + "/")
+                    .withHostConfig(HostConfig.newHostConfig().withBinds(srcBind, dstBind))) {
+                containerId = cmd.exec().getId();
+            }
+
+            try (StartContainerCmd cmd = client.startContainerCmd(containerId)) {
+                cmd.exec();
+            }
+
+            try (WaitContainerCmd waitCmd = client.waitContainerCmd(containerId)) {
+                waitCmd.start().awaitCompletion(VOLUME_CLONE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            }
+
+            result.put("status", "success");
+            result.put("message", "Volume cloned successfully");
+        } catch (Exception e) {
+            result.put("status", "failed");
+            result.put("message", "Failed to clone volume: " + e.getMessage());
+        } finally {
+            if (containerId != null) {
+                try {
+                    client.removeContainerCmd(containerId).withForce(true).exec();
+                } catch (Exception ignored) {
+                    log.warn("Failed to remove temporary clone container: {}", containerId);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 批量删除镜像，返回每个镜像的删除结果
+     */
+    public List<Map<String, Object>> bulkRemoveImages(List<String> imageIds, Boolean force) {
+        List<Map<String, Object>> results = new ArrayList<>();
+        boolean forceRemove = Boolean.TRUE.equals(force);
+
+        for (String imageId : imageIds) {
+            Map<String, Object> itemResult = new HashMap<>();
+            itemResult.put("imageId", imageId);
+            try {
+                this.removeImage(imageId, forceRemove);
+                itemResult.put("status", "success");
+                itemResult.put("message", "Image removed successfully");
+            } catch (Exception e) {
+                itemResult.put("status", "failed");
+                itemResult.put("message", "Failed to remove image: " + e.getMessage());
+            }
+            results.add(itemResult);
+        }
+
+        return results;
+    }
+
+    /**
+     * 获取所有容器的端口映射汇总
+     */
+    public List<ContainerPortMapping> getContainerPortMappings(Boolean all) {
+        List<Container> containers;
+        try (ListContainersCmd cmd = getCurrentDockerClient().listContainersCmd()
+                .withShowAll(Boolean.TRUE.equals(all))) {
+            containers = cmd.exec();
+        }
+
+        List<ContainerPortMapping> mappings = new ArrayList<>();
+        for (Container container : containers) {
+            String containerName = (container.getNames() != null && container.getNames().length > 0)
+                    ? container.getNames()[0].substring(1)
+                    : container.getId().substring(0, 12);
+
+            ContainerPort[] ports = container.getPorts();
+            if (ports != null) {
+                for (ContainerPort port : ports) {
+                    if (port.getPublicPort() != null) {
+                        ContainerPortMapping mapping = new ContainerPortMapping();
+                        mapping.setContainerId(container.getId().substring(0, 12));
+                        mapping.setContainerName(containerName);
+                        mapping.setState(container.getState());
+                        mapping.setImage(container.getImage());
+                        mapping.setIp(port.getIp() != null ? port.getIp() : DEFAULT_BIND_IP);
+                        mapping.setPublicPort(port.getPublicPort());
+                        mapping.setPrivatePort(port.getPrivatePort());
+                        mapping.setType(port.getType() != null ? port.getType() : DEFAULT_PORT_TYPE);
+                        mappings.add(mapping);
+                    }
+                }
+            }
+        }
+
+        mappings.sort(Comparator.comparingInt(ContainerPortMapping::getPublicPort));
+        return mappings;
     }
 }

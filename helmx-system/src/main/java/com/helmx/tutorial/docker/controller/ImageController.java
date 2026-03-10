@@ -400,4 +400,28 @@ public class ImageController {
 
         return ResponseUtil.success(result);
     }
+
+    @Operation(summary = "Bulk remove Docker images")
+    @PostMapping("/bulk/remove")
+    @PreAuthorize("@va.check('Ops:Image:Delete')")
+    public ResponseEntity<Result> bulkRemoveDockerImages(@Valid @RequestBody BulkImageRemoveRequest criteria) {
+        String host = criteria.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        List<Map<String, Object>> results = dockerClientUtil.bulkRemoveImages(criteria.getImageIds(), criteria.getForce());
+
+        long failedCount = results.stream().filter(r -> "failed".equals(r.get("status"))).count();
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", results.size());
+        result.put("failed", failedCount);
+        result.put("succeeded", results.size() - failedCount);
+        result.put("items", results);
+
+        if (failedCount > 0) {
+            log.error("Bulk remove images: {} out of {} failed", failedCount, results.size());
+            return ResponseUtil.failed(500, result, failedCount + " image(s) failed to remove");
+        }
+        return ResponseUtil.success("All images removed successfully", result);
+    }
 }

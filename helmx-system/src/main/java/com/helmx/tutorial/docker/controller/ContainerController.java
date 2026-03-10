@@ -892,4 +892,15 @@ public class ContainerController {
     private boolean checkStatsPermission(Long userId) {
         return userPermissionService.hasPermission(userId, "Ops:Container:Stats");
     }
+
+    @Operation(summary = "Get port mappings summary for all containers")
+    @PostMapping("/ports")
+    @PreAuthorize("@va.check('Ops:Container:List')")
+    public ResponseEntity<Result> getContainerPortMappings(@Valid @RequestBody ContainerPortsRequest criteria) {
+        String host = criteria.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        List<ContainerPortMapping> mappings = dockerClientUtil.getContainerPortMappings(criteria.getAll());
+        return ResponseUtil.success(mappings);
+    }
 }
