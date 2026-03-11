@@ -87,6 +87,9 @@ public class DockerClientUtil {
     private volatile long diskMetricsLoadedAt;
     private volatile long cachedTotalDisk;
     private volatile long cachedUsableDisk;
+    private volatile long previousDiskReadBytes;
+    private volatile long previousDiskWriteBytes;
+    private volatile long previousDiskSampleAt;
     private volatile long localAddressesLoadedAt;
     private volatile boolean localAddressesLoaded;
     private volatile Set<String> cachedLocalAddresses = Set.of();
@@ -1244,6 +1247,7 @@ public class DockerClientUtil {
      *     <li>{@code hostMetricsAvailable}: {@link Boolean}</li>
      *     <li>{@code hostCpuUsage}, {@code hostMemoryUsage}, {@code hostDiskUsage}: {@link Double} percentages</li>
      *     <li>{@code hostMemoryUsed}, {@code hostMemoryTotal}, {@code hostDiskUsed}, {@code hostDiskTotal}: formatted {@link String} sizes</li>
+     *     <li>{@code DiskReadTrafficNew}, {@code WriteTrafficNew}: {@link Double} KB/s disk read/write throughput</li>
      * </ul>
      * For local Docker hosts (for example {@code unix:///var/run/docker.sock}), the map contains live host metrics.
      * For remote Docker hosts, the method tries to use the matching DockerEnv SSH settings to collect metrics from the
@@ -1260,6 +1264,8 @@ public class DockerClientUtil {
         hostMetrics.put("hostDiskUsage", 0D);
         hostMetrics.put("hostDiskUsed", "0B");
         hostMetrics.put("hostDiskTotal", "0B");
+        hostMetrics.put("DiskReadTrafficNew", 0D);
+        hostMetrics.put("WriteTrafficNew", 0D);
 
         String host = currentHost.get();
         if (isLocalDockerHost(host)) {
@@ -1299,9 +1305,9 @@ public class DockerClientUtil {
             log.debug("Extended operating system metrics are not available on the current JVM implementation");
         }
 
-        long[] diskMetrics = getDiskMetrics();
-        long totalDisk = diskMetrics[0];
-        long usableDisk = diskMetrics[1];
+        DiskMetrics diskMetrics = getDiskMetrics();
+        long totalDisk = diskMetrics.totalDisk();
+        long usableDisk = diskMetrics.usableDisk();
         if (totalDisk > 0) {
             long usedDisk = Math.max(totalDisk - usableDisk, 0);
             hostMetrics.put("hostDiskUsage", toPercentage((double) usedDisk / totalDisk));
@@ -1309,6 +1315,8 @@ public class DockerClientUtil {
             hostMetrics.put("hostDiskTotal", ByteUtils.formatBytes(totalDisk));
             metricsAvailable = true;
         }
+        hostMetrics.put("DiskReadTrafficNew", diskMetrics.readTrafficKb());
+        hostMetrics.put("WriteTrafficNew", diskMetrics.writeTrafficKb());
 
         hostMetrics.put("hostMetricsAvailable", metricsAvailable);
         return hostMetrics;
@@ -1356,39 +1364,105 @@ public class DockerClientUtil {
         return false;
     }
 
-    private long[] getDiskMetrics() {
-        long now = System.currentTimeMillis();
-        if (now - diskMetricsLoadedAt <= HOST_METRICS_CACHE_TTL_MILLIS) {
-            return new long[]{cachedTotalDisk, cachedUsableDisk};
-        }
-
+    private DiskMetrics getDiskMetrics() {
         synchronized (diskMetricsLock) {
-            long refreshedNow = System.currentTimeMillis();
-            if (refreshedNow - diskMetricsLoadedAt <= HOST_METRICS_CACHE_TTL_MILLIS) {
-                return new long[]{cachedTotalDisk, cachedUsableDisk};
-            }
-
-            long totalDisk = 0;
-            long usableDisk = 0;
-            try {
-                for (FileStore fileStore : FileSystems.getDefault().getFileStores()) {
-                    long fileStoreTotal = fileStore.getTotalSpace();
-                    long fileStoreUsable = fileStore.getUsableSpace();
-                    if (fileStoreTotal <= 0 && fileStoreUsable <= 0) {
-                        continue;
-                    }
-                    totalDisk += fileStoreTotal;
-                    usableDisk += fileStoreUsable;
+            long now = System.currentTimeMillis();
+            if (now - diskMetricsLoadedAt > HOST_METRICS_CACHE_TTL_MILLIS) {
+                try {
+                    FileStore rootFileStore = Files.getFileStore(Path.of("/"));
+                    cachedTotalDisk = rootFileStore.getTotalSpace();
+                    cachedUsableDisk = rootFileStore.getUsableSpace();
+                } catch (IOException e) {
+                    log.warn("Failed to collect root filesystem usage metrics", e);
+                    cachedTotalDisk = 0L;
+                    cachedUsableDisk = 0L;
                 }
-            } catch (IOException e) {
-                log.warn("Failed to collect disk usage metrics", e);
+                diskMetricsLoadedAt = now;
             }
 
-            cachedTotalDisk = totalDisk;
-            cachedUsableDisk = usableDisk;
-            diskMetricsLoadedAt = refreshedNow;
-            return new long[]{cachedTotalDisk, cachedUsableDisk};
+            double readTrafficKb = 0D;
+            double writeTrafficKb = 0D;
+            long[] diskIoCounters = readLocalDiskIoCounters();
+            long currentReadBytes = diskIoCounters[0];
+            long currentWriteBytes = diskIoCounters[1];
+            if (previousDiskSampleAt > 0 && now > previousDiskSampleAt
+                    && currentReadBytes >= previousDiskReadBytes && currentWriteBytes >= previousDiskWriteBytes) {
+                double elapsedSeconds = (now - previousDiskSampleAt) / 1000D;
+                if (elapsedSeconds > 0) {
+                    readTrafficKb = toTrafficKb(currentReadBytes - previousDiskReadBytes, elapsedSeconds);
+                    writeTrafficKb = toTrafficKb(currentWriteBytes - previousDiskWriteBytes, elapsedSeconds);
+                }
+            }
+            previousDiskReadBytes = currentReadBytes;
+            previousDiskWriteBytes = currentWriteBytes;
+            previousDiskSampleAt = now;
+
+            return new DiskMetrics(cachedTotalDisk, cachedUsableDisk, readTrafficKb, writeTrafficKb);
         }
+    }
+
+    private long[] readLocalDiskIoCounters() {
+        try {
+            String rootBlockDevice = resolveRootBlockDevice();
+            if (rootBlockDevice == null || rootBlockDevice.isBlank()) {
+                return new long[]{0L, 0L};
+            }
+            Path statPath = Path.of("/sys/class/block", rootBlockDevice, "stat");
+            if (!Files.exists(statPath)) {
+                return new long[]{0L, 0L};
+            }
+            String[] fields = Files.readString(statPath).trim().split("\\s+");
+            if (fields.length < 7) {
+                return new long[]{0L, 0L};
+            }
+            return new long[]{parseLong(fields[2]) * 512L, parseLong(fields[6]) * 512L};
+        } catch (Exception ex) {
+            log.debug("Failed to collect local disk I/O counters", ex);
+            return new long[]{0L, 0L};
+        }
+    }
+
+    private String resolveRootBlockDevice() throws IOException {
+        try (Stream<String> mounts = Files.lines(Path.of("/proc/self/mounts"))) {
+            Optional<String> rootMount = mounts
+                    .map(String::trim)
+                    .filter(line -> !line.isBlank())
+                    .map(line -> line.split("\\s+"))
+                    .filter(parts -> parts.length >= 2 && "/".equals(parts[1]))
+                    .map(parts -> parts[0])
+                    .findFirst();
+            if (rootMount.isEmpty()) {
+                return null;
+            }
+
+            String source = rootMount.get();
+            if (source.startsWith("/")) {
+                try {
+                    source = Path.of(source).toRealPath().getFileName().toString();
+                } catch (IOException ex) {
+                    source = Path.of(source).getFileName().toString();
+                }
+            }
+            return Path.of(source).getFileName().toString();
+        }
+    }
+
+    private long parseLong(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException ex) {
+            return 0L;
+        }
+    }
+
+    private double toTrafficKb(long bytesDelta, double elapsedSeconds) {
+        if (bytesDelta <= 0 || elapsedSeconds <= 0) {
+            return 0D;
+        }
+        return Math.round((bytesDelta / 1024D / elapsedSeconds) * 100D) / 100D;
+    }
+
+    private record DiskMetrics(long totalDisk, long usableDisk, double readTrafficKb, double writeTrafficKb) {
     }
 
     private Set<String> getLocalAddresses() {

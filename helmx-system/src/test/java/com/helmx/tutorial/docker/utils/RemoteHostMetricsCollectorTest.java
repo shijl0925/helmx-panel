@@ -26,6 +26,7 @@ class RemoteHostMetricsCollectorTest {
                 cpu=12.34
                 mem=2147483648 8589934592 25.00
                 disk=10737418240 21474836480 50.00
+                diskio=128.50 64.25
                 """);
 
         assertTrue((Boolean) metrics.get("hostMetricsAvailable"));
@@ -36,6 +37,8 @@ class RemoteHostMetricsCollectorTest {
         assertEquals(50.0D, metrics.get("hostDiskUsage"));
         assertEquals("10.00 GB", metrics.get("hostDiskUsed"));
         assertEquals("20.00 GB", metrics.get("hostDiskTotal"));
+        assertEquals(128.5D, metrics.get("DiskReadTrafficNew"));
+        assertEquals(64.25D, metrics.get("WriteTrafficNew"));
     }
 
     @Test
@@ -46,6 +49,8 @@ class RemoteHostMetricsCollectorTest {
         assertEquals(0D, metrics.get("hostCpuUsage"));
         assertEquals("0B", metrics.get("hostMemoryTotal"));
         assertEquals("0B", metrics.get("hostDiskTotal"));
+        assertEquals(0D, metrics.get("DiskReadTrafficNew"));
+        assertEquals(0D, metrics.get("WriteTrafficNew"));
     }
 
     @Test

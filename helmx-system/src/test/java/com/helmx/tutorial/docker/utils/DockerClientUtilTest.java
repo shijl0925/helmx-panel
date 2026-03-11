@@ -96,6 +96,8 @@ class DockerClientUtilTest {
         assertTrue(getMetricAsDouble(metrics, "hostMemoryUsage") <= 100D);
         assertTrue(getMetricAsDouble(metrics, "hostDiskUsage") >= 0D);
         assertTrue(getMetricAsDouble(metrics, "hostDiskUsage") <= 100D);
+        assertTrue(getMetricAsDouble(metrics, "DiskReadTrafficNew") >= 0D);
+        assertTrue(getMetricAsDouble(metrics, "WriteTrafficNew") >= 0D);
         assertFalse(((String) metrics.get("hostMemoryTotal")).isBlank());
         assertFalse(((String) metrics.get("hostDiskTotal")).isBlank());
     }
@@ -112,6 +114,8 @@ class DockerClientUtilTest {
         assertEquals(0D, metrics.get("hostDiskUsage"));
         assertEquals("0B", metrics.get("hostMemoryTotal"));
         assertEquals("0B", metrics.get("hostDiskTotal"));
+        assertEquals(0D, metrics.get("DiskReadTrafficNew"));
+        assertEquals(0D, metrics.get("WriteTrafficNew"));
     }
 
     @Test
@@ -134,7 +138,9 @@ class DockerClientUtilTest {
                 "hostMemoryTotal", "6.00 GB",
                 "hostDiskUsage", 44.4D,
                 "hostDiskUsed", "10.00 GB",
-                "hostDiskTotal", "20.00 GB"
+                "hostDiskTotal", "20.00 GB",
+                "DiskReadTrafficNew", 128.5D,
+                "WriteTrafficNew", 64.25D
         );
 
         when(dockerEnvMapper.selectOne(any())).thenReturn(dockerEnv);
@@ -165,7 +171,9 @@ class DockerClientUtilTest {
                 "hostMemoryTotal", "6.25 GB",
                 "hostDiskUsage", 31.2D,
                 "hostDiskUsed", "8.00 GB",
-                "hostDiskTotal", "25.64 GB"
+                "hostDiskTotal", "25.64 GB",
+                "DiskReadTrafficNew", 16.0D,
+                "WriteTrafficNew", 8.0D
         );
 
         when(dockerEnvMapper.selectOne(any())).thenReturn(dockerEnv);
