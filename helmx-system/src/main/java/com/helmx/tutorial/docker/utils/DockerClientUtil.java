@@ -2884,7 +2884,14 @@ public class DockerClientUtil {
     }
 
     /**
-     * 备份存储卷：通过临时容器将卷内容导出为 TAR 流
+     * 备份存储卷：通过临时容器将卷内容导出为 TAR 流。
+     * <p>
+     * 创建一个挂载了指定卷的临时 busybox 容器，然后将卷内容（或指定子路径）以 TAR 格式流式返回。
+     * <strong>调用方必须关闭返回的 {@link InputStream}</strong>，关闭时会同步清理临时容器和底层 Docker 连接。
+     *
+     * @param volumeName 需要备份的 Docker 卷名称
+     * @param path       卷内需要备份的子路径（相对于卷根目录）；传 {@code null} 或空字符串时备份整个卷根目录
+     * @return 包含卷内容的 TAR 格式输入流，调用方负责关闭
      */
     public InputStream backupVolume(String volumeName, String path) {
         DockerClient client = getCurrentDockerClient();
@@ -2908,10 +2915,11 @@ public class DockerClientUtil {
         String normalizedBackupPath = backupPath.startsWith("/") ? backupPath : "/" + backupPath;
         String copyPath = "/".equals(normalizedBackupPath) ? VOLUME_BACKUP_MOUNT_PATH : VOLUME_BACKUP_MOUNT_PATH + normalizedBackupPath;
 
-        InputStream tarStream;
-        try (CopyArchiveFromContainerCmd copyCmd = client.copyArchiveFromContainerCmd(containerId, copyPath)) {
-            tarStream = copyCmd.exec();
-        }
+        // Do NOT close copyCmd here: exec() returns a live HTTP-response stream and closing
+        // the command object closes the underlying connection, producing an empty stream.
+        // Both copyCmd and the container are cleaned up when the caller closes the returned stream.
+        CopyArchiveFromContainerCmd copyCmd = client.copyArchiveFromContainerCmd(containerId, copyPath);
+        InputStream tarStream = copyCmd.exec();
 
         final String finalContainerId = containerId;
         return new FilterInputStream(tarStream) {
@@ -2920,6 +2928,11 @@ public class DockerClientUtil {
                 try {
                     super.close();
                 } finally {
+                    try {
+                        copyCmd.close();
+                    } catch (Exception ignored) {
+                        log.warn("Failed to close copyCmd for backup container: {}", finalContainerId);
+                    }
                     try {
                         client.removeContainerCmd(finalContainerId).withForce(true).exec();
                     } catch (Exception ignored) {
