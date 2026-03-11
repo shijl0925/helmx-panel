@@ -51,7 +51,7 @@ public class DockerEnv extends BaseEntity implements Serializable {
     @ApiModelProperty(value = "SSH用户名")
     private String sshUsername;
 
-    @ApiModelProperty(value = "SSH加密密码，可为空；为空时尝试使用后端主机已有的SSH私钥", hidden = true)
+    @ApiModelProperty(value = "SSH加密密码，可为空；为空时尝试使用后端主机现有的SSH私钥", hidden = true)
     private String sshPassword;
 
     @ApiModelProperty(value = "SSH主机指纹")
