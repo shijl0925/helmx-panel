@@ -79,12 +79,12 @@ class DockerClientUtilTest {
         Map<String, Object> metrics = dockerClientUtil.loadHostResourceUsage();
 
         assertTrue((Boolean) metrics.get("hostMetricsAvailable"));
-        assertTrue(((Double) metrics.get("hostCpuUsage")) >= 0D);
-        assertTrue(((Double) metrics.get("hostCpuUsage")) <= 100D);
-        assertTrue(((Double) metrics.get("hostMemoryUsage")) >= 0D);
-        assertTrue(((Double) metrics.get("hostMemoryUsage")) <= 100D);
-        assertTrue(((Double) metrics.get("hostDiskUsage")) >= 0D);
-        assertTrue(((Double) metrics.get("hostDiskUsage")) <= 100D);
+        assertTrue(getMetricAsDouble(metrics, "hostCpuUsage") >= 0D);
+        assertTrue(getMetricAsDouble(metrics, "hostCpuUsage") <= 100D);
+        assertTrue(getMetricAsDouble(metrics, "hostMemoryUsage") >= 0D);
+        assertTrue(getMetricAsDouble(metrics, "hostMemoryUsage") <= 100D);
+        assertTrue(getMetricAsDouble(metrics, "hostDiskUsage") >= 0D);
+        assertTrue(getMetricAsDouble(metrics, "hostDiskUsage") <= 100D);
         assertFalse(((String) metrics.get("hostMemoryTotal")).isBlank());
         assertFalse(((String) metrics.get("hostDiskTotal")).isBlank());
     }
@@ -101,5 +101,9 @@ class DockerClientUtilTest {
         assertEquals(0D, metrics.get("hostDiskUsage"));
         assertEquals("0B", metrics.get("hostMemoryTotal"));
         assertEquals("0B", metrics.get("hostDiskTotal"));
+    }
+
+    private double getMetricAsDouble(Map<String, Object> metrics, String key) {
+        return ((Number) metrics.get(key)).doubleValue();
     }
 }

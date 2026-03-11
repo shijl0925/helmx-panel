@@ -49,6 +49,10 @@ import java.util.stream.Stream;
 @Component
 public class DockerClientUtil {
 
+    private static final long HOST_METRICS_CACHE_TTL_MILLIS = 30_000L;
+    private final Object diskMetricsLock = new Object();
+    private final Object localAddressesLock = new Object();
+
     @Autowired
     private DockerConnectionManager connectionManager;
 
@@ -71,6 +75,13 @@ public class DockerClientUtil {
 
     @Autowired
     private DockerHostValidator dockerHostValidator;
+
+    private volatile long diskMetricsLoadedAt;
+    private volatile long cachedTotalDisk;
+    private volatile long cachedUsableDisk;
+    private volatile long localAddressesLoadedAt;
+    private volatile boolean localAddressesLoaded;
+    private volatile Set<String> cachedLocalAddresses = Set.of();
 
     // 设置当前操作的服务器
     public void setCurrentHost(String host) {
@@ -1217,6 +1228,7 @@ public class DockerClientUtil {
         return result;
     }
 
+    // package-private for focused unit tests of host metrics fallback behavior.
     Map<String, Object> loadHostResourceUsage() {
         Map<String, Object> hostMetrics = new HashMap<>();
         hostMetrics.put("hostMetricsAvailable", false);
@@ -1233,47 +1245,39 @@ public class DockerClientUtil {
             return hostMetrics;
         }
 
-        com.sun.management.OperatingSystemMXBean operatingSystemMXBean =
-                ManagementFactory.getPlatformMXBean(com.sun.management.OperatingSystemMXBean.class);
-        if (operatingSystemMXBean != null) {
-            double cpuLoad = operatingSystemMXBean.getCpuLoad();
+        boolean metricsAvailable = false;
+        java.lang.management.OperatingSystemMXBean operatingSystemMXBean = ManagementFactory.getOperatingSystemMXBean();
+        // JDK 21/OpenJDK in this project exposes host CPU and memory counters via the extended OS bean.
+        if (operatingSystemMXBean instanceof com.sun.management.OperatingSystemMXBean extendedOperatingSystemMXBean) {
+            double cpuLoad = extendedOperatingSystemMXBean.getCpuLoad();
             if (cpuLoad >= 0) {
                 hostMetrics.put("hostCpuUsage", toPercentage(cpuLoad));
+                metricsAvailable = true;
             }
 
-            long totalMemory = operatingSystemMXBean.getTotalMemorySize();
-            long freeMemory = operatingSystemMXBean.getFreeMemorySize();
+            long totalMemory = extendedOperatingSystemMXBean.getTotalMemorySize();
+            long freeMemory = extendedOperatingSystemMXBean.getFreeMemorySize();
             if (totalMemory > 0 && freeMemory >= 0) {
                 long usedMemory = Math.max(totalMemory - freeMemory, 0);
                 hostMetrics.put("hostMemoryUsage", toPercentage((double) usedMemory / totalMemory));
                 hostMetrics.put("hostMemoryUsed", ByteUtils.formatBytes(usedMemory));
                 hostMetrics.put("hostMemoryTotal", ByteUtils.formatBytes(totalMemory));
+                metricsAvailable = true;
             }
         }
 
-        long totalDisk = 0;
-        long usableDisk = 0;
-        try {
-            for (FileStore fileStore : FileSystems.getDefault().getFileStores()) {
-                long fileStoreTotal = fileStore.getTotalSpace();
-                if (fileStoreTotal <= 0) {
-                    continue;
-                }
-                totalDisk += fileStoreTotal;
-                usableDisk += Math.max(fileStore.getUsableSpace(), 0);
-            }
-        } catch (IOException e) {
-            log.warn("Failed to collect disk usage metrics", e);
-        }
-
+        long[] diskMetrics = getDiskMetrics();
+        long totalDisk = diskMetrics[0];
+        long usableDisk = diskMetrics[1];
         if (totalDisk > 0) {
             long usedDisk = Math.max(totalDisk - usableDisk, 0);
             hostMetrics.put("hostDiskUsage", toPercentage((double) usedDisk / totalDisk));
             hostMetrics.put("hostDiskUsed", ByteUtils.formatBytes(usedDisk));
             hostMetrics.put("hostDiskTotal", ByteUtils.formatBytes(totalDisk));
+            metricsAvailable = true;
         }
 
-        hostMetrics.put("hostMetricsAvailable", true);
+        hostMetrics.put("hostMetricsAvailable", metricsAvailable);
         return hostMetrics;
     }
 
@@ -1297,16 +1301,7 @@ public class DockerClientUtil {
 
     private boolean isLocalAddress(String hostname) {
         try {
-            Set<String> localAddresses = new HashSet<>();
-            Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
-            while (networkInterfaces != null && networkInterfaces.hasMoreElements()) {
-                NetworkInterface networkInterface = networkInterfaces.nextElement();
-                Enumeration<InetAddress> inetAddresses = networkInterface.getInetAddresses();
-                while (inetAddresses.hasMoreElements()) {
-                    localAddresses.add(inetAddresses.nextElement().getHostAddress());
-                }
-            }
-
+            Set<String> localAddresses = getLocalAddresses();
             for (InetAddress address : InetAddress.getAllByName(hostname)) {
                 if (address.isAnyLocalAddress() || address.isLoopbackAddress()
                         || localAddresses.contains(address.getHostAddress())) {
@@ -1317,6 +1312,73 @@ public class DockerClientUtil {
             log.debug("Unable to resolve Docker host address: {}", hostname, ex);
         }
         return false;
+    }
+
+    private long[] getDiskMetrics() {
+        long now = System.currentTimeMillis();
+        if (now - diskMetricsLoadedAt <= HOST_METRICS_CACHE_TTL_MILLIS) {
+            return new long[]{cachedTotalDisk, cachedUsableDisk};
+        }
+
+        synchronized (diskMetricsLock) {
+            long refreshedNow = System.currentTimeMillis();
+            if (refreshedNow - diskMetricsLoadedAt <= HOST_METRICS_CACHE_TTL_MILLIS) {
+                return new long[]{cachedTotalDisk, cachedUsableDisk};
+            }
+
+            long totalDisk = 0;
+            long usableDisk = 0;
+            try {
+                for (FileStore fileStore : FileSystems.getDefault().getFileStores()) {
+                    long fileStoreTotal = fileStore.getTotalSpace();
+                    if (fileStoreTotal <= 0) {
+                        continue;
+                    }
+                    totalDisk += fileStoreTotal;
+                    usableDisk += Math.max(fileStore.getUsableSpace(), 0);
+                }
+            } catch (IOException e) {
+                log.warn("Failed to collect disk usage metrics", e);
+            }
+
+            cachedTotalDisk = totalDisk;
+            cachedUsableDisk = usableDisk;
+            diskMetricsLoadedAt = refreshedNow;
+            return new long[]{cachedTotalDisk, cachedUsableDisk};
+        }
+    }
+
+    private Set<String> getLocalAddresses() {
+        long now = System.currentTimeMillis();
+        if (now - localAddressesLoadedAt <= HOST_METRICS_CACHE_TTL_MILLIS && localAddressesLoaded) {
+            return cachedLocalAddresses;
+        }
+
+        synchronized (localAddressesLock) {
+            long refreshedNow = System.currentTimeMillis();
+            if (refreshedNow - localAddressesLoadedAt <= HOST_METRICS_CACHE_TTL_MILLIS && localAddressesLoaded) {
+                return cachedLocalAddresses;
+            }
+
+            Set<String> localAddresses = new HashSet<>();
+            try {
+                Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+                while (networkInterfaces != null && networkInterfaces.hasMoreElements()) {
+                    NetworkInterface networkInterface = networkInterfaces.nextElement();
+                    Enumeration<InetAddress> inetAddresses = networkInterface.getInetAddresses();
+                    while (inetAddresses.hasMoreElements()) {
+                        localAddresses.add(inetAddresses.nextElement().getHostAddress());
+                    }
+                }
+            } catch (Exception ex) {
+                log.debug("Unable to enumerate local network interfaces", ex);
+            }
+
+            cachedLocalAddresses = Set.copyOf(localAddresses);
+            localAddressesLoadedAt = refreshedNow;
+            localAddressesLoaded = true;
+            return cachedLocalAddresses;
+        }
     }
 
     private double toPercentage(double value) {
