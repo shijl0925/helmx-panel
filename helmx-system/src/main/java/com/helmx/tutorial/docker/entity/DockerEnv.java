@@ -42,7 +42,7 @@ public class DockerEnv extends BaseEntity implements Serializable {
     @ApiModelProperty(value = "是否启用TLS验证")
     private Boolean tlsVerify = false;
 
-    @ApiModelProperty(value = "是否启用远程主机资源采集")
+    @ApiModelProperty(value = "是否启用SSH远程连接")
     private Boolean sshEnabled = false;
 
     @ApiModelProperty(value = "SSH端口")

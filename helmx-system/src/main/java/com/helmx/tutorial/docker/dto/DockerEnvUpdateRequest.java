@@ -22,7 +22,7 @@ public class DockerEnvUpdateRequest {
     @ApiModelProperty(value = "是否启用TLS验证")
     private Boolean tlsVerify;
 
-    @ApiModelProperty(value = "是否启用远程主机资源采集")
+    @ApiModelProperty(value = "是否启用SSH远程连接")
     private Boolean sshEnabled;
 
     @ApiModelProperty(value = "SSH端口")

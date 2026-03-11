@@ -1277,7 +1277,8 @@ public class DockerClientUtil {
     private Map<String, Object> loadLocalHostResourceUsage(Map<String, Object> hostMetrics) {
         boolean metricsAvailable = false;
         java.lang.management.OperatingSystemMXBean operatingSystemMXBean = ManagementFactory.getOperatingSystemMXBean();
-        // JDK 21/OpenJDK in this project exposes host CPU and memory counters via the extended OS bean.
+        // This project targets Java 21 and intentionally uses the JDK/OpenJDK extended OS bean here because the
+        // standard management bean does not expose host CPU and memory usage counters with the fidelity we need.
         if (operatingSystemMXBean instanceof com.sun.management.OperatingSystemMXBean extendedOperatingSystemMXBean) {
             double cpuLoad = extendedOperatingSystemMXBean.getCpuLoad();
             if (cpuLoad >= 0) {
