@@ -6,14 +6,19 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 
+import java.io.InputStream;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -187,6 +192,51 @@ public class VolumeController {
         } else {
             log.error("Prune volumes failed: {}", message);
             return ResponseUtil.failed(500, result, message);
+        }
+    }
+
+    @Operation(summary = "Backup Docker Volume as TAR archive")
+    @PostMapping("/backup")
+    @PreAuthorize("@va.check('Ops:Volume:List')")
+    public ResponseEntity<StreamingResponseBody> backupDockerVolume(@Valid @RequestBody VolumeBackupRequest criteria) {
+        String fileName = criteria.getName() + "-backup.tar";
+
+        StreamingResponseBody body = outputStream -> {
+            dockerClientUtil.setCurrentHost(criteria.getHost());
+            try (InputStream inputStream = dockerClientUtil.backupVolume(criteria.getName(), criteria.getPath())) {
+                inputStream.transferTo(outputStream);
+                outputStream.flush();
+            } finally {
+                dockerClientUtil.clearCurrentHost();
+            }
+        };
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType("application/x-tar"));
+        headers.setContentDisposition(ContentDisposition.attachment().filename(fileName).build());
+        return ResponseEntity.ok().headers(headers).body(body);
+    }
+
+    @Operation(summary = "Clone Docker Volume to a new volume")
+    @PostMapping("/clone")
+    @PreAuthorize("@va.check('Ops:Volume:Create')")
+    public ResponseEntity<Result> cloneDockerVolume(@Valid @RequestBody VolumeCloneRequest criteria) {
+        String host = criteria.getHost();
+        dockerClientUtil.setCurrentHost(host);
+        try {
+            Map<String, Object> result = dockerClientUtil.cloneVolume(
+                    criteria.getSourceName(), criteria.getTargetName(), criteria.getDriver());
+            String status = (String) result.get("status");
+            String message = (String) result.get("message");
+
+            if ("success".equals(status)) {
+                return ResponseUtil.success(message, result);
+            } else {
+                log.error("Clone volume failed: {}", message);
+                return ResponseUtil.failed(500, result, message);
+            }
+        } finally {
+            dockerClientUtil.clearCurrentHost();
         }
     }
 }

@@ -2,21 +2,29 @@ package com.helmx.tutorial.docker.controller;
 
 import com.github.dockerjava.api.command.InspectVolumeResponse;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -30,11 +38,12 @@ class VolumeControllerIntegrationTest {
     @Mock
     private DockerClientUtil dockerClientUtil;
 
+    private VolumeController controller;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        VolumeController controller = new VolumeController();
+        controller = new VolumeController();
         ReflectionTestUtils.setField(controller, "dockerClientUtil", dockerClientUtil);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
@@ -111,6 +120,58 @@ class VolumeControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(500))
                 .andExpect(jsonPath("$.message").value("volume is in use"))
                 .andExpect(jsonPath("$.data.status").value("failed"));
+    }
+
+    @Test
+    void backupDockerVolume_streamsArchiveAndClearsHost() throws Exception {
+        when(dockerClientUtil.backupVolume("data", "/"))
+                .thenReturn(new ByteArrayInputStream("tar-content".getBytes()));
+
+        com.helmx.tutorial.docker.dto.VolumeBackupRequest request = new com.helmx.tutorial.docker.dto.VolumeBackupRequest();
+        request.setHost("unix:///var/run/docker.sock");
+        request.setName("data");
+        request.setPath("/");
+
+        ResponseEntity<StreamingResponseBody> response = controller.backupDockerVolume(request);
+
+        Assertions.assertEquals(HttpStatus.OK, response.getStatusCode());
+        Assertions.assertEquals("attachment; filename=\"data-backup.tar\"",
+                response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION));
+        Assertions.assertEquals("application/x-tar", response.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE));
+        Assertions.assertNotNull(response.getBody());
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        response.getBody().writeTo(outputStream);
+        Assertions.assertEquals("tar-content", outputStream.toString());
+
+        var inOrder = inOrder(dockerClientUtil);
+        inOrder.verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        inOrder.verify(dockerClientUtil).backupVolume("data", "/");
+        inOrder.verify(dockerClientUtil).clearCurrentHost();
+    }
+
+    @Test
+    void cloneDockerVolume_returnsFailureWhenUtilityFails() throws Exception {
+        when(dockerClientUtil.cloneVolume("source-data", "target-data", "local"))
+                .thenReturn(new HashMap<>(Map.of("status", "failed", "message", "Source volume does not exist: source-data")));
+
+        mockMvc.perform(post("/api/v1/ops/volumes/clone")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "sourceName": "source-data",
+                                  "targetName": "target-data",
+                                  "driver": "local"
+                                }
+                                """))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.message").value("Source volume does not exist: source-data"))
+                .andExpect(jsonPath("$.data.status").value("failed"));
+
+        verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        verify(dockerClientUtil).clearCurrentHost();
     }
 
     private InspectVolumeResponse createVolume(String name, String mountpoint, String... rawPairs) {

@@ -42,6 +42,13 @@ import java.util.stream.Stream;
 @Slf4j
 @Component
 public class DockerClientUtil {
+    private static final String VOLUME_HELPER_IMAGE = "busybox:latest";
+    private static final String VOLUME_BACKUP_CONTAINER_PREFIX = "helmx-volume-backup-";
+    private static final String VOLUME_BACKUP_MOUNT_PATH = "/volume";
+    private static final String VOLUME_CLONE_CONTAINER_PREFIX = "helmx-volume-clone-";
+    private static final String VOLUME_CLONE_SOURCE_MOUNT_PATH = "/from";
+    private static final String VOLUME_CLONE_TARGET_MOUNT_PATH = "/to";
+    private static final long VOLUME_CLONE_TIMEOUT_SECONDS = 60L;
 
     @Autowired
     private DockerConnectionManager connectionManager;
@@ -1378,6 +1385,143 @@ public class DockerClientUtil {
     }
 
     /**
+     * 备份存储卷：通过临时容器将卷内容导出为 TAR 流。
+     */
+    public InputStream backupVolume(String volumeName, String path) {
+        DockerClient client = getCurrentDockerClient();
+        if (!isVolumeExists(client, volumeName)) {
+            throw new IllegalArgumentException("Volume does not exist: " + volumeName);
+        }
+
+        String copyPath = resolveVolumeBackupPath(path);
+        ensureVolumeHelperImage(client);
+
+        String containerId;
+        try (CreateContainerCmd cmd = client.createContainerCmd(VOLUME_HELPER_IMAGE)
+                .withName(VOLUME_BACKUP_CONTAINER_PREFIX + volumeName + "-" + System.currentTimeMillis())
+                .withCmd("true")
+                .withHostConfig(HostConfig.newHostConfig()
+                        .withBinds(new Bind(volumeName, new Volume(VOLUME_BACKUP_MOUNT_PATH))))) {
+            containerId = cmd.exec().getId();
+        }
+        CopyArchiveFromContainerCmd copyCmd = null;
+        try {
+            copyCmd = client.copyArchiveFromContainerCmd(containerId, copyPath);
+            InputStream tarStream = copyCmd.exec();
+            CopyArchiveFromContainerCmd finalCopyCmd = copyCmd;
+            String finalContainerId = containerId;
+            return new FilterInputStream(tarStream) {
+                @Override
+                public void close() throws IOException {
+                    try {
+                        super.close();
+                    } finally {
+                        closeQuietly(finalCopyCmd, "Failed to close copy command for volume backup container: " + finalContainerId);
+                        removeContainerQuietly(client, finalContainerId, "Failed to remove temporary volume backup container: " + finalContainerId);
+                    }
+                }
+            };
+        } catch (Exception e) {
+            closeQuietly(copyCmd, "Failed to close copy command after backup failure: " + containerId);
+            removeContainerQuietly(client, containerId, "Failed to remove temporary volume backup container after copy failure: " + containerId);
+            throw e;
+        }
+    }
+
+    /**
+     * 克隆存储卷：将源卷的数据复制到目标卷
+     */
+    public Map<String, Object> cloneVolume(String sourceName, String targetName, String driver) {
+        Map<String, Object> result = new HashMap<>();
+        DockerClient client = getCurrentDockerClient();
+
+        if (!isVolumeExists(client, sourceName)) {
+            result.put("status", "failed");
+            result.put("message", "Source volume does not exist: " + sourceName);
+            return result;
+        }
+        if (isVolumeExists(client, targetName)) {
+            result.put("status", "failed");
+            result.put("message", "Target volume already exists: " + targetName);
+            return result;
+        }
+
+        try {
+            ensureVolumeHelperImage(client);
+        } catch (Exception e) {
+            result.put("status", "failed");
+            result.put("message", "Failed to prepare helper image for volume clone");
+            return result;
+        }
+
+        boolean targetCreated = false;
+        try (CreateVolumeCmd createCmd = client.createVolumeCmd()
+                .withName(targetName)
+                .withDriver(driver != null && !driver.isBlank() ? driver : "local")) {
+            createCmd.exec();
+            targetCreated = true;
+        } catch (Exception e) {
+            result.put("status", "failed");
+            result.put("message", "Failed to create target volume: " + e.getMessage());
+            return result;
+        }
+
+        String containerId = null;
+        boolean cloned = false;
+        try {
+            try (CreateContainerCmd cmd = client.createContainerCmd(VOLUME_HELPER_IMAGE)
+                    .withName(VOLUME_CLONE_CONTAINER_PREFIX + System.currentTimeMillis())
+                    .withCmd("sh", "-c", "cp -a " + VOLUME_CLONE_SOURCE_MOUNT_PATH + "/. " + VOLUME_CLONE_TARGET_MOUNT_PATH + "/")
+                    .withHostConfig(HostConfig.newHostConfig().withBinds(
+                            new Bind(sourceName, new Volume(VOLUME_CLONE_SOURCE_MOUNT_PATH)),
+                            new Bind(targetName, new Volume(VOLUME_CLONE_TARGET_MOUNT_PATH))))) {
+                containerId = cmd.exec().getId();
+            }
+
+            try (StartContainerCmd cmd = client.startContainerCmd(containerId)) {
+                cmd.exec();
+            }
+
+            try (WaitContainerCmd cmd = client.waitContainerCmd(containerId)) {
+                if (!cmd.start().awaitCompletion(VOLUME_CLONE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    result.put("status", "failed");
+                    result.put("message", "Volume clone operation timed out after " + VOLUME_CLONE_TIMEOUT_SECONDS
+                            + " seconds. The operation may still be running or the volumes may be too large.");
+                    return result;
+                }
+            }
+
+            try (InspectContainerCmd cmd = client.inspectContainerCmd(containerId)) {
+                InspectContainerResponse response = cmd.exec();
+                Long exitCode = response != null && response.getState() != null
+                        ? response.getState().getExitCodeLong()
+                        : null;
+                if (exitCode != null && exitCode != 0L) {
+                    result.put("status", "failed");
+                    result.put("message", "Failed to clone volume: helper container exited with code " + exitCode);
+                    return result;
+                }
+            }
+
+            cloned = true;
+            result.put("status", "success");
+            result.put("message", "Volume cloned successfully");
+            return result;
+        } catch (Exception e) {
+            result.put("status", "failed");
+            result.put("message", "Failed to clone volume: " + e.getMessage());
+            return result;
+        } finally {
+            if (containerId != null) {
+                removeContainerQuietly(client, containerId, "Failed to remove temporary volume clone container: " + containerId);
+            }
+            if (targetCreated && !cloned) {
+                removeVolumeQuietly(client, targetName, "Failed to remove target volume after clone failure: " + targetName);
+            }
+        }
+    }
+
+    /**
      * 获取所有网络
      */
     public List<Network> listNetworks(String name) {
@@ -1751,6 +1895,80 @@ public class DockerClientUtil {
         } catch (Exception e) {
             log.warn("Failed to inspect image: {}", imageName, e);
             throw new RuntimeException("Error occurred while inspecting image", e);
+        }
+    }
+
+    private boolean isVolumeExists(DockerClient client, String volumeName) {
+        try (InspectVolumeCmd cmd = client.inspectVolumeCmd(volumeName)) {
+            cmd.exec();
+            return true;
+        } catch (NotFoundException e) {
+            log.debug("Volume {} does not exist.", volumeName);
+            return false;
+        } catch (Exception e) {
+            log.warn("Failed to inspect volume: {}", volumeName, e);
+            throw new RuntimeException("Error occurred while inspecting volume", e);
+        }
+    }
+
+    private void ensureVolumeHelperImage(DockerClient client) {
+        if (isImageExists(client, VOLUME_HELPER_IMAGE)) {
+            return;
+        }
+        log.info("Helper image {} not found locally, pulling...", VOLUME_HELPER_IMAGE);
+        try (PullImageCmd cmd = client.pullImageCmd(VOLUME_HELPER_IMAGE)) {
+            cmd.exec(new PullImageResultCallback()).awaitCompletion();
+            log.info("Helper image {} pulled successfully", VOLUME_HELPER_IMAGE);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while pulling helper image: " + VOLUME_HELPER_IMAGE, e);
+        } catch (Exception e) {
+            log.error("Failed to pull helper image {}: {}", VOLUME_HELPER_IMAGE, e.getMessage());
+            throw new RuntimeException("Failed to pull helper image: " + VOLUME_HELPER_IMAGE, e);
+        }
+    }
+
+    private String resolveVolumeBackupPath(String path) {
+        Path mountPath = Paths.get(VOLUME_BACKUP_MOUNT_PATH);
+        if (path == null || path.isBlank() || "/".equals(path.trim())) {
+            return mountPath.toString();
+        }
+
+        Path requestedPath = Paths.get(path.trim().replace('\\', '/'));
+        if (requestedPath.isAbsolute()) {
+            requestedPath = requestedPath.subpath(0, requestedPath.getNameCount());
+        }
+        Path resolvedPath = mountPath.resolve(requestedPath.normalize()).normalize();
+        if (!resolvedPath.startsWith(mountPath)) {
+            throw new IllegalArgumentException("Backup path must stay within the volume");
+        }
+        return resolvedPath.toString();
+    }
+
+    private void closeQuietly(Closeable closeable, String message) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (Exception e) {
+            log.warn(message, e);
+        }
+    }
+
+    private void removeContainerQuietly(DockerClient client, String containerId, String message) {
+        try (RemoveContainerCmd cmd = client.removeContainerCmd(containerId).withForce(true)) {
+            cmd.exec();
+        } catch (Exception e) {
+            log.warn(message, e);
+        }
+    }
+
+    private void removeVolumeQuietly(DockerClient client, String volumeName, String message) {
+        try (RemoveVolumeCmd cmd = client.removeVolumeCmd(volumeName)) {
+            cmd.exec();
+        } catch (Exception e) {
+            log.warn(message, e);
         }
     }
 
