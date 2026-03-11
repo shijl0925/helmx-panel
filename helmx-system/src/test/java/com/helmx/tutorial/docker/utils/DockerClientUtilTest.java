@@ -185,7 +185,7 @@ class DockerClientUtilTest {
         Map<String, Object> result = dockerClientUtil.cloneVolume("src-vol", "target-vol", "local");
 
         Assertions.assertEquals("failed", result.get("status"));
-        Assertions.assertEquals("Failed to pull helper image: busybox:latest", result.get("message"));
+        Assertions.assertEquals("Failed to prepare helper image for volume clone", result.get("message"));
         verify(dockerClient, never()).createContainerCmd(anyString());
     }
 

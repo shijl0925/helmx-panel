@@ -1450,7 +1450,7 @@ public class DockerClientUtil {
             ensureVolumeHelperImage(client);
         } catch (Exception e) {
             result.put("status", "failed");
-            result.put("message", e.getMessage());
+            result.put("message", "Failed to prepare helper image for volume clone");
             return result;
         }
 
@@ -1485,7 +1485,8 @@ public class DockerClientUtil {
             try (WaitContainerCmd cmd = client.waitContainerCmd(containerId)) {
                 if (!cmd.start().awaitCompletion(VOLUME_CLONE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                     result.put("status", "failed");
-                    result.put("message", "Timed out while cloning volume");
+                    result.put("message", "Volume clone operation timed out after " + VOLUME_CLONE_TIMEOUT_SECONDS
+                            + " seconds. The operation may still be running or the volumes may be too large.");
                     return result;
                 }
             }
@@ -1933,8 +1934,11 @@ public class DockerClientUtil {
             return mountPath.toString();
         }
 
-        String sanitizedPath = path.trim().replace('\\', '/').replaceFirst("^/+", "");
-        Path resolvedPath = mountPath.resolve(sanitizedPath).normalize();
+        Path requestedPath = Paths.get(path.trim().replace('\\', '/'));
+        if (requestedPath.isAbsolute()) {
+            requestedPath = requestedPath.subpath(0, requestedPath.getNameCount());
+        }
+        Path resolvedPath = mountPath.resolve(requestedPath.normalize()).normalize();
         if (!resolvedPath.startsWith(mountPath)) {
             throw new IllegalArgumentException("Backup path must stay within the volume");
         }

@@ -169,6 +169,9 @@ class VolumeControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(500))
                 .andExpect(jsonPath("$.message").value("Source volume does not exist: source-data"))
                 .andExpect(jsonPath("$.data.status").value("failed"));
+
+        verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        verify(dockerClientUtil).clearCurrentHost();
     }
 
     private InspectVolumeResponse createVolume(String name, String mountpoint, String... rawPairs) {

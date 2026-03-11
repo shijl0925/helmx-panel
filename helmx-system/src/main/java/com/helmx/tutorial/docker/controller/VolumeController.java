@@ -19,7 +19,10 @@ import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
 
 import java.io.InputStream;
-import java.util.*;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -220,17 +223,20 @@ public class VolumeController {
     public ResponseEntity<Result> cloneDockerVolume(@Valid @RequestBody VolumeCloneRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
+        try {
+            Map<String, Object> result = dockerClientUtil.cloneVolume(
+                    criteria.getSourceName(), criteria.getTargetName(), criteria.getDriver());
+            String status = (String) result.get("status");
+            String message = (String) result.get("message");
 
-        Map<String, Object> result = dockerClientUtil.cloneVolume(
-                criteria.getSourceName(), criteria.getTargetName(), criteria.getDriver());
-        String status = (String) result.get("status");
-        String message = (String) result.get("message");
-
-        if ("success".equals(status)) {
-            return ResponseUtil.success(message, result);
-        } else {
-            log.error("Clone volume failed: {}", message);
-            return ResponseUtil.failed(500, result, message);
+            if ("success".equals(status)) {
+                return ResponseUtil.success(message, result);
+            } else {
+                log.error("Clone volume failed: {}", message);
+                return ResponseUtil.failed(500, result, message);
+            }
+        } finally {
+            dockerClientUtil.clearCurrentHost();
         }
     }
 }
