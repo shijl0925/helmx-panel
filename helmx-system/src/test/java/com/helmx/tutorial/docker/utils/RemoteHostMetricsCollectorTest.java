@@ -1,12 +1,20 @@
 package com.helmx.tutorial.docker.utils;
 
+import com.helmx.tutorial.docker.entity.DockerEnv;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
+
+import net.schmizz.sshj.SSHClient;
 
 class RemoteHostMetricsCollectorTest {
 
@@ -38,5 +46,36 @@ class RemoteHostMetricsCollectorTest {
         assertEquals(0D, metrics.get("hostCpuUsage"));
         assertEquals("0B", metrics.get("hostMemoryTotal"));
         assertEquals("0B", metrics.get("hostDiskTotal"));
+    }
+
+    @Test
+    void authenticate_withPassword_usesPasswordAuthentication() throws Exception {
+        PasswordUtil passwordUtil = mock(PasswordUtil.class);
+        ReflectionTestUtils.setField(collector, "passwordUtil", passwordUtil);
+        SSHClient sshClient = mock(SSHClient.class);
+        DockerEnv dockerEnv = new DockerEnv();
+        dockerEnv.setSshUsername("root");
+        dockerEnv.setSshPassword("encrypted");
+        when(passwordUtil.decrypt("encrypted")).thenReturn("plain-secret");
+
+        collector.authenticate(sshClient, dockerEnv);
+
+        verify(passwordUtil).decrypt("encrypted");
+        verify(sshClient).authPassword("root", "plain-secret");
+        verifyNoMoreInteractions(sshClient);
+    }
+
+    @Test
+    void authenticate_withoutPassword_usesPublicKeyAuthentication() throws Exception {
+        ReflectionTestUtils.setField(collector, "passwordUtil", mock(PasswordUtil.class));
+        SSHClient sshClient = mock(SSHClient.class);
+        DockerEnv dockerEnv = new DockerEnv();
+        dockerEnv.setSshUsername("root");
+        dockerEnv.setSshPassword(null);
+
+        collector.authenticate(sshClient, dockerEnv);
+
+        verify(sshClient).authPublickey("root");
+        verifyNoMoreInteractions(sshClient);
     }
 }

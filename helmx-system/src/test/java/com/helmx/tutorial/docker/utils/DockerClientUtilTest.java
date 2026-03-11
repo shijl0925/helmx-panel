@@ -145,6 +145,37 @@ class DockerClientUtilTest {
         assertEquals(remoteMetrics, metrics);
     }
 
+    @Test
+    void loadHostResourceUsage_remoteDockerHostWithPublicKeySshConfig_returnsRemoteMetrics() {
+        dockerClientUtil.setCurrentHost("tcp://192.0.2.11:2375");
+        DockerEnv dockerEnv = new DockerEnv();
+        dockerEnv.setHost("tcp://192.0.2.11:2375");
+        dockerEnv.setStatus(1);
+        dockerEnv.setSshEnabled(true);
+        dockerEnv.setSshPort(22);
+        dockerEnv.setSshUsername("root");
+        dockerEnv.setSshPassword(null);
+        dockerEnv.setSshHostKeyFingerprint("SHA256:example");
+
+        Map<String, Object> remoteMetrics = Map.of(
+                "hostMetricsAvailable", true,
+                "hostCpuUsage", 18.5D,
+                "hostMemoryUsage", 28.8D,
+                "hostMemoryUsed", "1.80 GB",
+                "hostMemoryTotal", "6.25 GB",
+                "hostDiskUsage", 31.2D,
+                "hostDiskUsed", "8.00 GB",
+                "hostDiskTotal", "25.64 GB"
+        );
+
+        when(dockerEnvMapper.selectOne(any())).thenReturn(dockerEnv);
+        when(remoteHostMetricsCollector.collect("tcp://192.0.2.11:2375", dockerEnv)).thenReturn(remoteMetrics);
+
+        Map<String, Object> metrics = dockerClientUtil.loadHostResourceUsage();
+
+        assertEquals(remoteMetrics, metrics);
+    }
+
     private double getMetricAsDouble(Map<String, Object> metrics, String key) {
         return ((Number) metrics.get(key)).doubleValue();
     }

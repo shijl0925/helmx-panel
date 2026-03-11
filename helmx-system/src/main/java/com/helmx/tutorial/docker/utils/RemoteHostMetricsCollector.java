@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.schmizz.sshj.SSHClient;
 import net.schmizz.sshj.connection.channel.direct.Session;
 import net.schmizz.sshj.transport.verification.FingerprintVerifier;
+import net.schmizz.sshj.userauth.UserAuthException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -59,7 +60,7 @@ public class RemoteHostMetricsCollector {
             sshClient.setConnectTimeout(sshTimeoutSeconds * 1000);
             sshClient.setTimeout(sshTimeoutSeconds * 1000);
             sshClient.connect(sshHost, dockerEnv.getSshPort());
-            sshClient.authPassword(dockerEnv.getSshUsername(), passwordUtil.decrypt(dockerEnv.getSshPassword()));
+            authenticate(sshClient, dockerEnv);
 
             try (Session session = sshClient.startSession();
                  Session.Command command = session.exec(REMOTE_METRICS_COMMAND)) {
@@ -123,8 +124,21 @@ public class RemoteHostMetricsCollector {
                 && Boolean.TRUE.equals(dockerEnv.getSshEnabled())
                 && dockerEnv.getSshPort() != null
                 && dockerEnv.getSshUsername() != null && !dockerEnv.getSshUsername().isBlank()
-                && dockerEnv.getSshPassword() != null && !dockerEnv.getSshPassword().isBlank()
                 && dockerEnv.getSshHostKeyFingerprint() != null && !dockerEnv.getSshHostKeyFingerprint().isBlank();
+    }
+
+    void authenticate(SSHClient sshClient, DockerEnv dockerEnv) throws IOException {
+        String sshPassword = dockerEnv.getSshPassword();
+        if (sshPassword != null && !sshPassword.isBlank()) {
+            sshClient.authPassword(dockerEnv.getSshUsername(), passwordUtil.decrypt(sshPassword));
+            return;
+        }
+
+        try {
+            sshClient.authPublickey(dockerEnv.getSshUsername());
+        } catch (UserAuthException ex) {
+            throw new IOException("SSH public key authentication failed for user " + dockerEnv.getSshUsername(), ex);
+        }
     }
 
     private String resolveSshHost(String dockerHost) {

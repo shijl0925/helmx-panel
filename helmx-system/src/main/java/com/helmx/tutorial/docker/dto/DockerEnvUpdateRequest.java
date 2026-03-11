@@ -31,7 +31,7 @@ public class DockerEnvUpdateRequest {
     @ApiModelProperty(value = "SSH用户名")
     private String sshUsername;
 
-    @ApiModelProperty(value = "SSH密码")
+    @ApiModelProperty(value = "SSH密码，可选；留空时尝试使用后端主机已有的SSH私钥")
     private String sshPassword;
 
     @ApiModelProperty(value = "SSH主机指纹")
