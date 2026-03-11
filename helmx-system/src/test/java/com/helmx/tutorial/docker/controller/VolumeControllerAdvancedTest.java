@@ -11,6 +11,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import org.springframework.test.web.servlet.MvcResult;
+
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.HashMap;
@@ -21,6 +23,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -47,7 +50,7 @@ class VolumeControllerAdvancedTest {
         InputStream tarStream = new ByteArrayInputStream(tarBytes);
         when(dockerClientUtil.backupVolume("mydata", "/")).thenReturn(tarStream);
 
-        mockMvc.perform(post("/api/v1/ops/volumes/backup")
+        MvcResult asyncResult = mockMvc.perform(post("/api/v1/ops/volumes/backup")
                         .contentType(APPLICATION_JSON)
                         .content("""
                                 {
@@ -56,6 +59,10 @@ class VolumeControllerAdvancedTest {
                                   "path": "/"
                                 }
                                 """))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(asyncResult))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", "attachment; filename=\"mydata-backup.tar\""))
                 .andExpect(header().string("Content-Type", MediaType.APPLICATION_OCTET_STREAM_VALUE))
@@ -71,7 +78,7 @@ class VolumeControllerAdvancedTest {
         InputStream tarStream = new ByteArrayInputStream(tarBytes);
         when(dockerClientUtil.backupVolume(eq("logs"), any())).thenReturn(tarStream);
 
-        mockMvc.perform(post("/api/v1/ops/volumes/backup")
+        MvcResult asyncResult = mockMvc.perform(post("/api/v1/ops/volumes/backup")
                         .contentType(APPLICATION_JSON)
                         .content("""
                                 {
@@ -79,6 +86,10 @@ class VolumeControllerAdvancedTest {
                                   "name": "logs"
                                 }
                                 """))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(asyncResult))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", "attachment; filename=\"logs-backup.tar\""));
 
