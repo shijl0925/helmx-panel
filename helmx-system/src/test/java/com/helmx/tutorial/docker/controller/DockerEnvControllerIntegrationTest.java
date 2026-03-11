@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.helmx.tutorial.docker.entity.DockerEnv;
 import com.helmx.tutorial.docker.mapper.DockerEnvMapper;
 import com.helmx.tutorial.docker.service.DockerEnvService;
+import com.helmx.tutorial.docker.utils.PasswordUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +38,9 @@ class DockerEnvControllerIntegrationTest {
     @Mock
     private DockerEnvMapper dockerEnvMapper;
 
+    @Mock
+    private PasswordUtil passwordUtil;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -44,6 +48,7 @@ class DockerEnvControllerIntegrationTest {
         DockerEnvController controller = new DockerEnvController();
         ReflectionTestUtils.setField(controller, "dockerEnvService", dockerEnvService);
         ReflectionTestUtils.setField(controller, "dockerEnvMapper", dockerEnvMapper);
+        ReflectionTestUtils.setField(controller, "passwordUtil", passwordUtil);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
@@ -86,6 +91,7 @@ class DockerEnvControllerIntegrationTest {
     @Test
     void createDockerEnv_persistsTlsVerifyAndDefaultRemark() throws Exception {
         when(dockerEnvMapper.exists(any())).thenReturn(false);
+        when(passwordUtil.encrypt("secret")).thenReturn("encrypted-secret");
         doAnswer(invocation -> {
             DockerEnv env = invocation.getArgument(0);
             env.setId(9L);
@@ -98,7 +104,12 @@ class DockerEnvControllerIntegrationTest {
                                 {
                                   "name": "dev",
                                   "host": "tcp://dev:2376",
-                                  "tlsVerify": true
+                                  "tlsVerify": true,
+                                  "sshEnabled": true,
+                                  "sshPort": 2222,
+                                  "sshUsername": "root",
+                                  "sshPassword": "secret",
+                                  "sshHostKeyFingerprint": "SHA256:host"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -106,12 +117,21 @@ class DockerEnvControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.id").value(9))
                 .andExpect(jsonPath("$.data.name").value("dev"))
                 .andExpect(jsonPath("$.data.tlsVerify").value(true))
-                .andExpect(jsonPath("$.data.remark").value(""));
+                .andExpect(jsonPath("$.data.remark").value(""))
+                .andExpect(jsonPath("$.data.sshEnabled").value(true))
+                .andExpect(jsonPath("$.data.sshPort").value(2222))
+                .andExpect(jsonPath("$.data.sshUsername").value("root"))
+                .andExpect(jsonPath("$.data.sshPasswordConfigured").value(true));
 
         ArgumentCaptor<DockerEnv> captor = ArgumentCaptor.forClass(DockerEnv.class);
         verify(dockerEnvMapper).insert(captor.capture());
         assertEquals(true, captor.getValue().getTlsVerify());
         assertEquals("", captor.getValue().getRemark());
+        assertEquals(true, captor.getValue().getSshEnabled());
+        assertEquals(2222, captor.getValue().getSshPort());
+        assertEquals("root", captor.getValue().getSshUsername());
+        assertEquals("encrypted-secret", captor.getValue().getSshPassword());
+        assertEquals("SHA256:host", captor.getValue().getSshHostKeyFingerprint());
     }
 
     @Test
@@ -138,6 +158,11 @@ class DockerEnvControllerIntegrationTest {
         env.setHost(host);
         env.setStatus(status);
         env.setTlsVerify(tlsVerify);
+        env.setSshEnabled(true);
+        env.setSshPort(22);
+        env.setSshUsername("root");
+        env.setSshPassword("encrypted");
+        env.setSshHostKeyFingerprint("SHA256:host");
         return env;
     }
 }

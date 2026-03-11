@@ -12,6 +12,8 @@ import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.core.InvocationBuilder;
 import com.alibaba.fastjson2.JSONObject;
 import com.helmx.tutorial.docker.entity.Registry;
+import com.helmx.tutorial.docker.entity.DockerEnv;
+import com.helmx.tutorial.docker.mapper.DockerEnvMapper;
 import com.helmx.tutorial.docker.mapper.RegistryMapper;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -75,6 +77,12 @@ public class DockerClientUtil {
 
     @Autowired
     private DockerHostValidator dockerHostValidator;
+
+    @Autowired
+    private DockerEnvMapper dockerEnvMapper;
+
+    @Autowired
+    private RemoteHostMetricsCollector remoteHostMetricsCollector;
 
     private volatile long diskMetricsLoadedAt;
     private volatile long cachedTotalDisk;
@@ -1238,8 +1246,8 @@ public class DockerClientUtil {
      *     <li>{@code hostMemoryUsed}, {@code hostMemoryTotal}, {@code hostDiskUsed}, {@code hostDiskTotal}: formatted {@link String} sizes</li>
      * </ul>
      * For local Docker hosts (for example {@code unix:///var/run/docker.sock}), the map contains live host metrics.
-     * For remote Docker hosts, the method keeps safe default values because the current backend only has direct access to
-     * the local machine's operating system metrics.
+     * For remote Docker hosts, the method tries to use the matching DockerEnv SSH settings to collect metrics from the
+     * target host; otherwise it keeps safe default values.
      */
     // package-private for focused unit tests of host metrics fallback behavior.
     Map<String, Object> loadHostResourceUsage() {
@@ -1254,10 +1262,19 @@ public class DockerClientUtil {
         hostMetrics.put("hostDiskTotal", "0B");
 
         String host = currentHost.get();
-        if (!isLocalDockerHost(host)) {
+        if (isLocalDockerHost(host)) {
+            return loadLocalHostResourceUsage(hostMetrics);
+        }
+
+        DockerEnv dockerEnv = findCurrentDockerEnv(host);
+        if (dockerEnv == null) {
             return hostMetrics;
         }
 
+        return remoteHostMetricsCollector.collect(host, dockerEnv);
+    }
+
+    private Map<String, Object> loadLocalHostResourceUsage(Map<String, Object> hostMetrics) {
         boolean metricsAvailable = false;
         java.lang.management.OperatingSystemMXBean operatingSystemMXBean = ManagementFactory.getOperatingSystemMXBean();
         // JDK 21/OpenJDK in this project exposes host CPU and memory counters via the extended OS bean.
@@ -1294,6 +1311,15 @@ public class DockerClientUtil {
 
         hostMetrics.put("hostMetricsAvailable", metricsAvailable);
         return hostMetrics;
+    }
+
+    private DockerEnv findCurrentDockerEnv(String host) {
+        if (host == null || host.isBlank()) {
+            return null;
+        }
+        QueryWrapper<DockerEnv> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("host", host).eq("status", 1).last("LIMIT 1");
+        return dockerEnvMapper.selectOne(queryWrapper);
     }
 
     private boolean isLocalDockerHost(String host) {

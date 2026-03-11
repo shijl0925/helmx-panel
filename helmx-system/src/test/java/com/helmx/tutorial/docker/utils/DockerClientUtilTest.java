@@ -1,6 +1,8 @@
 package com.helmx.tutorial.docker.utils;
 
 import com.github.dockerjava.api.DockerClient;
+import com.helmx.tutorial.docker.entity.DockerEnv;
+import com.helmx.tutorial.docker.mapper.DockerEnvMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,6 +34,12 @@ class DockerClientUtilTest {
     @Mock
     private DockerClient dockerClient;
 
+    @Mock
+    private DockerEnvMapper dockerEnvMapper;
+
+    @Mock
+    private RemoteHostMetricsCollector remoteHostMetricsCollector;
+
     private DockerClientUtil dockerClientUtil;
 
     @BeforeEach
@@ -38,6 +47,8 @@ class DockerClientUtilTest {
         dockerClientUtil = new DockerClientUtil();
         ReflectionTestUtils.setField(dockerClientUtil, "connectionManager", connectionManager);
         ReflectionTestUtils.setField(dockerClientUtil, "dockerHostValidator", dockerHostValidator);
+        ReflectionTestUtils.setField(dockerClientUtil, "dockerEnvMapper", dockerEnvMapper);
+        ReflectionTestUtils.setField(dockerClientUtil, "remoteHostMetricsCollector", remoteHostMetricsCollector);
     }
 
     @Test
@@ -101,6 +112,37 @@ class DockerClientUtilTest {
         assertEquals(0D, metrics.get("hostDiskUsage"));
         assertEquals("0B", metrics.get("hostMemoryTotal"));
         assertEquals("0B", metrics.get("hostDiskTotal"));
+    }
+
+    @Test
+    void loadHostResourceUsage_remoteDockerHostWithSshConfig_returnsRemoteMetrics() {
+        dockerClientUtil.setCurrentHost("tcp://192.0.2.10:2375");
+        DockerEnv dockerEnv = new DockerEnv();
+        dockerEnv.setHost("tcp://192.0.2.10:2375");
+        dockerEnv.setStatus(1);
+        dockerEnv.setSshEnabled(true);
+        dockerEnv.setSshPort(22);
+        dockerEnv.setSshUsername("root");
+        dockerEnv.setSshPassword("encrypted");
+        dockerEnv.setSshHostKeyFingerprint("SHA256:example");
+
+        Map<String, Object> remoteMetrics = Map.of(
+                "hostMetricsAvailable", true,
+                "hostCpuUsage", 22.5D,
+                "hostMemoryUsage", 33.3D,
+                "hostMemoryUsed", "2.00 GB",
+                "hostMemoryTotal", "6.00 GB",
+                "hostDiskUsage", 44.4D,
+                "hostDiskUsed", "10.00 GB",
+                "hostDiskTotal", "20.00 GB"
+        );
+
+        when(dockerEnvMapper.selectOne(any())).thenReturn(dockerEnv);
+        when(remoteHostMetricsCollector.collect("tcp://192.0.2.10:2375", dockerEnv)).thenReturn(remoteMetrics);
+
+        Map<String, Object> metrics = dockerClientUtil.loadHostResourceUsage();
+
+        assertEquals(remoteMetrics, metrics);
     }
 
     private double getMetricAsDouble(Map<String, Object> metrics, String key) {
