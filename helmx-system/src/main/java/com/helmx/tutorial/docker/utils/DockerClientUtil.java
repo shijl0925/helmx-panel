@@ -330,6 +330,7 @@ public class DockerClientUtil {
     private static final int LOG_RETAIN_SIZE_BYTES = 524288; // 512KB
 
     // Constants for temporary volume operations
+    private static final String VOLUME_HELPER_IMAGE = "busybox:latest";
     private static final String VOLUME_BACKUP_MOUNT_PATH = "/backup-data";
     private static final String VOLUME_BACKUP_CONTAINER_PREFIX = "helmx-backup-";
     private static final String VOLUME_CLONE_SRC_MOUNT = "/source";
@@ -2863,6 +2864,26 @@ public class DockerClientUtil {
     }
 
     /**
+     * 确保卷操作所需的辅助镜像可用，如本地不存在则同步拉取
+     */
+    private void ensureVolumeHelperImage(DockerClient client) {
+        if (isImageExists(client, VOLUME_HELPER_IMAGE)) {
+            return;
+        }
+        log.info("Helper image {} not found locally, pulling...", VOLUME_HELPER_IMAGE);
+        try (PullImageCmd cmd = client.pullImageCmd(VOLUME_HELPER_IMAGE)) {
+            cmd.exec(new PullImageResultCallback()).awaitCompletion();
+            log.info("Helper image {} pulled successfully", VOLUME_HELPER_IMAGE);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while pulling helper image: " + VOLUME_HELPER_IMAGE, e);
+        } catch (Exception e) {
+            log.error("Failed to pull helper image {}: {}", VOLUME_HELPER_IMAGE, e.getMessage());
+            throw new RuntimeException("Failed to pull helper image: " + VOLUME_HELPER_IMAGE, e);
+        }
+    }
+
+    /**
      * 备份存储卷：通过临时容器将卷内容导出为 TAR 流
      */
     public InputStream backupVolume(String volumeName, String path) {
@@ -2870,11 +2891,13 @@ public class DockerClientUtil {
         String backupPath = (path == null || path.isBlank()) ? "/" : path;
         String containerName = VOLUME_BACKUP_CONTAINER_PREFIX + volumeName + "-" + System.currentTimeMillis();
 
+        ensureVolumeHelperImage(client);
+
         Volume vol = new Volume(VOLUME_BACKUP_MOUNT_PATH);
         Bind bind = new Bind(volumeName, vol);
 
         String containerId;
-        try (CreateContainerCmd cmd = client.createContainerCmd("busybox")
+        try (CreateContainerCmd cmd = client.createContainerCmd(VOLUME_HELPER_IMAGE)
                 .withName(containerName)
                 .withCmd("true")
                 .withHostConfig(HostConfig.newHostConfig().withBinds(bind))) {
@@ -2931,9 +2954,11 @@ public class DockerClientUtil {
         Bind srcBind = new Bind(sourceName, srcVol);
         Bind dstBind = new Bind(targetName, dstVol);
 
+        ensureVolumeHelperImage(client);
+
         String containerId = null;
         try {
-            try (CreateContainerCmd cmd = client.createContainerCmd("busybox")
+            try (CreateContainerCmd cmd = client.createContainerCmd(VOLUME_HELPER_IMAGE)
                     .withName(containerName)
                     .withCmd("sh", "-c", "cp -a " + VOLUME_CLONE_SRC_MOUNT + "/. " + VOLUME_CLONE_DST_MOUNT + "/")
                     .withHostConfig(HostConfig.newHostConfig().withBinds(srcBind, dstBind))) {
