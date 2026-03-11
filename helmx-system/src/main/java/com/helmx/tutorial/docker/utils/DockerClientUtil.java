@@ -25,8 +25,14 @@ import org.springframework.web.multipart.MultipartFile;
 import com.helmx.tutorial.docker.utils.GitUtil;
 
 import java.io.*;
+import java.lang.management.ManagementFactory;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileStore;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -1207,7 +1213,114 @@ public class DockerClientUtil {
             result.put("dead", dead);
         }
 
+        result.putAll(loadHostResourceUsage());
         return result;
+    }
+
+    Map<String, Object> loadHostResourceUsage() {
+        Map<String, Object> hostMetrics = new HashMap<>();
+        hostMetrics.put("hostMetricsAvailable", false);
+        hostMetrics.put("hostCpuUsage", 0D);
+        hostMetrics.put("hostMemoryUsage", 0D);
+        hostMetrics.put("hostMemoryUsed", "0B");
+        hostMetrics.put("hostMemoryTotal", "0B");
+        hostMetrics.put("hostDiskUsage", 0D);
+        hostMetrics.put("hostDiskUsed", "0B");
+        hostMetrics.put("hostDiskTotal", "0B");
+
+        String host = currentHost.get();
+        if (!isLocalDockerHost(host)) {
+            return hostMetrics;
+        }
+
+        com.sun.management.OperatingSystemMXBean operatingSystemMXBean =
+                ManagementFactory.getPlatformMXBean(com.sun.management.OperatingSystemMXBean.class);
+        if (operatingSystemMXBean != null) {
+            double cpuLoad = operatingSystemMXBean.getCpuLoad();
+            if (cpuLoad >= 0) {
+                hostMetrics.put("hostCpuUsage", toPercentage(cpuLoad));
+            }
+
+            long totalMemory = operatingSystemMXBean.getTotalMemorySize();
+            long freeMemory = operatingSystemMXBean.getFreeMemorySize();
+            if (totalMemory > 0 && freeMemory >= 0) {
+                long usedMemory = Math.max(totalMemory - freeMemory, 0);
+                hostMetrics.put("hostMemoryUsage", toPercentage((double) usedMemory / totalMemory));
+                hostMetrics.put("hostMemoryUsed", ByteUtils.formatBytes(usedMemory));
+                hostMetrics.put("hostMemoryTotal", ByteUtils.formatBytes(totalMemory));
+            }
+        }
+
+        long totalDisk = 0;
+        long usableDisk = 0;
+        try {
+            for (FileStore fileStore : FileSystems.getDefault().getFileStores()) {
+                long fileStoreTotal = fileStore.getTotalSpace();
+                if (fileStoreTotal <= 0) {
+                    continue;
+                }
+                totalDisk += fileStoreTotal;
+                usableDisk += Math.max(fileStore.getUsableSpace(), 0);
+            }
+        } catch (IOException e) {
+            log.warn("Failed to collect disk usage metrics", e);
+        }
+
+        if (totalDisk > 0) {
+            long usedDisk = Math.max(totalDisk - usableDisk, 0);
+            hostMetrics.put("hostDiskUsage", toPercentage((double) usedDisk / totalDisk));
+            hostMetrics.put("hostDiskUsed", ByteUtils.formatBytes(usedDisk));
+            hostMetrics.put("hostDiskTotal", ByteUtils.formatBytes(totalDisk));
+        }
+
+        hostMetrics.put("hostMetricsAvailable", true);
+        return hostMetrics;
+    }
+
+    private boolean isLocalDockerHost(String host) {
+        if (host == null || host.isBlank()) {
+            return false;
+        }
+        if (host.startsWith("unix://") || host.startsWith("npipe://")) {
+            return true;
+        }
+
+        try {
+            URI uri = URI.create(host);
+            String hostname = uri.getHost();
+            return hostname != null && isLocalAddress(hostname);
+        } catch (IllegalArgumentException ex) {
+            log.debug("Unable to parse Docker host URI: {}", host, ex);
+            return false;
+        }
+    }
+
+    private boolean isLocalAddress(String hostname) {
+        try {
+            Set<String> localAddresses = new HashSet<>();
+            Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+            while (networkInterfaces != null && networkInterfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = networkInterfaces.nextElement();
+                Enumeration<InetAddress> inetAddresses = networkInterface.getInetAddresses();
+                while (inetAddresses.hasMoreElements()) {
+                    localAddresses.add(inetAddresses.nextElement().getHostAddress());
+                }
+            }
+
+            for (InetAddress address : InetAddress.getAllByName(hostname)) {
+                if (address.isAnyLocalAddress() || address.isLoopbackAddress()
+                        || localAddresses.contains(address.getHostAddress())) {
+                    return true;
+                }
+            }
+        } catch (Exception ex) {
+            log.debug("Unable to resolve Docker host address: {}", hostname, ex);
+        }
+        return false;
+    }
+
+    private double toPercentage(double value) {
+        return Math.round(value * 10000D) / 100D;
     }
 
     /**

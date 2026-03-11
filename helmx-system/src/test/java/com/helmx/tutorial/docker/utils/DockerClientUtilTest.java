@@ -8,6 +8,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.doThrow;
@@ -65,5 +70,36 @@ class DockerClientUtilTest {
     @Test
     void getCurrentDockerClient_withoutHost_throwsIllegalStateException() {
         assertThrows(IllegalStateException.class, dockerClientUtil::getCurrentDockerClient);
+    }
+
+    @Test
+    void loadHostResourceUsage_localDockerHost_returnsUsageMetrics() {
+        dockerClientUtil.setCurrentHost("unix:///var/run/docker.sock");
+
+        Map<String, Object> metrics = dockerClientUtil.loadHostResourceUsage();
+
+        assertTrue((Boolean) metrics.get("hostMetricsAvailable"));
+        assertTrue(((Double) metrics.get("hostCpuUsage")) >= 0D);
+        assertTrue(((Double) metrics.get("hostCpuUsage")) <= 100D);
+        assertTrue(((Double) metrics.get("hostMemoryUsage")) >= 0D);
+        assertTrue(((Double) metrics.get("hostMemoryUsage")) <= 100D);
+        assertTrue(((Double) metrics.get("hostDiskUsage")) >= 0D);
+        assertTrue(((Double) metrics.get("hostDiskUsage")) <= 100D);
+        assertFalse(((String) metrics.get("hostMemoryTotal")).isBlank());
+        assertFalse(((String) metrics.get("hostDiskTotal")).isBlank());
+    }
+
+    @Test
+    void loadHostResourceUsage_remoteDockerHost_returnsUnavailableDefaults() {
+        dockerClientUtil.setCurrentHost("tcp://192.0.2.10:2375");
+
+        Map<String, Object> metrics = dockerClientUtil.loadHostResourceUsage();
+
+        assertFalse((Boolean) metrics.get("hostMetricsAvailable"));
+        assertEquals(0D, metrics.get("hostCpuUsage"));
+        assertEquals(0D, metrics.get("hostMemoryUsage"));
+        assertEquals(0D, metrics.get("hostDiskUsage"));
+        assertEquals("0B", metrics.get("hostMemoryTotal"));
+        assertEquals("0B", metrics.get("hostDiskTotal"));
     }
 }
