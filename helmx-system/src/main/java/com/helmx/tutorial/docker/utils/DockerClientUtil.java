@@ -1228,6 +1228,19 @@ public class DockerClientUtil {
         return result;
     }
 
+    /**
+     * Loads host resource metrics to enrich the System Info response.
+     * <p>
+     * Returned keys:
+     * <ul>
+     *     <li>{@code hostMetricsAvailable}: {@link Boolean}</li>
+     *     <li>{@code hostCpuUsage}, {@code hostMemoryUsage}, {@code hostDiskUsage}: {@link Double} percentages</li>
+     *     <li>{@code hostMemoryUsed}, {@code hostMemoryTotal}, {@code hostDiskUsed}, {@code hostDiskTotal}: formatted {@link String} sizes</li>
+     * </ul>
+     * For local Docker hosts (for example {@code unix:///var/run/docker.sock}), the map contains live host metrics.
+     * For remote Docker hosts, the method keeps safe default values because the current backend only has direct access to
+     * the local machine's operating system metrics.
+     */
     // package-private for focused unit tests of host metrics fallback behavior.
     Map<String, Object> loadHostResourceUsage() {
         Map<String, Object> hostMetrics = new HashMap<>();
@@ -1264,6 +1277,8 @@ public class DockerClientUtil {
                 hostMetrics.put("hostMemoryTotal", ByteUtils.formatBytes(totalMemory));
                 metricsAvailable = true;
             }
+        } else {
+            log.debug("Extended operating system metrics are not available on the current JVM implementation");
         }
 
         long[] diskMetrics = getDiskMetrics();
@@ -1331,11 +1346,12 @@ public class DockerClientUtil {
             try {
                 for (FileStore fileStore : FileSystems.getDefault().getFileStores()) {
                     long fileStoreTotal = fileStore.getTotalSpace();
-                    if (fileStoreTotal <= 0) {
+                    long fileStoreUsable = fileStore.getUsableSpace();
+                    if (fileStoreTotal <= 0 && fileStoreUsable <= 0) {
                         continue;
                     }
                     totalDisk += fileStoreTotal;
-                    usableDisk += Math.max(fileStore.getUsableSpace(), 0);
+                    usableDisk += fileStoreUsable;
                 }
             } catch (IOException e) {
                 log.warn("Failed to collect disk usage metrics", e);
