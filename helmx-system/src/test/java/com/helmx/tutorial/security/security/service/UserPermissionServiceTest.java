@@ -135,6 +135,13 @@ class UserPermissionServiceTest {
                 .getDeclaredConstructor(Object.class, long.class);
         cacheEntryCtor.setAccessible(true);
 
+        // Obtain the evictionLock used by the production code so the test can hold it
+        // across evictIfNeeded + cache.put, matching getCachedValue's atomic guarantee.
+        java.lang.reflect.Field evictionLockField =
+                UserPermissionService.class.getDeclaredField("evictionLock");
+        evictionLockField.setAccessible(true);
+        Object evictionLock = evictionLockField.get(service);
+
         CountDownLatch removeStarted = new CountDownLatch(2);
         AtomicInteger removeCalls = new AtomicInteger();
         CoordinatedCache<Long, Object> cache = new CoordinatedCache<>(removeStarted, removeCalls);
@@ -142,8 +149,8 @@ class UserPermissionServiceTest {
 
         cache.put(0L, cacheEntryCtor.newInstance(Set.of("seed"), now + 10_000));
 
-        Runnable firstWrite = () -> runConcurrentEvictionWrite(service, evictIfNeeded, cacheEntryCtor, cache, now, 1L, "A");
-        Runnable secondWrite = () -> runConcurrentEvictionWrite(service, evictIfNeeded, cacheEntryCtor, cache, now, 2L, "B");
+        Runnable firstWrite = () -> runConcurrentEvictionWrite(service, evictIfNeeded, cacheEntryCtor, cache, now, 1L, "A", evictionLock);
+        Runnable secondWrite = () -> runConcurrentEvictionWrite(service, evictIfNeeded, cacheEntryCtor, cache, now, 2L, "B", evictionLock);
 
         Thread threadA = new Thread(firstWrite, "permission-evict-a");
         Thread threadB = new Thread(secondWrite, "permission-evict-b");
@@ -207,11 +214,16 @@ class UserPermissionServiceTest {
             ConcurrentHashMap<Long, Object> cache,
             long now,
             long userId,
-            String permission
+            String permission,
+            Object evictionLock
     ) {
         assertDoesNotThrow(() -> {
-            evictIfNeeded.invoke(service, cache, now);
-            cache.put(userId, cacheEntryCtor.newInstance(Set.of(permission), now + 10_000));
+            // Mirror what getCachedValue does: hold evictionLock across eviction AND put
+            // so that no other thread can observe a stale cache size between the two.
+            synchronized (evictionLock) {
+                evictIfNeeded.invoke(service, cache, now);
+                cache.put(userId, cacheEntryCtor.newInstance(Set.of(permission), now + 10_000));
+            }
         });
     }
 

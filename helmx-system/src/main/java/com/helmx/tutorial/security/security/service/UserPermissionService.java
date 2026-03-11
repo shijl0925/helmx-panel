@@ -138,25 +138,36 @@ public class UserPermissionService {
                 return refreshed.value();
             }
             T loaded = loader.load();
-            evictIfNeeded(cache, refreshedNow);
-            cache.put(userId, new CacheEntry<>(loaded, refreshedNow + cacheTtl.toMillis()));
+            // Eviction and insertion must be atomic under evictionLock so that a
+            // second thread entering evictIfNeeded (for a different user / stripe lock)
+            // always sees the newly-inserted entry and can evict it if necessary.
+            // Without this, the second thread may observe an empty cache, skip
+            // eviction, and both threads end up inserting — exceeding maxEntries.
+            synchronized (evictionLock) {
+                doEvict(cache, refreshedNow);
+                cache.put(userId, new CacheEntry<>(loaded, refreshedNow + cacheTtl.toMillis()));
+            }
             return loaded;
         }
     }
 
     private <T> void evictIfNeeded(ConcurrentHashMap<Long, CacheEntry<T>> cache, long now) {
         synchronized (evictionLock) {
-            cache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
-            int overflow = cache.size() - maxEntries + 1;
-            if (overflow <= 0) {
-                return;
-            }
-            List<Map.Entry<Long, CacheEntry<T>>> oldestEntries = cache.entrySet().stream()
-                    .sorted(Comparator.comparingLong(entry -> entry.getValue().expiresAt()))
-                    .limit(overflow)
-                    .toList();
-            oldestEntries.forEach(entry -> cache.remove(entry.getKey(), entry.getValue()));
+            doEvict(cache, now);
         }
+    }
+
+    private <T> void doEvict(ConcurrentHashMap<Long, CacheEntry<T>> cache, long now) {
+        cache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
+        int overflow = cache.size() - maxEntries + 1;
+        if (overflow <= 0) {
+            return;
+        }
+        List<Map.Entry<Long, CacheEntry<T>>> oldestEntries = cache.entrySet().stream()
+                .sorted(Comparator.comparingLong(entry -> entry.getValue().expiresAt()))
+                .limit(overflow)
+                .toList();
+        oldestEntries.forEach(entry -> cache.remove(entry.getKey(), entry.getValue()));
     }
 
     private Object lockFor(Long userId) {
