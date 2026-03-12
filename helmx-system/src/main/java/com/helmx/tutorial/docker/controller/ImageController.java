@@ -70,7 +70,7 @@ public class ImageController {
         if (name != null && !name.isEmpty()) {
             images = images.stream().filter(
                     image -> image.getId().contains(name) ||
-                            Arrays.stream(image.getRepoTags()).allMatch(tag -> tag.contains(name))
+                            Arrays.stream(image.getRepoTags()).anyMatch(tag -> tag.contains(name))
             ).toList();
         }
 

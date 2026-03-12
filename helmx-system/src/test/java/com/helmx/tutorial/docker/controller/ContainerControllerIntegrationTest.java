@@ -492,6 +492,27 @@ class ContainerControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.changes[1].path").value("/app/new.txt"));
     }
 
+    @Test
+    void renameDockerContainer_nullStatusDoesNotThrowNPE() throws Exception {
+        // Before the fix: status.equals("success") threw NPE when status was null
+        Map<String, Object> result = new HashMap<>();
+        result.put("status", null);
+        result.put("message", "backend error");
+        when(dockerClientUtil.renameContainer(any())).thenReturn(result);
+
+        mockMvc.perform(post("/api/v1/ops/containers/rename")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1",
+                                  "newName": "renamed-app"
+                                }
+                                """))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value(500));
+    }
+
     private Container createContainer(String id, String name, long created, String state, String image, String imageId) {
         Container container = new Container();
         ReflectionTestUtils.setField(container, "id", id);

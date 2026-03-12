@@ -540,6 +540,35 @@ class ImageControllerIntegrationTest {
     }
 
     @Test
+    void searchDockerImages_multipleTagsUsesAnyMatchSemantics() throws Exception {
+        // Bug fix: was using allMatch instead of anyMatch.
+        // Image has TWO tags: "nginx:latest" and "nginx:1.23".
+        // Searching for "latest" should still match because at least one tag contains it.
+        Image multiTagImage = createImage("sha256:nginx", new String[]{"nginx:latest", "nginx:1.23"}, 2048L, 5L);
+        Container runningContainer = new Container();
+        ReflectionTestUtils.setField(runningContainer, "imageId", "sha256:nginx");
+        when(dockerClientUtil.listImages()).thenReturn(List.of(multiTagImage));
+        when(dockerClientUtil.listContainers()).thenReturn(List.of(runningContainer));
+
+        // "latest" only matches one of the two tags → allMatch returns false (bug),
+        // anyMatch returns true (correct)
+        mockMvc.perform(post("/api/v1/ops/images/search")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "name": "latest",
+                                  "page": 1,
+                                  "pageSize": 10
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value("nginx"));
+    }
+
+    @Test
     void searchDockerHubImages_usesDefaultLimitWhenNotSpecified() throws Exception {
         when(dockerClientUtil.searchImagesOnHub("redis", 25)).thenReturn(List.of());
 

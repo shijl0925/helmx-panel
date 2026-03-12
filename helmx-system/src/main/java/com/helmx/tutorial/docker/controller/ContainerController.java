@@ -477,7 +477,7 @@ public class ContainerController {
         String status = (String) result.get("status");
         String message = (String) result.remove("message");
 
-        if (status.equals("success")) {
+        if ("success".equals(status)) {
             return ResponseUtil.success(message, result);
         } else {
             return ResponseUtil.failed(500, result, message);

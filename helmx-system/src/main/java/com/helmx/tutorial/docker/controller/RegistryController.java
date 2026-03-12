@@ -86,6 +86,9 @@ public class RegistryController {
         }
         registryMapper.insert(registry);
 
+        // Redact sensitive credentials before responding
+        registry.setPassword(null);
+
         return ResponseUtil.success(registry);
     }
 
@@ -204,7 +207,7 @@ public class RegistryController {
             registry.setAuth(true);
             registry.setUsername(request.getUsername());
             registry.setPassword(passwordUtil.encrypt(request.getPassword()));
-        } else {
+        } else if (Boolean.FALSE.equals(request.getAuth())) {
             registry.setAuth(false);
             registry.setUsername(null);
             registry.setPassword(null);
