@@ -113,6 +113,45 @@ class VolumeControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("failed"));
     }
 
+    @Test
+    void createDockerVolume_nullStatusInResult_doesNotThrowNPE() throws Exception {
+        // Before the fix, status.equals("success") threw NPE when status was null
+        Map<String, Object> result = new HashMap<>();
+        result.put("status", null);
+        result.put("message", "unexpected null status");
+        when(dockerClientUtil.createVolume(any())).thenReturn(result);
+
+        mockMvc.perform(post("/api/v1/ops/volumes")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "name": "null-status-vol"
+                                }
+                                """))
+                .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    void removeDockerVolume_nullStatusInResult_doesNotThrowNPE() throws Exception {
+        // Before the fix, removeVolumeResult.get("status").equals("failed") threw NPE
+        // when the status key was null
+        Map<String, Object> nullStatusResult = new HashMap<>();
+        nullStatusResult.put("status", null);
+        when(dockerClientUtil.removeVolume("orphan")).thenReturn(nullStatusResult);
+
+        mockMvc.perform(post("/api/v1/ops/volumes/remove")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "names": ["orphan"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
     private InspectVolumeResponse createVolume(String name, String mountpoint, String... rawPairs) {
         InspectVolumeResponse volume = new InspectVolumeResponse();
         ReflectionTestUtils.setField(volume, "name", name);

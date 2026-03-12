@@ -126,6 +126,6 @@ public class HomeController {
             default -> "";
         };
         log.info("Checking permission for user {} and prune type {}, Permission: {}", userId, pruneType, permission);
-        return !pruneType.isEmpty() && userPermissionService.hasPermission(userId, permission);
+        return !permission.isEmpty() && userPermissionService.hasPermission(userId, permission);
     }
 }

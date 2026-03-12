@@ -220,4 +220,78 @@ class RegistryControllerTest {
         assertEquals("admin", existing.getUsername());
         assertEquals("encrypted", existing.getPassword());
     }
+
+    @Test
+    void createRegistry_passwordRedactedInResponse() {
+        // Bug fix: the create endpoint was returning the encrypted password in the response.
+        RegistryCreateRequest request = new RegistryCreateRequest();
+        request.setName("PrivateReg");
+        request.setUrl("https://private.example.com");
+        request.setAuth(true);
+        request.setUsername("admin");
+        request.setPassword("secret123");
+
+        when(registryMapper.exists(any())).thenReturn(false);
+        when(passwordUtil.encrypt("secret123")).thenReturn("encrypted-secret");
+
+        ResponseEntity<Result> response = registryController.CreateRegistry(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        Registry result = (Registry) response.getBody().getData();
+        assertNull(result.getPassword(), "Password must be redacted (null) in the response");
+    }
+
+    @Test
+    void updateRegistry_nullAuthPreservesExistingCredentials() {
+        // Bug fix: else branch was too broad – when auth is null the credentials were incorrectly wiped.
+        Registry existing = new Registry();
+        existing.setName("MyReg");
+        existing.setUrl("https://registry.example.com");
+        existing.setAuth(true);
+        existing.setUsername("admin");
+        existing.setPassword("encrypted-pw");
+
+        when(registryMapper.selectById(1L)).thenReturn(existing);
+
+        RegistryCreateRequest request = new RegistryCreateRequest();
+        request.setName("UpdatedName");
+        // auth is intentionally left null – partial update, not touching credentials
+
+        ResponseEntity<Result> response = registryController.UpdateRegistryById(1L, request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        Registry result = (Registry) response.getBody().getData();
+        assertEquals("UpdatedName", result.getName());
+        // Credentials must be untouched because auth was null in the request
+        assertTrue(result.getAuth(), "Auth flag must remain true");
+        assertEquals("admin", result.getUsername(), "Username must not be cleared on partial update");
+        // password is always redacted from the response
+        assertNull(result.getPassword());
+    }
+
+    @Test
+    void updateRegistry_explicitFalseAuthClearsCredentials() {
+        // When auth is explicitly set to false, credentials should be cleared.
+        Registry existing = new Registry();
+        existing.setName("MyReg");
+        existing.setUrl("https://registry.example.com");
+        existing.setAuth(true);
+        existing.setUsername("admin");
+        existing.setPassword("encrypted-pw");
+
+        when(registryMapper.selectById(2L)).thenReturn(existing);
+
+        RegistryCreateRequest request = new RegistryCreateRequest();
+        request.setName("MyReg");
+        request.setAuth(false);
+
+        ResponseEntity<Result> response = registryController.UpdateRegistryById(2L, request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        Registry result = (Registry) response.getBody().getData();
+        assertFalse(result.getAuth(), "Auth flag must be set to false");
+        assertNull(result.getUsername(), "Username must be cleared when auth is explicitly false");
+        assertNull(result.getPassword(), "Password must be cleared when auth is explicitly false");
+    }
 }

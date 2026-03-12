@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
+import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -67,6 +68,16 @@ class PasswordUtilTest {
         assertFalse(key.isBlank());
         // A 128-bit AES key base64-encoded is 24 characters
         assertTrue(key.length() >= 20);
+    }
+
+    @Test
+    void decrypt_tooShortCiphertext_throwsRuntimeException() {
+        // A Base64-encoded string that decodes to fewer than 16 bytes cannot contain a valid IV.
+        // Before the fix this caused a NegativeArraySizeException; after the fix a clear
+        // RuntimeException("decrypt failed") is thrown instead.
+        String shortCipherText = Base64.getEncoder().encodeToString(new byte[8]); // only 8 bytes
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> passwordUtil.decrypt(shortCipherText));
+        assertEquals("decrypt failed", ex.getMessage());
     }
 
     @Test
