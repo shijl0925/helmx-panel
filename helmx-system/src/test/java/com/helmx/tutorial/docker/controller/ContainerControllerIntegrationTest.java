@@ -174,9 +174,9 @@ class ContainerControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.cpuPercent").value(100.0))
-                .andExpect(jsonPath("$.data.memoryUsage").value("512 B"))
+                .andExpect(jsonPath("$.data.memoryUsage").value("384 B"))
                 .andExpect(jsonPath("$.data.memoryLimit").value("1.00 KB"))
-                .andExpect(jsonPath("$.data.memoryPercent").value(50.0));
+                .andExpect(jsonPath("$.data.memoryPercent").value(37.5));
     }
 
     @Test

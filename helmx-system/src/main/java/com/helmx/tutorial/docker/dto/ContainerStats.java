@@ -13,11 +13,10 @@ public class ContainerStats {
     private String cpuSystemUsage;
     private Integer onlineCPUs;
     private Float cpuPercent;
-    private Long perCpuUsage;
 
     private String memoryUsage;
     private String memoryLimit;
-    private Integer memoryCache;
+    private Long memoryCache;
     private Float memoryPercent;
 
     public ContainerStats(JSONObject stats) {
@@ -51,18 +50,31 @@ public class ContainerStats {
             this.cpuPercent = 0.0f;
         }
 
-        long memoryUsage = memoryStats.getLongValue("usage");
-        this.memoryUsage = ByteUtils.formatBytes(memoryUsage);
-
+        long rawMemoryUsage = memoryStats.getLongValue("usage");
         long memoryLimit = memoryStats.getLongValue("limit");
-        this.memoryLimit = ByteUtils.formatBytes(memoryLimit);
 
+        // Subtract page cache from usage to get actual process memory consumption.
+        // Docker stats API: memory_stats.usage includes page cache.
+        // cgroup v2 reports inactive_file; cgroup v1 reports cache.
+        long cacheBytes = 0L;
         JSONObject memoryStatsDetail = memoryStats.getJSONObject("stats");
         if (memoryStatsDetail != null) {
-            this.memoryCache = memoryStatsDetail.getInteger("cache");
+            // Prefer inactive_file (present in both cgroup v1 and v2) when the key exists;
+            // fall back to cache (cgroup v1 only).
+            if (memoryStatsDetail.containsKey("inactive_file")) {
+                cacheBytes = memoryStatsDetail.getLongValue("inactive_file");
+            } else if (memoryStatsDetail.containsKey("cache")) {
+                cacheBytes = memoryStatsDetail.getLongValue("cache");
+            }
+            this.memoryCache = cacheBytes;
         }
+
+        long actualMemoryUsage = Math.max(0L, rawMemoryUsage - cacheBytes);
+        this.memoryUsage = ByteUtils.formatBytes(actualMemoryUsage);
+        this.memoryLimit = ByteUtils.formatBytes(memoryLimit);
+
         if (memoryLimit != 0) {
-            this.memoryPercent = (memoryUsage * 100.0f / memoryLimit);
+            this.memoryPercent = (actualMemoryUsage * 100.0f / memoryLimit);
         } else {
             this.memoryPercent = 0.0f;
         }
