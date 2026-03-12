@@ -1448,7 +1448,11 @@ public class DockerClientUtil {
             }
         }
 
-        try (Stream<String> mounts = Files.lines(mountsPath())) {
+        Path mountsFilePath = mountsPath();
+        if (!Files.isReadable(mountsFilePath)) {
+            return null;
+        }
+        try (Stream<String> mounts = Files.lines(mountsFilePath)) {
             Optional<String> rootMount = mounts
                     .map(String::trim)
                     .filter(line -> !line.isBlank())

@@ -218,6 +218,25 @@ class DockerClientUtilTest {
     }
 
     @Test
+    void resolveRootBlockDevice_returnsNullWhenBothMountFilesAreUnavailable() {
+        DockerClientUtil macosUtil = new DockerClientUtil() {
+            @Override
+            Path mountInfoPath() {
+                return tempDir.resolve("missing-mountinfo");
+            }
+
+            @Override
+            Path mountsPath() {
+                return tempDir.resolve("missing-mounts");
+            }
+        };
+
+        String rootBlockDevice = ReflectionTestUtils.invokeMethod(macosUtil, "resolveRootBlockDevice");
+
+        assertNull(rootBlockDevice);
+    }
+
+    @Test
     void loadHostResourceUsage_remoteDockerHost_returnsUnavailableDefaults() {
         dockerClientUtil.setCurrentHost("tcp://192.0.2.10:2375");
 
