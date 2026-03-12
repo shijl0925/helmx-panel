@@ -138,26 +138,25 @@ public class UserPermissionService {
                 return refreshed.value();
             }
             T loaded = loader.load();
-            // Eviction and insertion must be atomic under evictionLock so that a
-            // second thread entering evictIfNeeded (for a different user / stripe lock)
-            // always sees the newly-inserted entry and can evict it if necessary.
-            // Without this, the second thread may observe an empty cache, skip
-            // eviction, and both threads end up inserting — exceeding maxEntries.
-            synchronized (evictionLock) {
-                doEvict(cache, refreshedNow);
-                cache.put(userId, new CacheEntry<>(loaded, refreshedNow + cacheTtl.toMillis()));
-            }
+            cacheValue(cache, userId, loaded, refreshedNow);
             return loaded;
+        }
+    }
+
+    private <T> void cacheValue(ConcurrentHashMap<Long, CacheEntry<T>> cache, Long userId, T loaded, long now) {
+        synchronized (evictionLock) {
+            evictIfNeededInternal(cache, now);
+            cache.put(userId, new CacheEntry<>(loaded, now + cacheTtl.toMillis()));
         }
     }
 
     private <T> void evictIfNeeded(ConcurrentHashMap<Long, CacheEntry<T>> cache, long now) {
         synchronized (evictionLock) {
-            doEvict(cache, now);
+            evictIfNeededInternal(cache, now);
         }
     }
 
-    private <T> void doEvict(ConcurrentHashMap<Long, CacheEntry<T>> cache, long now) {
+    private <T> void evictIfNeededInternal(ConcurrentHashMap<Long, CacheEntry<T>> cache, long now) {
         cache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
         int overflow = cache.size() - maxEntries + 1;
         if (overflow <= 0) {

@@ -27,6 +27,21 @@ public class DockerEnvDTO {
     @ApiModelProperty(value = "是否启用TLS验证")
     private Boolean tlsVerify;
 
+    @ApiModelProperty(value = "是否启用SSH远程连接")
+    private Boolean sshEnabled;
+
+    @ApiModelProperty(value = "SSH端口")
+    private Integer sshPort;
+
+    @ApiModelProperty(value = "SSH用户名")
+    private String sshUsername;
+
+    @ApiModelProperty(value = "SSH主机指纹")
+    private String sshHostKeyFingerprint;
+
+    @ApiModelProperty(value = "是否已配置SSH密码")
+    private Boolean sshPasswordConfigured;
+
     public DockerEnvDTO(DockerEnv dockerEnv) {
         this.id = dockerEnv.getId();
         this.name = dockerEnv.getName();
@@ -34,5 +49,10 @@ public class DockerEnvDTO {
         this.host = dockerEnv.getHost();
         this.status = dockerEnv.getStatus();
         this.tlsVerify = dockerEnv.getTlsVerify();
+        this.sshEnabled = dockerEnv.getSshEnabled();
+        this.sshPort = dockerEnv.getSshPort();
+        this.sshUsername = dockerEnv.getSshUsername();
+        this.sshHostKeyFingerprint = dockerEnv.getSshHostKeyFingerprint();
+        this.sshPasswordConfigured = dockerEnv.getSshPassword() != null && !dockerEnv.getSshPassword().isBlank();
     }
 }

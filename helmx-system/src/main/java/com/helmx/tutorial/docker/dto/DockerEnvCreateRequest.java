@@ -22,4 +22,19 @@ public class DockerEnvCreateRequest {
     // 新增TLS相关字段
     @ApiModelProperty(value = "是否启用TLS验证")
     private Boolean tlsVerify = false;
+
+    @ApiModelProperty(value = "是否启用SSH远程连接")
+    private Boolean sshEnabled = false;
+
+    @ApiModelProperty(value = "SSH端口")
+    private Integer sshPort = 22;
+
+    @ApiModelProperty(value = "SSH用户名")
+    private String sshUsername;
+
+    @ApiModelProperty(value = "SSH密码，可选；留空时尝试使用后端主机现有的SSH私钥")
+    private String sshPassword;
+
+    @ApiModelProperty(value = "SSH主机指纹")
+    private String sshHostKeyFingerprint;
 }

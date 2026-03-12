@@ -12,6 +12,8 @@ import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.core.InvocationBuilder;
 import com.alibaba.fastjson2.JSONObject;
 import com.helmx.tutorial.docker.entity.Registry;
+import com.helmx.tutorial.docker.entity.DockerEnv;
+import com.helmx.tutorial.docker.mapper.DockerEnvMapper;
 import com.helmx.tutorial.docker.mapper.RegistryMapper;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -25,8 +27,14 @@ import org.springframework.web.multipart.MultipartFile;
 import com.helmx.tutorial.docker.utils.GitUtil;
 
 import java.io.*;
+import java.lang.management.ManagementFactory;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileStore;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -42,6 +50,10 @@ import java.util.stream.Stream;
 @Slf4j
 @Component
 public class DockerClientUtil {
+
+    private static final long HOST_METRICS_CACHE_TTL_MILLIS = 30_000L;
+    private final Object diskMetricsLock = new Object();
+    private final Object localAddressesLock = new Object();
 
     @Autowired
     private DockerConnectionManager connectionManager;
@@ -65,6 +77,22 @@ public class DockerClientUtil {
 
     @Autowired
     private DockerHostValidator dockerHostValidator;
+
+    @Autowired
+    private DockerEnvMapper dockerEnvMapper;
+
+    @Autowired
+    private RemoteHostMetricsCollector remoteHostMetricsCollector;
+
+    private volatile long diskMetricsLoadedAt;
+    private volatile long cachedTotalDisk;
+    private volatile long cachedUsableDisk;
+    private volatile long previousDiskReadBytes;
+    private volatile long previousDiskWriteBytes;
+    private volatile long previousDiskSampleAt;
+    private volatile long localAddressesLoadedAt;
+    private volatile boolean localAddressesLoaded;
+    private volatile Set<String> cachedLocalAddresses = Set.of();
 
     // 设置当前操作的服务器
     public void setCurrentHost(String host) {
@@ -1218,7 +1246,325 @@ public class DockerClientUtil {
             result.put("dead", dead);
         }
 
+        result.putAll(loadHostResourceUsage());
         return result;
+    }
+
+    /**
+     * Loads host resource metrics to enrich the System Info response.
+     * <p>
+     * Returned keys:
+     * <ul>
+     *     <li>{@code hostMetricsAvailable}: {@link Boolean}</li>
+     *     <li>{@code hostMetricsDebug}: {@link String} explaining why metrics are unavailable or how they were collected</li>
+     *     <li>{@code hostCpuUsage}, {@code hostMemoryUsage}, {@code hostDiskUsage}: {@link Double} percentages</li>
+     *     <li>{@code hostMemoryUsed}, {@code hostMemoryTotal}, {@code hostDiskUsed}, {@code hostDiskTotal}: formatted {@link String} sizes</li>
+     *     <li>{@code DiskReadTrafficNew}, {@code WriteTrafficNew}: {@link Double} KB/s disk read/write throughput</li>
+     * </ul>
+     * For local Docker hosts (for example {@code unix:///var/run/docker.sock}), the map contains live host metrics.
+     * For remote Docker hosts, the method tries to use the matching DockerEnv SSH settings to collect metrics from the
+     * target host; otherwise it keeps safe default values.
+     */
+    // package-private for focused unit tests of host metrics fallback behavior.
+    Map<String, Object> loadHostResourceUsage() {
+        Map<String, Object> hostMetrics = new HashMap<>();
+        hostMetrics.put("hostMetricsAvailable", false);
+        hostMetrics.put("hostCpuUsage", 0D);
+        hostMetrics.put("hostMemoryUsage", 0D);
+        hostMetrics.put("hostMemoryUsed", "0B");
+        hostMetrics.put("hostMemoryTotal", "0B");
+        hostMetrics.put("hostDiskUsage", 0D);
+        hostMetrics.put("hostDiskUsed", "0B");
+        hostMetrics.put("hostDiskTotal", "0B");
+        hostMetrics.put("DiskReadTrafficNew", 0D);
+        hostMetrics.put("WriteTrafficNew", 0D);
+        hostMetrics.put("hostMetricsDebug", "Host metrics are unavailable");
+
+        String host = currentHost.get();
+        if (isLocalDockerHost(host)) {
+            return loadLocalHostResourceUsage(hostMetrics);
+        }
+
+        DockerEnv dockerEnv = findCurrentDockerEnv(host);
+        if (dockerEnv == null) {
+            hostMetrics.put("hostMetricsDebug", "Remote host metrics unavailable: no active Docker environment matched the current host");
+            return hostMetrics;
+        }
+
+        return remoteHostMetricsCollector.collect(host, dockerEnv);
+    }
+
+    private Map<String, Object> loadLocalHostResourceUsage(Map<String, Object> hostMetrics) {
+        boolean metricsAvailable = false;
+        java.lang.management.OperatingSystemMXBean operatingSystemMXBean = ManagementFactory.getOperatingSystemMXBean();
+        // This project targets Java 21 and intentionally uses the JDK/OpenJDK extended OS bean here because the
+        // standard management bean does not expose host CPU and memory usage counters with the fidelity we need.
+        if (operatingSystemMXBean instanceof com.sun.management.OperatingSystemMXBean extendedOperatingSystemMXBean) {
+            double cpuLoad = extendedOperatingSystemMXBean.getCpuLoad();
+            if (cpuLoad >= 0) {
+                hostMetrics.put("hostCpuUsage", toPercentage(cpuLoad));
+                metricsAvailable = true;
+            }
+
+            long totalMemory = extendedOperatingSystemMXBean.getTotalMemorySize();
+            long freeMemory = extendedOperatingSystemMXBean.getFreeMemorySize();
+            if (totalMemory > 0 && freeMemory >= 0) {
+                long usedMemory = Math.max(totalMemory - freeMemory, 0);
+                hostMetrics.put("hostMemoryUsage", toPercentage((double) usedMemory / totalMemory));
+                hostMetrics.put("hostMemoryUsed", ByteUtils.formatBytes(usedMemory));
+                hostMetrics.put("hostMemoryTotal", ByteUtils.formatBytes(totalMemory));
+                metricsAvailable = true;
+            }
+        } else {
+            log.debug("Extended operating system metrics are not available on the current JVM implementation");
+        }
+
+        DiskMetrics diskMetrics = getDiskMetrics();
+        long totalDisk = diskMetrics.totalDisk();
+        long usableDisk = diskMetrics.usableDisk();
+        if (totalDisk > 0) {
+            long usedDisk = Math.max(totalDisk - usableDisk, 0);
+            hostMetrics.put("hostDiskUsage", toPercentage((double) usedDisk / totalDisk));
+            hostMetrics.put("hostDiskUsed", ByteUtils.formatBytes(usedDisk));
+            hostMetrics.put("hostDiskTotal", ByteUtils.formatBytes(totalDisk));
+            metricsAvailable = true;
+        }
+        hostMetrics.put("DiskReadTrafficNew", diskMetrics.readTrafficKb());
+        hostMetrics.put("WriteTrafficNew", diskMetrics.writeTrafficKb());
+
+        hostMetrics.put("hostMetricsAvailable", metricsAvailable);
+        hostMetrics.put("hostMetricsDebug", metricsAvailable
+                ? "Local host metrics collected"
+                : "Local host metrics unavailable on the current runtime");
+        return hostMetrics;
+    }
+
+    private DockerEnv findCurrentDockerEnv(String host) {
+        if (host == null || host.isBlank()) {
+            return null;
+        }
+        QueryWrapper<DockerEnv> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("host", host).eq("status", 1).last("LIMIT 1");
+        return dockerEnvMapper.selectOne(queryWrapper);
+    }
+
+    private boolean isLocalDockerHost(String host) {
+        if (host == null || host.isBlank()) {
+            return false;
+        }
+        if (host.startsWith("unix://") || host.startsWith("npipe://")) {
+            return true;
+        }
+
+        try {
+            URI uri = URI.create(host);
+            String hostname = uri.getHost();
+            return hostname != null && isLocalAddress(hostname);
+        } catch (IllegalArgumentException ex) {
+            log.debug("Unable to parse Docker host URI: {}", host, ex);
+            return false;
+        }
+    }
+
+    private boolean isLocalAddress(String hostname) {
+        try {
+            Set<String> localAddresses = getLocalAddresses();
+            for (InetAddress address : InetAddress.getAllByName(hostname)) {
+                if (address.isAnyLocalAddress() || address.isLoopbackAddress()
+                        || localAddresses.contains(address.getHostAddress())) {
+                    return true;
+                }
+            }
+        } catch (Exception ex) {
+            log.debug("Unable to resolve Docker host address: {}", hostname, ex);
+        }
+        return false;
+    }
+
+    private DiskMetrics getDiskMetrics() {
+        synchronized (diskMetricsLock) {
+            long now = System.currentTimeMillis();
+            if (now - diskMetricsLoadedAt > HOST_METRICS_CACHE_TTL_MILLIS) {
+                try {
+                    FileStore rootFileStore = Files.getFileStore(Path.of("/"));
+                    cachedTotalDisk = rootFileStore.getTotalSpace();
+                    cachedUsableDisk = rootFileStore.getUsableSpace();
+                } catch (IOException e) {
+                    log.warn("Failed to collect root filesystem usage metrics", e);
+                    cachedTotalDisk = 0L;
+                    cachedUsableDisk = 0L;
+                }
+                diskMetricsLoadedAt = now;
+            }
+
+            double readTrafficKb = 0D;
+            double writeTrafficKb = 0D;
+            long[] diskIoCounters = readLocalDiskIoCounters();
+            long currentReadBytes = diskIoCounters[0];
+            long currentWriteBytes = diskIoCounters[1];
+            if (previousDiskSampleAt > 0 && now > previousDiskSampleAt
+                    && currentReadBytes >= previousDiskReadBytes && currentWriteBytes >= previousDiskWriteBytes) {
+                double elapsedSeconds = (now - previousDiskSampleAt) / 1000D;
+                if (elapsedSeconds > 0) {
+                    readTrafficKb = toTrafficKb(currentReadBytes - previousDiskReadBytes, elapsedSeconds);
+                    writeTrafficKb = toTrafficKb(currentWriteBytes - previousDiskWriteBytes, elapsedSeconds);
+                }
+            }
+            previousDiskReadBytes = currentReadBytes;
+            previousDiskWriteBytes = currentWriteBytes;
+            previousDiskSampleAt = now;
+
+            return new DiskMetrics(cachedTotalDisk, cachedUsableDisk, readTrafficKb, writeTrafficKb);
+        }
+    }
+
+    private long[] readLocalDiskIoCounters() {
+        try {
+            String rootBlockDevice = resolveRootBlockDevice();
+            if (rootBlockDevice == null || rootBlockDevice.isBlank()) {
+                return new long[]{0L, 0L};
+            }
+            Path statPath = Path.of("/sys/class/block", rootBlockDevice, "stat");
+            if (!Files.exists(statPath)) {
+                return new long[]{0L, 0L};
+            }
+            String[] fields = Files.readString(statPath).trim().split("\\s+");
+            if (fields.length < 7) {
+                return new long[]{0L, 0L};
+            }
+            return new long[]{parseLong(fields[2]) * 512L, parseLong(fields[6]) * 512L};
+        } catch (Exception ex) {
+            log.debug("Failed to collect local disk I/O counters", ex);
+            return new long[]{0L, 0L};
+        }
+    }
+
+    private String resolveRootBlockDevice() throws IOException {
+        String rootDeviceNumber = resolveRootDeviceNumber();
+        if (rootDeviceNumber != null && !rootDeviceNumber.isBlank()) {
+            String blockDeviceName = resolveBlockDeviceName(rootDeviceNumber);
+            if (blockDeviceName != null && !blockDeviceName.isBlank()) {
+                return blockDeviceName;
+            }
+        }
+
+        try (Stream<String> mounts = Files.lines(mountsPath())) {
+            Optional<String> rootMount = mounts
+                    .map(String::trim)
+                    .filter(line -> !line.isBlank())
+                    .map(line -> line.split("\\s+"))
+                    .filter(parts -> parts.length >= 2 && "/".equals(parts[1]))
+                    .map(parts -> parts[0])
+                    .findFirst();
+            if (rootMount.isEmpty()) {
+                return null;
+            }
+
+            String source = rootMount.get();
+            if (source.startsWith("/")) {
+                try {
+                    source = Path.of(source).toRealPath().getFileName().toString();
+                } catch (IOException ex) {
+                    source = Path.of(source).getFileName().toString();
+                }
+            }
+            return Path.of(source).getFileName().toString();
+        }
+    }
+
+    private String resolveRootDeviceNumber() throws IOException {
+        Path mountInfoPath = mountInfoPath();
+        if (!Files.isReadable(mountInfoPath)) {
+            // Trigger resolveRootBlockDevice() fallback to /proc/self/mounts when mountinfo
+            // is unavailable in the current runtime environment.
+            return null;
+        }
+        try (Stream<String> mountInfoLines = Files.lines(mountInfoPath)) {
+            return mountInfoLines
+                    .map(String::trim)
+                    .filter(line -> !line.isBlank())
+                    .map(line -> line.split("\\s+"))
+                    .filter(parts -> parts.length >= 5 && "/".equals(parts[4]))
+                    .map(parts -> parts[2])
+                    .findFirst()
+                    .orElse(null);
+        }
+    }
+
+    Path mountInfoPath() {
+        return Path.of("/proc/self/mountinfo");
+    }
+
+    Path mountsPath() {
+        return Path.of("/proc/self/mounts");
+    }
+
+    private String resolveBlockDeviceName(String deviceNumber) {
+        try {
+            Path devicePath = Path.of("/sys/dev/block", deviceNumber);
+            if (!Files.exists(devicePath)) {
+                return null;
+            }
+            return devicePath.toRealPath().getFileName().toString();
+        } catch (IOException ex) {
+            log.debug("Failed to resolve block device name for {}", deviceNumber, ex);
+            return null;
+        }
+    }
+
+    private long parseLong(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException ex) {
+            return 0L;
+        }
+    }
+
+    private double toTrafficKb(long bytesDelta, double elapsedSeconds) {
+        if (bytesDelta <= 0 || elapsedSeconds <= 0) {
+            return 0D;
+        }
+        return Math.round((bytesDelta / 1024D / elapsedSeconds) * 100D) / 100D;
+    }
+
+    private record DiskMetrics(long totalDisk, long usableDisk, double readTrafficKb, double writeTrafficKb) {
+    }
+
+    private Set<String> getLocalAddresses() {
+        long now = System.currentTimeMillis();
+        if (now - localAddressesLoadedAt <= HOST_METRICS_CACHE_TTL_MILLIS && localAddressesLoaded) {
+            return cachedLocalAddresses;
+        }
+
+        synchronized (localAddressesLock) {
+            long refreshedNow = System.currentTimeMillis();
+            if (refreshedNow - localAddressesLoadedAt <= HOST_METRICS_CACHE_TTL_MILLIS && localAddressesLoaded) {
+                return cachedLocalAddresses;
+            }
+
+            Set<String> localAddresses = new HashSet<>();
+            try {
+                Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+                while (networkInterfaces != null && networkInterfaces.hasMoreElements()) {
+                    NetworkInterface networkInterface = networkInterfaces.nextElement();
+                    Enumeration<InetAddress> inetAddresses = networkInterface.getInetAddresses();
+                    while (inetAddresses.hasMoreElements()) {
+                        localAddresses.add(inetAddresses.nextElement().getHostAddress());
+                    }
+                }
+            } catch (Exception ex) {
+                log.debug("Unable to enumerate local network interfaces", ex);
+            }
+
+            cachedLocalAddresses = Set.copyOf(localAddresses);
+            localAddressesLoadedAt = refreshedNow;
+            localAddressesLoaded = true;
+            return cachedLocalAddresses;
+        }
+    }
+
+    private double toPercentage(double value) {
+        return Math.round(value * 10000D) / 100D;
     }
 
     /**

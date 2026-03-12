@@ -61,6 +61,11 @@ CREATE TABLE IF NOT EXISTS tb_docker_env (
     host VARCHAR(64) NOT NULL,
     status INT DEFAULT 1,
     tls_verify BOOLEAN DEFAULT FALSE,
+    ssh_enabled BOOLEAN DEFAULT FALSE,
+    ssh_port INT DEFAULT 22,
+    ssh_username VARCHAR(128),
+    ssh_password VARCHAR(1024),
+    ssh_host_key_fingerprint VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

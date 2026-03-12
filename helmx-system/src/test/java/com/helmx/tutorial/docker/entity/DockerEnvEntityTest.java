@@ -15,6 +15,11 @@ class DockerEnvEntityTest {
         env.setHost("unix:///var/run/docker.sock");
         env.setStatus(1);
         env.setTlsVerify(false);
+        env.setSshEnabled(true);
+        env.setSshPort(22);
+        env.setSshUsername("root");
+        env.setSshPassword("encrypted");
+        env.setSshHostKeyFingerprint("SHA256:host");
 
         assertEquals(1L, env.getId());
         assertEquals("local", env.getName());
@@ -22,6 +27,11 @@ class DockerEnvEntityTest {
         assertEquals("unix:///var/run/docker.sock", env.getHost());
         assertEquals(1, env.getStatus());
         assertFalse(env.getTlsVerify());
+        assertTrue(env.getSshEnabled());
+        assertEquals(22, env.getSshPort());
+        assertEquals("root", env.getSshUsername());
+        assertEquals("encrypted", env.getSshPassword());
+        assertEquals("SHA256:host", env.getSshHostKeyFingerprint());
     }
 
     @Test
@@ -29,6 +39,8 @@ class DockerEnvEntityTest {
         // The field defaults to false at declaration site
         DockerEnv env = new DockerEnv();
         assertFalse(env.getTlsVerify());
+        assertFalse(env.getSshEnabled());
+        assertEquals(22, env.getSshPort());
     }
 
     @Test
