@@ -138,6 +138,31 @@ class RegistryControllerTest {
     }
 
     @Test
+    void createRegistry_authEnabled_redactsPasswordInResponse() {
+        RegistryCreateRequest request = new RegistryCreateRequest();
+        request.setName("PrivateHub");
+        request.setUrl("https://registry.example.com");
+        request.setAuth(true);
+        request.setUsername("admin");
+        request.setPassword("secret");
+
+        when(registryMapper.exists(any())).thenReturn(false);
+        when(passwordUtil.encrypt("secret")).thenReturn("encrypted-secret");
+
+        ResponseEntity<Result> response = registryController.CreateRegistry(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        Registry created = (Registry) response.getBody().getData();
+        assertEquals("PrivateHub", created.getName());
+        assertTrue(created.getAuth());
+        assertEquals("admin", created.getUsername());
+        assertNull(created.getPassword());
+        verify(registryMapper).insert(any(Registry.class));
+        verify(passwordUtil).encrypt("secret");
+    }
+
+    @Test
     void updateRegistry_authEnabledWithoutPassword_rejectsRequest() {
         Registry existing = new Registry();
         existing.setName("PrivateHub");
@@ -193,5 +218,6 @@ class RegistryControllerTest {
         verify(registryMapper).updateById(existing);
         assertTrue(existing.getAuth());
         assertEquals("admin", existing.getUsername());
+        assertEquals("encrypted", existing.getPassword());
     }
 }
