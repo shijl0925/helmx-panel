@@ -892,4 +892,5 @@ public class ContainerController {
     private boolean checkStatsPermission(Long userId) {
         return userPermissionService.hasPermission(userId, "Ops:Container:Stats");
     }
+
 }

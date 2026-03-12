@@ -1,5 +1,7 @@
 package com.helmx.tutorial.docker.controller;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.helmx.tutorial.docker.dto.RegistryConnectRequest;
@@ -18,9 +20,12 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -128,7 +133,7 @@ public class RegistryController {
     }
 
     private static int getResponseCode(String registryUrl, String encodedAuth) throws IOException {
-        URI uri = URI.create(registryUrl + "/v2/");
+        URI uri = URI.create(normalizeRegistryUrl(registryUrl) + "/v2/");
         URL url = uri.toURL();
 
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -219,5 +224,152 @@ public class RegistryController {
         registryMapper.deleteById(id);
 
         return ResponseUtil.success(null);
+    }
+
+    @Operation(summary = "Browse image repositories and tags in a registry")
+    @GetMapping("/{id}/catalog")
+    @PreAuthorize("@va.check('Ops:Registry:List')")
+    public ResponseEntity<Result> GetRegistryCatalog(@PathVariable Long id) {
+        Registry registry = registryMapper.selectById(id);
+        if (registry == null) {
+            return ResponseUtil.failed(404, null, "Registry not found");
+        }
+
+        String encodedAuth = null;
+        if (Boolean.TRUE.equals(registry.getAuth())
+                && registry.getUsername() != null && registry.getPassword() != null) {
+            String plainPassword = passwordUtil.decrypt(registry.getPassword());
+            String auth = registry.getUsername() + ":" + plainPassword;
+            encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
+        }
+
+        try {
+            // Step 1: fetch repository list from /v2/_catalog
+            List<String> repositories = fetchRegistryCatalog(registry.getUrl(), encodedAuth);
+
+            // Step 2: fetch tags for each repository
+            List<Map<String, Object>> catalog = new ArrayList<>();
+            for (String repo : repositories) {
+                List<String> tags = fetchRepositoryTags(registry.getUrl(), repo, encodedAuth);
+                Map<String, Object> repoEntry = new HashMap<>();
+                repoEntry.put("name", repo);
+                repoEntry.put("tags", tags);
+                catalog.add(repoEntry);
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("total", catalog.size());
+            result.put("repositories", catalog);
+            return ResponseUtil.success(result);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid registry URL format for registry {}: {}", id, registry.getUrl());
+            return ResponseUtil.failed(400, null, "Invalid registry URL format");
+        } catch (Exception e) {
+            log.error("Failed to fetch catalog for registry {}: {}", id, e.getMessage());
+            return ResponseUtil.failed(500, null, "Failed to fetch registry catalog: " + e.getMessage());
+        }
+    }
+
+    private List<String> fetchRegistryCatalog(String registryUrl, String encodedAuth) throws IOException {
+        List<String> allRepositories = new ArrayList<>();
+        String path = "/v2/_catalog";
+        while (path != null) {
+            String[] response = callRegistryApiWithLink(registryUrl, path, encodedAuth);
+            JSONObject json = JSON.parseObject(response[0]);
+            List<String> page = json.getList("repositories", String.class);
+            if (page != null) {
+                allRepositories.addAll(page);
+            }
+            path = extractNextPath(response[1]);
+        }
+        return allRepositories;
+    }
+
+    private List<String> fetchRepositoryTags(String registryUrl, String repository, String encodedAuth)
+            throws IOException {
+        try {
+            List<String> allTags = new ArrayList<>();
+            String path = "/v2/" + repository + "/tags/list";
+            while (path != null) {
+                String[] response = callRegistryApiWithLink(registryUrl, path, encodedAuth);
+                JSONObject json = JSON.parseObject(response[0]);
+                List<String> page = json.getList("tags", String.class);
+                if (page != null) {
+                    allTags.addAll(page);
+                }
+                path = extractNextPath(response[1]);
+            }
+            return allTags;
+        } catch (Exception e) {
+            log.warn("Failed to fetch tags for repository {}: {}", repository, e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    private String callRegistryApi(String registryUrl, String path, String encodedAuth) throws IOException {
+        return callRegistryApiWithLink(registryUrl, path, encodedAuth)[0];
+    }
+
+    /**
+     * Calls the Docker Registry V2 HTTP API and returns a two-element array:
+     * {@code [responseBody, linkHeader]} where {@code linkHeader} may be {@code null}.
+     * The registry URL is normalized (trailing slashes stripped) before use.
+     */
+    private String[] callRegistryApiWithLink(String registryUrl, String path, String encodedAuth) throws IOException {
+        URI uri = URI.create(normalizeRegistryUrl(registryUrl) + path);
+        URL url = uri.toURL();
+
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        try {
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setInstanceFollowRedirects(false);
+            if (encodedAuth != null) {
+                connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
+            }
+
+            int code = connection.getResponseCode();
+            if (code == 200) {
+                String body;
+                try (InputStream in = connection.getInputStream()) {
+                    body = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                }
+                return new String[]{body, connection.getHeaderField("Link")};
+            } else {
+                throw new IOException("Registry API returned HTTP " + code + " for " + path);
+            }
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    /**
+     * Parses a {@code Link} response header (RFC 5988) and returns the path+query of the
+     * {@code rel="next"} URL, or {@code null} if there is no next page.
+     * <p>Example header value: {@code </v2/_catalog?last=repo100&n=100>; rel="next"}
+     * <p>Package-visible so that {@code RegistryControllerCatalogTest} can unit-test it directly.
+     */
+    static String extractNextPath(String linkHeader) {
+        if (linkHeader == null) return null;
+        int start = linkHeader.indexOf('<');
+        int end = linkHeader.indexOf('>');
+        if (start < 0 || end <= start) return null;
+        String url = linkHeader.substring(start + 1, end);
+        try {
+            URI uri = URI.create(url);
+            String p = uri.getPath();
+            String query = uri.getQuery();
+            return query != null ? p + "?" + query : p;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /** Strips any trailing slash from a registry URL before appending an API path. */
+    private static String normalizeRegistryUrl(String registryUrl) {
+        return registryUrl.endsWith("/") ? registryUrl.substring(0, registryUrl.length() - 1) : registryUrl;
     }
 }

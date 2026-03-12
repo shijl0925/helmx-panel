@@ -357,6 +357,17 @@ public class DockerClientUtil {
     private static final int MAX_LOG_SIZE_BYTES = 1048576; // 1MB
     private static final int LOG_RETAIN_SIZE_BYTES = 524288; // 512KB
 
+    // Constants for temporary volume operations
+    private static final String VOLUME_HELPER_IMAGE = "busybox:latest";
+    private static final String VOLUME_BACKUP_MOUNT_PATH = "/backup-data";
+    private static final String VOLUME_BACKUP_CONTAINER_PREFIX = "helmx-backup-";
+    private static final String VOLUME_CLONE_SRC_MOUNT = "/source";
+    private static final String VOLUME_CLONE_DST_MOUNT = "/target";
+    private static final String VOLUME_CLONE_CONTAINER_PREFIX = "helmx-clone-";
+    private static final long VOLUME_CLONE_TIMEOUT_SECONDS = 60L;
+    private static final String DEFAULT_BIND_IP = "0.0.0.0";
+    private static final String DEFAULT_PORT_TYPE = "tcp";
+
     /**
      * 获取容器日志
      */
@@ -3196,5 +3207,207 @@ public class DockerClientUtil {
             tarOutputStream.finish();
         }
         return new ByteArrayInputStream(tarOutput.toByteArray());
+    }
+
+    /**
+     * 确保卷操作所需的辅助镜像可用，如本地不存在则同步拉取
+     */
+    private void ensureVolumeHelperImage(DockerClient client) {
+        if (isImageExists(client, VOLUME_HELPER_IMAGE)) {
+            return;
+        }
+        log.info("Helper image {} not found locally, pulling...", VOLUME_HELPER_IMAGE);
+        try (PullImageCmd cmd = client.pullImageCmd(VOLUME_HELPER_IMAGE)) {
+            cmd.exec(new PullImageResultCallback()).awaitCompletion();
+            log.info("Helper image {} pulled successfully", VOLUME_HELPER_IMAGE);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while pulling helper image: " + VOLUME_HELPER_IMAGE, e);
+        } catch (Exception e) {
+            log.error("Failed to pull helper image {}: {}", VOLUME_HELPER_IMAGE, e.getMessage());
+            throw new RuntimeException("Failed to pull helper image: " + VOLUME_HELPER_IMAGE, e);
+        }
+    }
+
+    /**
+     * 备份存储卷：通过临时容器将卷内容导出为 TAR 流。
+     * <p>
+     * 创建一个挂载了指定卷的临时 busybox 容器，然后将卷内容（或指定子路径）以 TAR 格式流式返回。
+     * <strong>调用方必须关闭返回的 {@link InputStream}</strong>，关闭时会同步清理临时容器和底层 Docker 连接。
+     *
+     * @param volumeName 需要备份的 Docker 卷名称
+     * @param path       卷内需要备份的子路径（相对于卷根目录）；传 {@code null} 或空字符串时备份整个卷根目录
+     * @return 包含卷内容的 TAR 格式输入流，调用方负责关闭
+     */
+    public InputStream backupVolume(String volumeName, String path) {
+        DockerClient client = getCurrentDockerClient();
+        String backupPath = (path == null || path.isBlank()) ? "/" : path;
+        String containerName = VOLUME_BACKUP_CONTAINER_PREFIX + volumeName + "-" + System.currentTimeMillis();
+
+        ensureVolumeHelperImage(client);
+
+        Volume vol = new Volume(VOLUME_BACKUP_MOUNT_PATH);
+        Bind bind = new Bind(volumeName, vol);
+
+        String containerId;
+        try (CreateContainerCmd cmd = client.createContainerCmd(VOLUME_HELPER_IMAGE)
+                .withName(containerName)
+                .withCmd("true")
+                .withHostConfig(HostConfig.newHostConfig().withBinds(bind))) {
+            containerId = cmd.exec().getId();
+        }
+
+        // Resolve the copy path inside the container
+        String normalizedBackupPath = backupPath.startsWith("/") ? backupPath : "/" + backupPath;
+        String copyPath = "/".equals(normalizedBackupPath) ? VOLUME_BACKUP_MOUNT_PATH : VOLUME_BACKUP_MOUNT_PATH + normalizedBackupPath;
+
+        // Do NOT close copyCmd here: exec() returns a live HTTP-response stream and closing
+        // the command object closes the underlying connection, producing an empty stream.
+        // Both copyCmd and the container are cleaned up when the caller closes the returned stream.
+        CopyArchiveFromContainerCmd copyCmd = client.copyArchiveFromContainerCmd(containerId, copyPath);
+        InputStream tarStream = copyCmd.exec();
+
+        final String finalContainerId = containerId;
+        return new FilterInputStream(tarStream) {
+            @Override
+            public void close() throws IOException {
+                try {
+                    super.close();
+                } finally {
+                    try {
+                        copyCmd.close();
+                    } catch (Exception ignored) {
+                        log.warn("Failed to close copyCmd for backup container: {}", finalContainerId);
+                    }
+                    try {
+                        client.removeContainerCmd(finalContainerId).withForce(true).exec();
+                    } catch (Exception ignored) {
+                        log.warn("Failed to remove temporary backup container: {}", finalContainerId);
+                    }
+                }
+            }
+        };
+    }
+
+    /**
+     * 克隆存储卷：将源卷的数据复制到目标卷
+     */
+    public Map<String, Object> cloneVolume(String sourceName, String targetName, String driver) {
+        Map<String, Object> result = new HashMap<>();
+        DockerClient client = getCurrentDockerClient();
+
+        // Create the target volume
+        try (CreateVolumeCmd createCmd = client.createVolumeCmd()
+                .withName(targetName)
+                .withDriver(driver != null && !driver.isBlank() ? driver : "local")) {
+            createCmd.exec();
+        } catch (Exception e) {
+            result.put("status", "failed");
+            result.put("message", "Failed to create target volume: " + e.getMessage());
+            return result;
+        }
+
+        String containerName = VOLUME_CLONE_CONTAINER_PREFIX + System.currentTimeMillis();
+        Volume srcVol = new Volume(VOLUME_CLONE_SRC_MOUNT);
+        Volume dstVol = new Volume(VOLUME_CLONE_DST_MOUNT);
+        Bind srcBind = new Bind(sourceName, srcVol);
+        Bind dstBind = new Bind(targetName, dstVol);
+
+        ensureVolumeHelperImage(client);
+
+        String containerId = null;
+        try {
+            try (CreateContainerCmd cmd = client.createContainerCmd(VOLUME_HELPER_IMAGE)
+                    .withName(containerName)
+                    .withCmd("sh", "-c", "cp -a " + VOLUME_CLONE_SRC_MOUNT + "/. " + VOLUME_CLONE_DST_MOUNT + "/")
+                    .withHostConfig(HostConfig.newHostConfig().withBinds(srcBind, dstBind))) {
+                containerId = cmd.exec().getId();
+            }
+
+            try (StartContainerCmd cmd = client.startContainerCmd(containerId)) {
+                cmd.exec();
+            }
+
+            try (WaitContainerCmd waitCmd = client.waitContainerCmd(containerId)) {
+                waitCmd.start().awaitCompletion(VOLUME_CLONE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            }
+
+            result.put("status", "success");
+            result.put("message", "Volume cloned successfully");
+        } catch (Exception e) {
+            result.put("status", "failed");
+            result.put("message", "Failed to clone volume: " + e.getMessage());
+        } finally {
+            if (containerId != null) {
+                try {
+                    client.removeContainerCmd(containerId).withForce(true).exec();
+                } catch (Exception ignored) {
+                    log.warn("Failed to remove temporary clone container: {}", containerId);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 批量删除镜像，返回每个镜像的删除结果
+     */
+    public List<Map<String, Object>> bulkRemoveImages(List<String> imageIds, Boolean force) {
+        List<Map<String, Object>> results = new ArrayList<>();
+        boolean forceRemove = Boolean.TRUE.equals(force);
+
+        for (String imageId : imageIds) {
+            Map<String, Object> itemResult = new HashMap<>();
+            itemResult.put("imageId", imageId);
+            try {
+                this.removeImage(imageId, forceRemove);
+                itemResult.put("status", "success");
+                itemResult.put("message", "Image removed successfully");
+            } catch (Exception e) {
+                itemResult.put("status", "failed");
+                itemResult.put("message", "Failed to remove image: " + e.getMessage());
+            }
+            results.add(itemResult);
+        }
+
+        return results;
+    }
+
+    /**
+     * 获取镜像磁盘使用情况
+     */
+    public List<ImageUsageItem> getImageDiskUsage() {
+        List<Image> images = listImages();
+        List<Container> containers = listContainers();
+        Set<String> usedImageIds = containers.stream()
+                .map(Container::getImageId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        return images.stream()
+                .filter(img -> img.getRepoTags() != null
+                        && Arrays.stream(img.getRepoTags()).noneMatch("<none>:<none>"::equals))
+                .map(img -> {
+                    ImageUsageItem item = new ImageUsageItem();
+                    String fullId = img.getId() != null ? img.getId() : "";
+                    String shortId = fullId.startsWith("sha256:") && fullId.length() >= 19
+                            ? fullId.substring(7, 19)
+                            : (fullId.length() >= 12 ? fullId.substring(0, 12) : fullId);
+                    item.setId(shortId);
+                    item.setFullId(fullId);
+                    item.setRepoTags(img.getRepoTags() != null
+                            ? Arrays.asList(img.getRepoTags()) : Collections.emptyList());
+                    long sz = img.getSize() != null ? img.getSize() : 0L;
+                    long vsz = img.getVirtualSize() != null ? img.getVirtualSize() : 0L;
+                    item.setSize(sz);
+                    item.setSizeHuman(ByteUtils.formatBytes(sz));
+                    item.setVirtualSize(vsz);
+                    item.setVirtualSizeHuman(ByteUtils.formatBytes(vsz));
+                    item.setIsUsed(usedImageIds.contains(img.getId()));
+                    return item;
+                })
+                .sorted(Comparator.comparingLong(ImageUsageItem::getVirtualSize).reversed())
+                .toList();
     }
 }

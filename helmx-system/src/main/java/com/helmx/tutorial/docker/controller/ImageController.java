@@ -400,4 +400,51 @@ public class ImageController {
 
         return ResponseUtil.success(result);
     }
+
+    @Operation(summary = "Bulk remove Docker images")
+    @PostMapping("/bulk/remove")
+    @PreAuthorize("@va.check('Ops:Image:Delete')")
+    public ResponseEntity<Result> bulkRemoveDockerImages(@Valid @RequestBody BulkImageRemoveRequest criteria) {
+        String host = criteria.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        List<Map<String, Object>> results = dockerClientUtil.bulkRemoveImages(criteria.getImageIds(), criteria.getForce());
+
+        long failedCount = results.stream().filter(r -> "failed".equals(r.get("status"))).count();
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", results.size());
+        result.put("failed", failedCount);
+        result.put("succeeded", results.size() - failedCount);
+        result.put("items", results);
+
+        if (failedCount > 0) {
+            log.error("Bulk remove images: {} out of {} failed", failedCount, results.size());
+            return ResponseUtil.failed(500, result, failedCount + " image(s) failed to remove");
+        }
+        return ResponseUtil.success("All images removed successfully", result);
+    }
+
+    @Operation(summary = "Get image disk usage summary")
+    @PostMapping("/usage")
+    @PreAuthorize("@va.check('Ops:Image:List')")
+    public ResponseEntity<Result> getImageDiskUsage(@Valid @RequestBody ImageUsageRequest criteria) {
+        String host = criteria.getHost();
+        dockerClientUtil.setCurrentHost(host);
+
+        List<ImageUsageItem> items = dockerClientUtil.getImageDiskUsage();
+
+        long totalSize = items.stream().mapToLong(ImageUsageItem::getSize).sum();
+        long totalVirtualSize = items.stream().mapToLong(ImageUsageItem::getVirtualSize).sum();
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", items.size());
+        result.put("totalSize", totalSize);
+        result.put("totalSizeHuman", com.helmx.tutorial.docker.utils.ByteUtils.formatBytes(totalSize));
+        result.put("totalVirtualSize", totalVirtualSize);
+        result.put("totalVirtualSizeHuman", com.helmx.tutorial.docker.utils.ByteUtils.formatBytes(totalVirtualSize));
+        result.put("items", items);
+
+        return ResponseUtil.success(result);
+    }
 }
