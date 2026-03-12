@@ -3332,13 +3332,25 @@ public class DockerClientUtil {
                 cmd.exec();
             }
 
+            Integer exitCode;
             try (WaitContainerCmd waitCmd = client.waitContainerCmd(containerId)) {
-                waitCmd.start().awaitCompletion(VOLUME_CLONE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                exitCode = waitCmd.start().awaitStatusCode(VOLUME_CLONE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             }
 
-            result.put("status", "success");
-            result.put("message", "Volume cloned successfully");
+            if (exitCode == null) {
+                result.put("status", "failed");
+                result.put("message", "Clone operation timed out after " + VOLUME_CLONE_TIMEOUT_SECONDS + " seconds");
+            } else if (exitCode != 0) {
+                result.put("status", "failed");
+                result.put("message", "Copy command exited with code: " + exitCode);
+            } else {
+                result.put("status", "success");
+                result.put("message", "Volume cloned successfully");
+            }
         } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             result.put("status", "failed");
             result.put("message", "Failed to clone volume: " + e.getMessage());
         } finally {
