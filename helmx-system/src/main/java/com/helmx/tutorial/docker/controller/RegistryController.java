@@ -14,6 +14,7 @@ import com.helmx.tutorial.utils.ResponseUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -80,13 +81,16 @@ public class RegistryController {
         registry.setName(request.getName());
         registry.setUrl(request.getUrl());
         if (request.getAuth() != null && request.getAuth()) {
+            if (isAuthCredentialMissing(request)) {
+                return ResponseUtil.failed(400, null, "Username and password are required when authentication is enabled");
+            }
             registry.setAuth(true);
             registry.setUsername(request.getUsername());
             registry.setPassword(passwordUtil.encrypt(request.getPassword()));
         }
         registryMapper.insert(registry);
 
-        return ResponseUtil.success(registry);
+        return ResponseUtil.success(sanitizeRegistry(registry));
     }
 
     @Operation(summary = "Test registry connect")
@@ -179,9 +183,8 @@ public class RegistryController {
         if (registry == null) {
             return ResponseUtil.failed(404, null, "Registry not found");
         }
-        registry.setPassword(null);
 
-        return ResponseUtil.success(registry);
+        return ResponseUtil.success(sanitizeRegistry(registry));
     }
 
     @Operation(summary = "Update registry by ID")
@@ -201,20 +204,32 @@ public class RegistryController {
             registry.setUrl(request.getUrl());
         }
         if (request.getAuth() != null && request.getAuth()) {
+            if (isAuthCredentialMissing(request)) {
+                return ResponseUtil.failed(400, null, "Username and password are required when authentication is enabled");
+            }
             registry.setAuth(true);
             registry.setUsername(request.getUsername());
             registry.setPassword(passwordUtil.encrypt(request.getPassword()));
-        } else {
+        } else if (Boolean.FALSE.equals(request.getAuth())) {
             registry.setAuth(false);
             registry.setUsername(null);
             registry.setPassword(null);
         }
         registryMapper.updateById(registry);
 
-        // Redact sensitive credentials before responding
-        registry.setPassword(null);
+        return ResponseUtil.success(sanitizeRegistry(registry));
+    }
 
-        return ResponseUtil.success(registry);
+    private boolean isAuthCredentialMissing(RegistryCreateRequest request) {
+        return request.getUsername() == null || request.getUsername().isBlank()
+                || request.getPassword() == null || request.getPassword().isBlank();
+    }
+
+    private Registry sanitizeRegistry(Registry registry) {
+        Registry sanitized = new Registry();
+        BeanUtils.copyProperties(registry, sanitized);
+        sanitized.setPassword(null);
+        return sanitized;
     }
 
     @Operation(summary = "Delete registry by ID")
