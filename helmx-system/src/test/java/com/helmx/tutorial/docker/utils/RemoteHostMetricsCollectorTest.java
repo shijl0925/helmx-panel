@@ -39,6 +39,7 @@ class RemoteHostMetricsCollectorTest {
         assertEquals("20.00 GB", metrics.get("hostDiskTotal"));
         assertEquals(128.5D, metrics.get("DiskReadTrafficNew"));
         assertEquals(64.25D, metrics.get("WriteTrafficNew"));
+        assertEquals("Remote host metrics parsed successfully", metrics.get("hostMetricsDebug"));
     }
 
     @Test
@@ -51,6 +52,7 @@ class RemoteHostMetricsCollectorTest {
         assertEquals("0B", metrics.get("hostDiskTotal"));
         assertEquals(0D, metrics.get("DiskReadTrafficNew"));
         assertEquals(0D, metrics.get("WriteTrafficNew"));
+        assertEquals("Host metrics are unavailable", metrics.get("hostMetricsDebug"));
     }
 
     @Test
@@ -82,5 +84,28 @@ class RemoteHostMetricsCollectorTest {
 
         verify(sshClient).authPublickey("root");
         verifyNoMoreInteractions(sshClient);
+    }
+
+    @Test
+    void collect_missingFingerprint_returnsUnavailableMetricsWithReason() {
+        DockerEnv dockerEnv = new DockerEnv();
+        dockerEnv.setSshEnabled(true);
+        dockerEnv.setSshPort(22);
+        dockerEnv.setSshUsername("root");
+        dockerEnv.setSshPassword("encrypted");
+        dockerEnv.setSshHostKeyFingerprint(null);
+
+        Map<String, Object> metrics = collector.collect("tcp://192.0.2.10:2375", dockerEnv);
+
+        assertFalse((Boolean) metrics.get("hostMetricsAvailable"));
+        assertEquals("Remote host metrics unavailable: SSH host key fingerprint is not configured",
+                metrics.get("hostMetricsDebug"));
+    }
+
+    @Test
+    void resolveSshHost_acceptsDockerHostsWithoutScheme() {
+        String sshHost = ReflectionTestUtils.invokeMethod(collector, "resolveSshHost", "192.0.2.10:2375");
+
+        assertEquals("192.0.2.10", sshHost);
     }
 }

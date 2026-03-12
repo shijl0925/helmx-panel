@@ -148,6 +148,8 @@ class DockerClientUtilTest {
         Map<String, Object> metrics = dockerClientUtil.loadHostResourceUsage();
 
         assertFalse((Boolean) metrics.get("hostMetricsAvailable"));
+        assertEquals("Remote host metrics unavailable: no active Docker environment matched the current host",
+                metrics.get("hostMetricsDebug"));
         assertEquals(0D, metrics.get("hostCpuUsage"));
         assertEquals(0D, metrics.get("hostMemoryUsage"));
         assertEquals(0D, metrics.get("hostDiskUsage"));

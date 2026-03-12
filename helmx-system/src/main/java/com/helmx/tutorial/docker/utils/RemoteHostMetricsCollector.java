@@ -72,20 +72,31 @@ public class RemoteHostMetricsCollector {
     public Map<String, Object> collect(String dockerHost, DockerEnv dockerEnv) {
         Map<String, Object> metrics = defaultMetrics();
         if (!isRemoteMetricsConfigured(dockerEnv)) {
+            String reason = describeMissingRemoteMetricsConfig(dockerEnv);
+            metrics.put("hostMetricsDebug", reason);
+            log.warn("Remote host metrics unavailable for {}: {}", dockerHost, reason);
             return metrics;
         }
 
         String sshHost = resolveSshHost(dockerHost);
         if (sshHost == null) {
+            String reason = "Remote host metrics unavailable: unable to resolve SSH host from Docker host " + dockerHost;
+            metrics.put("hostMetricsDebug", reason);
+            log.warn(reason);
             return metrics;
         }
 
+        String authMethod = hasPassword(dockerEnv) ? "password" : "publickey";
+        log.debug("Attempting remote host metrics SSH collection for dockerHost={}, sshHost={}, sshPort={}, sshUser={}, authMethod={}",
+                dockerHost, sshHost, dockerEnv.getSshPort(), dockerEnv.getSshUsername(), authMethod);
         try (SSHClient sshClient = new SSHClient()) {
             sshClient.addHostKeyVerifier(FingerprintVerifier.getInstance(dockerEnv.getSshHostKeyFingerprint()));
             sshClient.setConnectTimeout(sshTimeoutSeconds * 1000);
             sshClient.setTimeout(sshTimeoutSeconds * 1000);
             sshClient.connect(sshHost, dockerEnv.getSshPort());
+            log.debug("SSH connected for dockerHost={}, sshHost={}, sshPort={}", dockerHost, sshHost, dockerEnv.getSshPort());
             authenticate(sshClient, dockerEnv);
+            log.debug("SSH authenticated for dockerHost={}, sshUser={}, authMethod={}", dockerHost, dockerEnv.getSshUsername(), authMethod);
 
             try (Session session = sshClient.startSession();
                  Session.Command command = session.exec(REMOTE_METRICS_COMMAND)) {
@@ -94,15 +105,24 @@ public class RemoteHostMetricsCollector {
                 String output = readFully(command.getInputStream());
                 String errorOutput = readFully(command.getErrorStream());
                 if (exitStatus == null || exitStatus != 0) {
-                    log.warn("Failed to collect remote host metrics from {}: {}", dockerHost, errorOutput);
+                    String reason = "Remote host metrics command failed"
+                            + (exitStatus == null ? " (timed out)" : " (exit status " + exitStatus + ")")
+                            + (errorOutput == null || errorOutput.isBlank() ? "" : ": " + errorOutput.trim());
+                    metrics.put("hostMetricsDebug", reason);
+                    log.warn("Failed to collect remote host metrics from {}: {}", dockerHost, reason);
                     return metrics;
                 }
-                return parseMetricsOutput(output);
+                Map<String, Object> parsedMetrics = parseMetricsOutput(output);
+                parsedMetrics.put("hostMetricsDebug", "Remote host metrics collected over SSH");
+                log.debug("Successfully collected remote host metrics for {}", dockerHost);
+                return parsedMetrics;
             } finally {
                 sshClient.disconnect();
             }
         } catch (Exception ex) {
-            log.warn("Unable to collect remote host metrics for {}", dockerHost, ex);
+            String reason = "Remote host metrics SSH connection failed: " + simplifyExceptionMessage(ex);
+            metrics.put("hostMetricsDebug", reason);
+            log.warn("Unable to collect remote host metrics for {}: {}", dockerHost, reason, ex);
             return metrics;
         }
     }
@@ -113,9 +133,11 @@ public class RemoteHostMetricsCollector {
             return metrics;
         }
 
+        boolean parsedAnyMetric = false;
         for (String line : output.split("\\R")) {
             if (line.startsWith("cpu=")) {
                 metrics.put("hostCpuUsage", parseDouble(line.substring(4)));
+                parsedAnyMetric = true;
             } else if (line.startsWith("mem=")) {
                 String[] values = line.substring(4).trim().split("\\s+");
                 if (values.length == 3) {
@@ -124,6 +146,7 @@ public class RemoteHostMetricsCollector {
                     metrics.put("hostMemoryUsed", ByteUtils.formatBytes(used));
                     metrics.put("hostMemoryTotal", ByteUtils.formatBytes(total));
                     metrics.put("hostMemoryUsage", parseDouble(values[2]));
+                    parsedAnyMetric = true;
                 }
             } else if (line.startsWith("disk=")) {
                 String[] values = line.substring(5).trim().split("\\s+");
@@ -133,20 +156,23 @@ public class RemoteHostMetricsCollector {
                     metrics.put("hostDiskUsed", ByteUtils.formatBytes(used));
                     metrics.put("hostDiskTotal", ByteUtils.formatBytes(total));
                     metrics.put("hostDiskUsage", parseDouble(values[2]));
+                    parsedAnyMetric = true;
                 }
             } else if (line.startsWith("diskio=")) {
                 String[] values = line.substring(7).trim().split("\\s+");
                 if (values.length == 2) {
                     metrics.put("DiskReadTrafficNew", parseDouble(values[0]));
                     metrics.put("WriteTrafficNew", parseDouble(values[1]));
+                    parsedAnyMetric = true;
                 }
             }
         }
 
-        boolean available = ((Double) metrics.get("hostCpuUsage")) > 0
-                || !"0B".equals(metrics.get("hostMemoryTotal"))
-                || !"0B".equals(metrics.get("hostDiskTotal"));
+        boolean available = parsedAnyMetric;
         metrics.put("hostMetricsAvailable", available);
+        metrics.put("hostMetricsDebug", available
+                ? "Remote host metrics parsed successfully"
+                : "Remote host metrics output did not contain usable values");
         return metrics;
     }
 
@@ -156,6 +182,25 @@ public class RemoteHostMetricsCollector {
                 && dockerEnv.getSshPort() != null
                 && dockerEnv.getSshUsername() != null && !dockerEnv.getSshUsername().isBlank()
                 && dockerEnv.getSshHostKeyFingerprint() != null && !dockerEnv.getSshHostKeyFingerprint().isBlank();
+    }
+
+    private String describeMissingRemoteMetricsConfig(DockerEnv dockerEnv) {
+        if (dockerEnv == null) {
+            return "Remote host metrics unavailable: no Docker environment matched the current host";
+        }
+        if (!Boolean.TRUE.equals(dockerEnv.getSshEnabled())) {
+            return "Remote host metrics unavailable: SSH collection is not enabled for this environment";
+        }
+        if (dockerEnv.getSshPort() == null) {
+            return "Remote host metrics unavailable: SSH port is not configured";
+        }
+        if (dockerEnv.getSshUsername() == null || dockerEnv.getSshUsername().isBlank()) {
+            return "Remote host metrics unavailable: SSH username is not configured";
+        }
+        if (dockerEnv.getSshHostKeyFingerprint() == null || dockerEnv.getSshHostKeyFingerprint().isBlank()) {
+            return "Remote host metrics unavailable: SSH host key fingerprint is not configured";
+        }
+        return "Remote host metrics unavailable: SSH configuration is incomplete";
     }
 
     void authenticate(SSHClient sshClient, DockerEnv dockerEnv) throws IOException {
@@ -173,13 +218,20 @@ public class RemoteHostMetricsCollector {
     }
 
     private String resolveSshHost(String dockerHost) {
-        try {
-            URI uri = URI.create(dockerHost);
-            return uri.getHost();
-        } catch (IllegalArgumentException ex) {
-            log.debug("Unable to resolve SSH host from Docker host {}", dockerHost, ex);
+        if (dockerHost == null || dockerHost.isBlank()) {
             return null;
         }
+        try {
+            URI uri = dockerHost.contains("://")
+                    ? URI.create(dockerHost)
+                    : URI.create("placeholder://" + dockerHost);
+            if (uri.getHost() != null && !uri.getHost().isBlank()) {
+                return uri.getHost();
+            }
+        } catch (IllegalArgumentException ex) {
+            log.debug("Unable to resolve SSH host from Docker host {}", dockerHost, ex);
+        }
+        return null;
     }
 
     private String readFully(InputStream inputStream) throws IOException {
@@ -217,6 +269,19 @@ public class RemoteHostMetricsCollector {
         hostMetrics.put("hostDiskTotal", "0B");
         hostMetrics.put("DiskReadTrafficNew", 0D);
         hostMetrics.put("WriteTrafficNew", 0D);
+        hostMetrics.put("hostMetricsDebug", "Host metrics are unavailable");
         return hostMetrics;
+    }
+
+    private boolean hasPassword(DockerEnv dockerEnv) {
+        return dockerEnv.getSshPassword() != null && !dockerEnv.getSshPassword().isBlank();
+    }
+
+    private String simplifyExceptionMessage(Exception ex) {
+        String message = ex.getMessage();
+        if (message == null || message.isBlank()) {
+            return ex.getClass().getSimpleName();
+        }
+        return ex.getClass().getSimpleName() + ": " + message;
     }
 }

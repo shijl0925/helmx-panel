@@ -1245,6 +1245,7 @@ public class DockerClientUtil {
      * Returned keys:
      * <ul>
      *     <li>{@code hostMetricsAvailable}: {@link Boolean}</li>
+     *     <li>{@code hostMetricsDebug}: {@link String} explaining why metrics are unavailable or how they were collected</li>
      *     <li>{@code hostCpuUsage}, {@code hostMemoryUsage}, {@code hostDiskUsage}: {@link Double} percentages</li>
      *     <li>{@code hostMemoryUsed}, {@code hostMemoryTotal}, {@code hostDiskUsed}, {@code hostDiskTotal}: formatted {@link String} sizes</li>
      *     <li>{@code DiskReadTrafficNew}, {@code WriteTrafficNew}: {@link Double} KB/s disk read/write throughput</li>
@@ -1266,6 +1267,7 @@ public class DockerClientUtil {
         hostMetrics.put("hostDiskTotal", "0B");
         hostMetrics.put("DiskReadTrafficNew", 0D);
         hostMetrics.put("WriteTrafficNew", 0D);
+        hostMetrics.put("hostMetricsDebug", "Host metrics are unavailable");
 
         String host = currentHost.get();
         if (isLocalDockerHost(host)) {
@@ -1274,6 +1276,7 @@ public class DockerClientUtil {
 
         DockerEnv dockerEnv = findCurrentDockerEnv(host);
         if (dockerEnv == null) {
+            hostMetrics.put("hostMetricsDebug", "Remote host metrics unavailable: no active Docker environment matched the current host");
             return hostMetrics;
         }
 
@@ -1319,6 +1322,9 @@ public class DockerClientUtil {
         hostMetrics.put("WriteTrafficNew", diskMetrics.writeTrafficKb());
 
         hostMetrics.put("hostMetricsAvailable", metricsAvailable);
+        hostMetrics.put("hostMetricsDebug", metricsAvailable
+                ? "Local host metrics collected"
+                : "Local host metrics unavailable on the current runtime");
         return hostMetrics;
     }
 
