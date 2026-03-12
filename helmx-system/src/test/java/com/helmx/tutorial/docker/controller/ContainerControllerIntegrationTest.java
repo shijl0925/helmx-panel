@@ -160,7 +160,7 @@ class ContainerControllerIntegrationTest {
                   }
                 }
                 """);
-        when(dockerClientUtil.getContainerStats("container-1", false)).thenReturn(stats);
+        when(dockerClientUtil.getContainerStats("container-1", true)).thenReturn(stats);
 
         mockMvc.perform(post("/api/v1/ops/containers/stats")
                         .contentType(APPLICATION_JSON)
