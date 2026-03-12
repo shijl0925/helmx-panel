@@ -10,10 +10,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -100,6 +103,17 @@ class DockerClientUtilTest {
         assertTrue(getMetricAsDouble(metrics, "WriteTrafficNew") >= 0D);
         assertFalse(((String) metrics.get("hostMemoryTotal")).isBlank());
         assertFalse(((String) metrics.get("hostDiskTotal")).isBlank());
+    }
+
+    @Test
+    void resolveRootBlockDevice_mapsMountInfoDeviceNumberToReadableStatFile() {
+        String rootDeviceNumber = ReflectionTestUtils.invokeMethod(dockerClientUtil, "resolveRootDeviceNumber");
+        assertNotNull(rootDeviceNumber);
+
+        String rootBlockDevice = ReflectionTestUtils.invokeMethod(dockerClientUtil, "resolveRootBlockDevice");
+        assertNotNull(rootBlockDevice);
+        assertFalse(rootBlockDevice.isBlank());
+        assertTrue(Files.exists(Path.of("/sys/class/block", rootBlockDevice, "stat")));
     }
 
     @Test

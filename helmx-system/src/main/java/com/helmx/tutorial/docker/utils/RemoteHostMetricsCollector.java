@@ -26,9 +26,14 @@ public class RemoteHostMetricsCollector {
             sh -lc 'read _ user nice system idle iowait irq softirq steal _ < /proc/stat;
             total1=$((user+nice+system+idle+iowait+irq+softirq+steal));
             idle1=$((idle+iowait));
-            root_source=$(df / | awk "NR==2 {print $1}");
-            root_resolved=$(readlink -f "$root_source" 2>/dev/null || printf "%s" "$root_source");
-            root_device=$(basename "$root_resolved");
+            root_devno=$(awk "$5 == \"/\" {print $3; exit}" /proc/self/mountinfo);
+            if [ -n "$root_devno" ] && [ -e "/sys/dev/block/$root_devno" ]; then
+              root_device=$(basename "$(readlink -f "/sys/dev/block/$root_devno")");
+            else
+              root_source=$(df / | awk "NR==2 {print $1}");
+              root_resolved=$(readlink -f "$root_source" 2>/dev/null || printf "%s" "$root_source");
+              root_device=$(basename "$root_resolved");
+            fi;
             if [ -r "/sys/class/block/$root_device/stat" ]; then
               set -- $(awk "{printf \\"%s %s\\", $3*512, $7*512}" "/sys/class/block/$root_device/stat");
               read1=${1:-0}; write1=${2:-0};

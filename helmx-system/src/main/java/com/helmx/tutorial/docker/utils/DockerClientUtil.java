@@ -1423,6 +1423,14 @@ public class DockerClientUtil {
     }
 
     private String resolveRootBlockDevice() throws IOException {
+        String rootDeviceNumber = resolveRootDeviceNumber();
+        if (rootDeviceNumber != null && !rootDeviceNumber.isBlank()) {
+            String blockDeviceName = resolveBlockDeviceName(rootDeviceNumber);
+            if (blockDeviceName != null && !blockDeviceName.isBlank()) {
+                return blockDeviceName;
+            }
+        }
+
         try (Stream<String> mounts = Files.lines(Path.of("/proc/self/mounts"))) {
             Optional<String> rootMount = mounts
                     .map(String::trim)
@@ -1444,6 +1452,32 @@ public class DockerClientUtil {
                 }
             }
             return Path.of(source).getFileName().toString();
+        }
+    }
+
+    private String resolveRootDeviceNumber() throws IOException {
+        try (Stream<String> mountInfoLines = Files.lines(Path.of("/proc/self/mountinfo"))) {
+            return mountInfoLines
+                    .map(String::trim)
+                    .filter(line -> !line.isBlank())
+                    .map(line -> line.split("\\s+"))
+                    .filter(parts -> parts.length >= 5 && "/".equals(parts[4]))
+                    .map(parts -> parts[2])
+                    .findFirst()
+                    .orElse(null);
+        }
+    }
+
+    private String resolveBlockDeviceName(String deviceNumber) {
+        try {
+            Path devicePath = Path.of("/sys/dev/block", deviceNumber);
+            if (!Files.exists(devicePath)) {
+                return null;
+            }
+            return devicePath.toRealPath().getFileName().toString();
+        } catch (IOException ex) {
+            log.debug("Failed to resolve block device name for {}", deviceNumber, ex);
+            return null;
         }
     }
 

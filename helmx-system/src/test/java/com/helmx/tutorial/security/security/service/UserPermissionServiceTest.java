@@ -126,9 +126,9 @@ class UserPermissionServiceTest {
                 1
         );
 
-        Method evictIfNeeded = UserPermissionService.class
-                .getDeclaredMethod("evictIfNeeded", ConcurrentHashMap.class, long.class);
-        evictIfNeeded.setAccessible(true);
+        Method cacheValue = UserPermissionService.class
+                .getDeclaredMethod("cacheValue", ConcurrentHashMap.class, Long.class, Object.class, long.class);
+        cacheValue.setAccessible(true);
 
         Constructor<?> cacheEntryCtor = Class
                 .forName("com.helmx.tutorial.security.security.service.UserPermissionService$CacheEntry")
@@ -142,8 +142,8 @@ class UserPermissionServiceTest {
 
         cache.put(0L, cacheEntryCtor.newInstance(Set.of("seed"), now + 10_000));
 
-        Runnable firstWrite = () -> runConcurrentEvictionWrite(service, evictIfNeeded, cacheEntryCtor, cache, now, 1L, "A");
-        Runnable secondWrite = () -> runConcurrentEvictionWrite(service, evictIfNeeded, cacheEntryCtor, cache, now, 2L, "B");
+        Runnable firstWrite = () -> runConcurrentEvictionWrite(service, cacheValue, cache, now, 1L, "A");
+        Runnable secondWrite = () -> runConcurrentEvictionWrite(service, cacheValue, cache, now, 2L, "B");
 
         Thread threadA = new Thread(firstWrite, "permission-evict-a");
         Thread threadB = new Thread(secondWrite, "permission-evict-b");
@@ -202,16 +202,14 @@ class UserPermissionServiceTest {
 
     private static void runConcurrentEvictionWrite(
             UserPermissionService service,
-            Method evictIfNeeded,
-            Constructor<?> cacheEntryCtor,
+            Method cacheValue,
             ConcurrentHashMap<Long, Object> cache,
             long now,
             long userId,
             String permission
     ) {
         assertDoesNotThrow(() -> {
-            evictIfNeeded.invoke(service, cache, now);
-            cache.put(userId, cacheEntryCtor.newInstance(Set.of(permission), now + 10_000));
+            cacheValue.invoke(service, cache, userId, Set.of(permission), now);
         });
     }
 
