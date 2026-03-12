@@ -80,6 +80,9 @@ public class RegistryController {
         registry.setName(request.getName());
         registry.setUrl(request.getUrl());
         if (request.getAuth() != null && request.getAuth()) {
+            if (isAuthCredentialMissing(request)) {
+                return ResponseUtil.failed(400, null, "Username and password are required when authentication is enabled");
+            }
             registry.setAuth(true);
             registry.setUsername(request.getUsername());
             registry.setPassword(passwordUtil.encrypt(request.getPassword()));
@@ -201,10 +204,13 @@ public class RegistryController {
             registry.setUrl(request.getUrl());
         }
         if (request.getAuth() != null && request.getAuth()) {
+            if (isAuthCredentialMissing(request)) {
+                return ResponseUtil.failed(400, null, "Username and password are required when authentication is enabled");
+            }
             registry.setAuth(true);
             registry.setUsername(request.getUsername());
             registry.setPassword(passwordUtil.encrypt(request.getPassword()));
-        } else {
+        } else if (Boolean.FALSE.equals(request.getAuth())) {
             registry.setAuth(false);
             registry.setUsername(null);
             registry.setPassword(null);
@@ -215,6 +221,11 @@ public class RegistryController {
         registry.setPassword(null);
 
         return ResponseUtil.success(registry);
+    }
+
+    private boolean isAuthCredentialMissing(RegistryCreateRequest request) {
+        return request.getUsername() == null || request.getUsername().isBlank()
+                || request.getPassword() == null || request.getPassword().isBlank();
     }
 
     @Operation(summary = "Delete registry by ID")

@@ -20,6 +20,8 @@ import java.net.InetSocketAddress;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -113,5 +115,83 @@ class RegistryControllerTest {
         assertNotNull(response.getBody());
         assertEquals("DockerHub", ((Registry) response.getBody().getData()).getName());
         verify(registryMapper).insert(any(Registry.class));
+    }
+
+    @Test
+    void createRegistry_authEnabledWithoutPassword_rejectsRequest() {
+        RegistryCreateRequest request = new RegistryCreateRequest();
+        request.setName("PrivateHub");
+        request.setUrl("https://registry.example.com");
+        request.setAuth(true);
+        request.setUsername("admin");
+        request.setPassword(null);
+
+        when(registryMapper.exists(any())).thenReturn(false);
+
+        ResponseEntity<Result> response = registryController.CreateRegistry(request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Username and password are required when authentication is enabled", response.getBody().getMessage());
+        verify(registryMapper, never()).insert(any(Registry.class));
+        verify(passwordUtil, never()).encrypt(any());
+    }
+
+    @Test
+    void updateRegistry_authEnabledWithoutPassword_rejectsRequest() {
+        Registry existing = new Registry();
+        existing.setName("PrivateHub");
+        existing.setUrl("https://registry.example.com");
+        existing.setAuth(true);
+        existing.setUsername("admin");
+        existing.setPassword("encrypted");
+
+        RegistryCreateRequest request = new RegistryCreateRequest();
+        request.setName("PrivateHub");
+        request.setUrl("https://registry.example.com");
+        request.setAuth(true);
+        request.setUsername("admin");
+        request.setPassword("");
+
+        when(registryMapper.selectById(1L)).thenReturn(existing);
+
+        ResponseEntity<Result> response = registryController.UpdateRegistryById(1L, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Username and password are required when authentication is enabled", response.getBody().getMessage());
+        verify(registryMapper, never()).updateById(any(Registry.class));
+        verify(passwordUtil, never()).encrypt(any());
+    }
+
+    @Test
+    void updateRegistry_missingAuth_preservesExistingCredentials() {
+        Registry existing = new Registry();
+        existing.setName("PrivateHub");
+        existing.setUrl("https://registry.example.com");
+        existing.setAuth(true);
+        existing.setUsername("admin");
+        existing.setPassword("encrypted");
+
+        RegistryCreateRequest request = new RegistryCreateRequest();
+        request.setName("RenamedHub");
+        request.setUrl("https://registry.example.com/v2");
+        request.setAuth(null);
+
+        when(registryMapper.selectById(2L)).thenReturn(existing);
+
+        ResponseEntity<Result> response = registryController.UpdateRegistryById(2L, request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        Registry updated = (Registry) response.getBody().getData();
+        assertEquals("RenamedHub", updated.getName());
+        assertEquals("https://registry.example.com/v2", updated.getUrl());
+        assertTrue(updated.getAuth());
+        assertEquals("admin", updated.getUsername());
+        assertNull(updated.getPassword());
+        verify(registryMapper).updateById(existing);
+        assertTrue(existing.getAuth());
+        assertEquals("admin", existing.getUsername());
     }
 }
