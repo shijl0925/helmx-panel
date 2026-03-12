@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -370,10 +371,7 @@ class ContainerControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("Networks cannot be null"));
 
-        verify(dockerClientUtil, never()).setCurrentHost(any());
-        verify(dockerClientUtil, never()).getContainerNetworks(any());
-        verify(dockerClientUtil, never()).disconnectNetwork(any(), any());
-        verify(dockerClientUtil, never()).connectNetwork(any(), any());
+        verifyNoInteractions(dockerClientUtil);
     }
 
     @Test
