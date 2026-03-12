@@ -16,6 +16,11 @@ class DockerEnvDTOTest {
         env.setHost("unix:///var/run/docker.sock");
         env.setStatus(1);
         env.setTlsVerify(false);
+        env.setSshEnabled(true);
+        env.setSshPort(22);
+        env.setSshUsername("root");
+        env.setSshPassword("encrypted");
+        env.setSshHostKeyFingerprint("SHA256:host");
 
         DockerEnvDTO dto = new DockerEnvDTO(env);
 
@@ -25,6 +30,11 @@ class DockerEnvDTOTest {
         assertEquals("unix:///var/run/docker.sock", dto.getHost());
         assertEquals(1,      dto.getStatus());
         assertFalse(dto.getTlsVerify());
+        assertTrue(dto.getSshEnabled());
+        assertEquals(22, dto.getSshPort());
+        assertEquals("root", dto.getSshUsername());
+        assertEquals("SHA256:host", dto.getSshHostKeyFingerprint());
+        assertTrue(dto.getSshPasswordConfigured());
     }
 
     @Test
@@ -34,11 +44,13 @@ class DockerEnvDTOTest {
         env.setName("remote");
         env.setTlsVerify(true);
         env.setHost("tcp://192.168.1.100:2376");
+        env.setSshEnabled(true);
 
         DockerEnvDTO dto = new DockerEnvDTO(env);
 
         assertTrue(dto.getTlsVerify());
         assertEquals("remote", dto.getName());
+        assertTrue(dto.getSshEnabled());
     }
 
     @Test
@@ -66,5 +78,7 @@ class DockerEnvDTOTest {
         DockerEnvDTO dto = new DockerEnvDTO(env);
 
         assertFalse(dto.getTlsVerify());
+        assertFalse(dto.getSshEnabled());
+        assertFalse(dto.getSshPasswordConfigured());
     }
 }

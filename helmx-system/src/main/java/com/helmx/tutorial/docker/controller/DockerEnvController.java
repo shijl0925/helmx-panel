@@ -9,6 +9,7 @@ import com.helmx.tutorial.docker.dto.DockerEnvUpdateRequest;
 import com.helmx.tutorial.docker.entity.DockerEnv;
 import com.helmx.tutorial.docker.mapper.DockerEnvMapper;
 import com.helmx.tutorial.docker.service.DockerEnvService;
+import com.helmx.tutorial.docker.utils.PasswordUtil;
 import com.helmx.tutorial.dto.PageResult;
 import com.helmx.tutorial.dto.Result;
 import com.helmx.tutorial.utils.ResponseUtil;
@@ -36,6 +37,9 @@ public class DockerEnvController {
     @Autowired
     private DockerEnvMapper dockerEnvMapper;
 
+    @Autowired
+    private PasswordUtil passwordUtil;
+
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     @Operation(summary = "Get all envs")
@@ -45,7 +49,9 @@ public class DockerEnvController {
         QueryWrapper<DockerEnv> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", 1);
 
-        List<DockerEnv> envs = dockerEnvMapper.selectList(queryWrapper);
+        List<DockerEnvDTO> envs = dockerEnvMapper.selectList(queryWrapper).stream()
+                .map(DockerEnvDTO::new)
+                .toList();
         return ResponseUtil.success(envs);
     }
 
@@ -104,9 +110,16 @@ public class DockerEnvController {
         env.setHost(request.getHost());
         // TLS设置
         env.setTlsVerify(request.getTlsVerify());
+        env.setSshEnabled(request.getSshEnabled());
+        env.setSshPort(request.getSshPort());
+        env.setSshUsername(request.getSshUsername());
+        env.setSshHostKeyFingerprint(request.getSshHostKeyFingerprint());
+        if (request.getSshPassword() != null && !request.getSshPassword().isBlank()) {
+            env.setSshPassword(passwordUtil.encrypt(request.getSshPassword()));
+        }
         dockerEnvMapper.insert(env);
 
-        return ResponseUtil.success(env);
+        return ResponseUtil.success(new DockerEnvDTO(env));
     }
 
     @Operation(summary = "Update env by ID")
@@ -132,10 +145,25 @@ public class DockerEnvController {
         if (request.getTlsVerify() != null) {
             env.setTlsVerify(request.getTlsVerify());
         }
+        if (request.getSshEnabled() != null) {
+            env.setSshEnabled(request.getSshEnabled());
+        }
+        if (request.getSshPort() != null) {
+            env.setSshPort(request.getSshPort());
+        }
+        if (request.getSshUsername() != null) {
+            env.setSshUsername(request.getSshUsername());
+        }
+        if (request.getSshHostKeyFingerprint() != null) {
+            env.setSshHostKeyFingerprint(request.getSshHostKeyFingerprint());
+        }
+        if (request.getSshPassword() != null) {
+            env.setSshPassword(request.getSshPassword().isBlank() ? null : passwordUtil.encrypt(request.getSshPassword()));
+        }
 
         dockerEnvMapper.updateById(env);
 
-        return ResponseUtil.success(env);
+        return ResponseUtil.success(new DockerEnvDTO(env));
     }
 
     @Operation(summary = "Delete env by ID")

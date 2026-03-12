@@ -138,25 +138,35 @@ public class UserPermissionService {
                 return refreshed.value();
             }
             T loaded = loader.load();
-            evictIfNeeded(cache, refreshedNow);
-            cache.put(userId, new CacheEntry<>(loaded, refreshedNow + cacheTtl.toMillis()));
+            cacheValue(cache, userId, loaded, refreshedNow);
             return loaded;
+        }
+    }
+
+    private <T> void cacheValue(ConcurrentHashMap<Long, CacheEntry<T>> cache, Long userId, T loaded, long now) {
+        synchronized (evictionLock) {
+            evictIfNeededInternal(cache, now);
+            cache.put(userId, new CacheEntry<>(loaded, now + cacheTtl.toMillis()));
         }
     }
 
     private <T> void evictIfNeeded(ConcurrentHashMap<Long, CacheEntry<T>> cache, long now) {
         synchronized (evictionLock) {
-            cache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
-            int overflow = cache.size() - maxEntries + 1;
-            if (overflow <= 0) {
-                return;
-            }
-            List<Map.Entry<Long, CacheEntry<T>>> oldestEntries = cache.entrySet().stream()
-                    .sorted(Comparator.comparingLong(entry -> entry.getValue().expiresAt()))
-                    .limit(overflow)
-                    .toList();
-            oldestEntries.forEach(entry -> cache.remove(entry.getKey(), entry.getValue()));
+            evictIfNeededInternal(cache, now);
         }
+    }
+
+    private <T> void evictIfNeededInternal(ConcurrentHashMap<Long, CacheEntry<T>> cache, long now) {
+        cache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
+        int overflow = cache.size() - maxEntries + 1;
+        if (overflow <= 0) {
+            return;
+        }
+        List<Map.Entry<Long, CacheEntry<T>>> oldestEntries = cache.entrySet().stream()
+                .sorted(Comparator.comparingLong(entry -> entry.getValue().expiresAt()))
+                .limit(overflow)
+                .toList();
+        oldestEntries.forEach(entry -> cache.remove(entry.getKey(), entry.getValue()));
     }
 
     private Object lockFor(Long userId) {
