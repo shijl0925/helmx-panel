@@ -1431,7 +1431,7 @@ public class DockerClientUtil {
             }
         }
 
-        try (Stream<String> mounts = Files.lines(Path.of("/proc/self/mounts"))) {
+        try (Stream<String> mounts = Files.lines(mountsPath())) {
             Optional<String> rootMount = mounts
                     .map(String::trim)
                     .filter(line -> !line.isBlank())
@@ -1456,7 +1456,13 @@ public class DockerClientUtil {
     }
 
     private String resolveRootDeviceNumber() throws IOException {
-        try (Stream<String> mountInfoLines = Files.lines(Path.of("/proc/self/mountinfo"))) {
+        Path mountInfoPath = mountInfoPath();
+        if (!Files.isReadable(mountInfoPath)) {
+            // Trigger resolveRootBlockDevice() fallback to /proc/self/mounts when mountinfo
+            // is unavailable in the current runtime environment.
+            return null;
+        }
+        try (Stream<String> mountInfoLines = Files.lines(mountInfoPath)) {
             return mountInfoLines
                     .map(String::trim)
                     .filter(line -> !line.isBlank())
@@ -1466,6 +1472,14 @@ public class DockerClientUtil {
                     .findFirst()
                     .orElse(null);
         }
+    }
+
+    Path mountInfoPath() {
+        return Path.of("/proc/self/mountinfo");
+    }
+
+    Path mountsPath() {
+        return Path.of("/proc/self/mounts");
     }
 
     private String resolveBlockDeviceName(String deviceNumber) {

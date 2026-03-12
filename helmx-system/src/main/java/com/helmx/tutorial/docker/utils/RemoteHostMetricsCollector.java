@@ -26,16 +26,20 @@ public class RemoteHostMetricsCollector {
             sh -lc 'read _ user nice system idle iowait irq softirq steal _ < /proc/stat;
             total1=$((user+nice+system+idle+iowait+irq+softirq+steal));
             idle1=$((idle+iowait));
-            root_devno=$(awk "$5 == \"/\" {print $3; exit}" /proc/self/mountinfo);
+            if [ -r /proc/self/mountinfo ]; then
+              root_devno=$(awk "\\$5 == \"/\" {print \\$3; exit}" /proc/self/mountinfo);
+            else
+              root_devno=;
+            fi;
             if [ -n "$root_devno" ] && [ -e "/sys/dev/block/$root_devno" ]; then
               root_device=$(basename "$(readlink -f "/sys/dev/block/$root_devno")");
             else
-              root_source=$(df / | awk "NR==2 {print $1}");
+              root_source=$(df / | awk "NR==2 {print \\$1}");
               root_resolved=$(readlink -f "$root_source" 2>/dev/null || printf "%s" "$root_source");
               root_device=$(basename "$root_resolved");
             fi;
             if [ -r "/sys/class/block/$root_device/stat" ]; then
-              set -- $(awk "{printf \\"%s %s\\", $3*512, $7*512}" "/sys/class/block/$root_device/stat");
+              set -- $(awk "{printf \\"%s %s\\", \\$3*512, \\$7*512}" "/sys/class/block/$root_device/stat");
               read1=${1:-0}; write1=${2:-0};
             else
               read1=0; write1=0;
@@ -45,7 +49,7 @@ public class RemoteHostMetricsCollector {
             total2=$((user+nice+system+idle+iowait+irq+softirq+steal));
             idle2=$((idle+iowait));
             if [ -r "/sys/class/block/$root_device/stat" ]; then
-              set -- $(awk "{printf \\"%s %s\\", $3*512, $7*512}" "/sys/class/block/$root_device/stat");
+              set -- $(awk "{printf \\"%s %s\\", \\$3*512, \\$7*512}" "/sys/class/block/$root_device/stat");
               read2=${1:-0}; write2=${2:-0};
             else
               read2=0; write2=0;
@@ -53,8 +57,8 @@ public class RemoteHostMetricsCollector {
             total=$((total2-total1));
             idle=$((idle2-idle1));
             if [ "$total" -le 0 ]; then cpu=0.00; else cpu=$(awk -v total="$total" -v idle="$idle" "BEGIN { printf \\"%.2f\\", (1 - idle / total) * 100 }"); fi;
-            mem=$(awk "/MemTotal:/ {total=$2} /MemAvailable:/ {avail=$2} /MemFree:/ {free=$2} /Buffers:/ {buffers=$2} /Cached:/ {cached=$2} END { if (avail == 0) avail = free + buffers + cached; used=total-avail; if (total<=0) {printf \\"0 0 0.00\\"} else {printf \\"%d %d %.2f\\", used*1024, total*1024, used*100/total}}" /proc/meminfo);
-            disk=$(df -B1 / | awk "NR==2 { if ($2<=0) printf \\"0 0 0.00\\"; else printf \\"%s %s %.2f\\", $3, $2, $5+0 }");
+            mem=$(awk "/MemTotal:/ {total=\\$2} /MemAvailable:/ {avail=\\$2} /MemFree:/ {free=\\$2} /Buffers:/ {buffers=\\$2} /Cached:/ {cached=\\$2} END { if (avail == 0) avail = free + buffers + cached; used=total-avail; if (total<=0) {printf \\"0 0 0.00\\"} else {printf \\"%d %d %.2f\\", used*1024, total*1024, used*100/total}}" /proc/meminfo);
+            disk=$(df -B1 / | awk "NR==2 { if (\\$2<=0) printf \\"0 0 0.00\\"; else printf \\"%s %s %.2f\\", \\$3, \\$2, \\$5+0 }");
             diskio=$(awk -v read1="$read1" -v read2="$read2" -v write1="$write1" -v write2="$write2" "BEGIN { read=read2-read1; write=write2-write1; if (read < 0) read = 0; if (write < 0) write = 0; printf \\"%.2f %.2f\\", read/1024, write/1024 }");
             printf "cpu=%s\\nmem=%s\\ndisk=%s\\ndiskio=%s\\n" "$cpu" "$mem" "$disk" "$diskio"'\
             """;

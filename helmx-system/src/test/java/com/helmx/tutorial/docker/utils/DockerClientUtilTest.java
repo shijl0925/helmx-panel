@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,6 +28,9 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DockerClientUtilTest {
+
+    @TempDir
+    Path tempDir;
 
     @Mock
     private DockerConnectionManager connectionManager;
@@ -114,6 +118,27 @@ class DockerClientUtilTest {
         assertNotNull(rootBlockDevice);
         assertFalse(rootBlockDevice.isBlank());
         assertTrue(Files.exists(Path.of("/sys/class/block", rootBlockDevice, "stat")));
+    }
+
+    @Test
+    void resolveRootBlockDevice_fallsBackToMountsWhenMountInfoIsUnavailable() throws Exception {
+        Path mountsFile = tempDir.resolve("mounts");
+        Files.writeString(mountsFile, "/dev/sda1 / ext4 rw,relatime 0 0\n");
+        DockerClientUtil fallbackUtil = new DockerClientUtil() {
+            @Override
+            Path mountInfoPath() {
+                return tempDir.resolve("missing-mountinfo");
+            }
+
+            @Override
+            Path mountsPath() {
+                return mountsFile;
+            }
+        };
+
+        String rootBlockDevice = ReflectionTestUtils.invokeMethod(fallbackUtil, "resolveRootBlockDevice");
+
+        assertEquals("sda1", rootBlockDevice);
     }
 
     @Test
