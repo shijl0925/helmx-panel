@@ -548,6 +548,10 @@ public class ContainerController {
         String host = request.getHost();
         dockerClientUtil.setCurrentHost(host);
 
+        if (request.getNetworks() == null) {
+            return ResponseUtil.failed(400, null, "Networks cannot be null");
+        }
+
         // 获取当前容器连接的网络
         Set<String> currentNetworks = dockerClientUtil.getContainerNetworks(containerId);
 

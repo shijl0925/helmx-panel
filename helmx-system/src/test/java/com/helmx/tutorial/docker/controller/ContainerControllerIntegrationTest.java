@@ -357,6 +357,25 @@ class ContainerControllerIntegrationTest {
     }
 
     @Test
+    void updateContainerNetworks_missingNetworksReturnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/ops/containers/networks")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "containerId": "container-1"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("Networks cannot be null"));
+
+        verify(dockerClientUtil, never()).getContainerNetworks(any());
+        verify(dockerClientUtil, never()).disconnectNetwork(any(), any());
+        verify(dockerClientUtil, never()).connectNetwork(any(), any());
+    }
+
+    @Test
     void disconnectContainerNetwork_successReturnsConfirmation() throws Exception {
         when(dockerClientUtil.disconnectNetwork("bridge", "container-1")).thenReturn(Map.of("status", "success"));
 
