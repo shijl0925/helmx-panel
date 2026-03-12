@@ -80,6 +80,9 @@ public class PasswordUtil {
             byte[] combined = Base64.getDecoder().decode(cipherText);
 
             // 提取IV和密文
+            if (combined.length < 16) {
+                throw new IllegalArgumentException("Invalid ciphertext: data is too short to contain IV");
+            }
             byte[] iv = new byte[16];
             byte[] encryptedBytes = new byte[combined.length - 16];
             System.arraycopy(combined, 0, iv, 0, 16);

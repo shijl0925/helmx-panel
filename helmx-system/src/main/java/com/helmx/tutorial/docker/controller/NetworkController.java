@@ -119,7 +119,7 @@ public class NetworkController {
         String status = (String) result.get("status");
         String message = (String) result.remove("message");
 
-        if (status.equals("success")) {
+        if ("success".equals(status)) {
             return ResponseUtil.success(message, result);
         } else {
             log.error("Create network failed: {}", message);
@@ -151,7 +151,7 @@ public class NetworkController {
 
         for (String name : names) {
             Map<String, Object> removeNetworkResult = dockerClientUtil.removeNetwork(name);
-            if (removeNetworkResult.get("status").equals("failed")) {
+            if ("failed".equals(removeNetworkResult.get("status"))) {
                 result.put("status", "failed");
                 String message = (String) removeNetworkResult.remove("message");
                 return ResponseUtil.failed(500, result, message);

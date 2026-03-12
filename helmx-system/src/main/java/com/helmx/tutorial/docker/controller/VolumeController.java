@@ -130,7 +130,7 @@ public class VolumeController {
         String status = (String) result.get("status");
         String message = (String) result.remove("message");
 
-        if (status.equals("success")) {
+        if ("success".equals(status)) {
             return ResponseUtil.success(message, result);
         } else {
             log.error("Create volume failed: {}", message);
@@ -165,7 +165,7 @@ public class VolumeController {
 
         for (String name : names) {
             Map<String, Object> removeVolumeResult = dockerClientUtil.removeVolume(name);
-            if (removeVolumeResult.get("status").equals("failed")) {
+            if ("failed".equals(removeVolumeResult.get("status"))) {
                 result.put("status", "failed");
                 String message = (String) removeVolumeResult.remove("message");
                 return ResponseUtil.failed(500, result, message);

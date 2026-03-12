@@ -3,6 +3,8 @@ package com.helmx.tutorial.docker.utils;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ByteUtilsTest {
 
@@ -33,5 +35,23 @@ class ByteUtilsTest {
     @Test
     void formatBytes_terabytes_returnsTB() {
         assertEquals("1.00 TB", ByteUtils.formatBytes(1024L * 1024 * 1024 * 1024));
+    }
+
+    @Test
+    void formatBytes_petabytes_returnsPB() {
+        assertEquals("1.00 PB", ByteUtils.formatBytes(1024L * 1024 * 1024 * 1024 * 1024));
+    }
+
+    @Test
+    void formatBytes_exabytes_returnsEB() {
+        assertEquals("1.00 EB", ByteUtils.formatBytes(1024L * 1024 * 1024 * 1024 * 1024 * 1024));
+    }
+
+    @Test
+    void formatBytes_longMaxValue_doesNotThrow() {
+        // Before the fix this threw ArrayIndexOutOfBoundsException
+        String result = ByteUtils.formatBytes(Long.MAX_VALUE);
+        assertNotNull(result);
+        assertTrue(result.endsWith("EB"), "Long.MAX_VALUE (~8 EB) should format as EB, got: " + result);
     }
 }

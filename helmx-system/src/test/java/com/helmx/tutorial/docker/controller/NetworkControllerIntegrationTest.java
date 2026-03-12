@@ -118,6 +118,46 @@ class NetworkControllerIntegrationTest {
         verify(dockerClientUtil).removeNetwork("beta");
     }
 
+    @Test
+    void createDockerNetwork_nullStatusInResult_doesNotThrowNPE() throws Exception {
+        // Before the fix, status.equals("success") threw NPE when status was null
+        Map<String, Object> result = new HashMap<>();
+        result.put("status", null);
+        result.put("message", "unexpected null status");
+        when(dockerClientUtil.createNetwork(any())).thenReturn(result);
+
+        mockMvc.perform(post("/api/v1/ops/networks")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "name": "null-status-net",
+                                  "driver": "bridge"
+                                }
+                                """))
+                .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    void removeDockerNetwork_nullStatusInResult_doesNotThrowNPE() throws Exception {
+        // Before the fix, removeNetworkResult.get("status").equals("failed") threw NPE
+        // when the status key was missing (null value)
+        Map<String, Object> nullStatusResult = new HashMap<>();
+        nullStatusResult.put("status", null);
+        when(dockerClientUtil.removeNetwork("orphan")).thenReturn(nullStatusResult);
+
+        mockMvc.perform(post("/api/v1/ops/networks/remove")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "names": ["orphan"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
     private Network createNetwork(String id, String name, Date created) {
         Network.Ipam ipam = new Network.Ipam()
                 .withDriver("default")
