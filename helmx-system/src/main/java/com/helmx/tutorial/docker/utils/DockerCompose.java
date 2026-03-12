@@ -350,7 +350,7 @@ public class DockerCompose {
         }
     }
 
-    int waitForProcess(Process process, long timeoutSeconds, String timeoutMessage) throws InterruptedException {
+    public int waitForProcess(Process process, long timeoutSeconds, String timeoutMessage) throws InterruptedException {
         boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
         if (!finished) {
             process.destroyForcibly();
