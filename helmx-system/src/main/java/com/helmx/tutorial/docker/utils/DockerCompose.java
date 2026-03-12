@@ -83,15 +83,7 @@ public class DockerCompose {
                 deployProcess = deployProcessBuilder.start();
                 task.setMessage("Starting stack deployment...");
 
-                // 等待命令执行完成（设置超时时间）
-                boolean finished = deployProcess.waitFor(300, TimeUnit.SECONDS); // 5分钟超时
-
-                if (!finished) {
-                    deployProcess.destroyForcibly();
-                    throw new RuntimeException("Deployment timeout after 5 minutes");
-                }
-
-                int exitCode = deployProcess.waitFor();
+                int exitCode = waitForProcess(deployProcess, 300L, "Deployment timeout after 5 minutes");
 
                 if (exitCode != 0) {
                     // 读取错误输出
@@ -131,18 +123,12 @@ public class DockerCompose {
         processBuilder.directory(stackDirPath.toFile());
         Process process = processBuilder.start();
 
-        boolean finished = process.waitFor(120, TimeUnit.SECONDS); // 2分钟超时
-        if (!finished) {
-            process.destroyForcibly();
-            log.warn("docker-compose down command timeout during cleanup");
+        int exitCode = waitForProcess(process, 120L, "docker-compose down command timeout during cleanup");
+        if (exitCode != 0) {
+            String errorOutput = readErrorStream(process);
+            log.warn("Failed to cleanup existing stack. Exit code: {}. Error: {}", exitCode, errorOutput);
         } else {
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                String errorOutput = readErrorStream(process);
-                log.warn("Failed to cleanup existing stack. Exit code: {}. Error: {}", exitCode, errorOutput);
-            } else {
-                log.info("Existing stack cleaned up successfully");
-            }
+            log.info("Existing stack cleaned up successfully");
         }
         closeQuietly(process);
     }
@@ -362,6 +348,15 @@ public class DockerCompose {
                 process.destroy();
             }
         }
+    }
+
+    public int waitForProcess(Process process, long timeoutSeconds, String timeoutMessage) throws InterruptedException {
+        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            throw new RuntimeException(timeoutMessage);
+        }
+        return process.exitValue();
     }
 
     /**
