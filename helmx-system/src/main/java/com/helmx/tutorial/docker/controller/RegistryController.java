@@ -133,7 +133,7 @@ public class RegistryController {
     }
 
     private static int getResponseCode(String registryUrl, String encodedAuth) throws IOException {
-        URI uri = URI.create(registryUrl + "/v2/");
+        URI uri = URI.create(normalizeRegistryUrl(registryUrl) + "/v2/");
         URL url = uri.toURL();
 
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -272,19 +272,35 @@ public class RegistryController {
     }
 
     private List<String> fetchRegistryCatalog(String registryUrl, String encodedAuth) throws IOException {
-        String responseBody = callRegistryApi(registryUrl, "/v2/_catalog", encodedAuth);
-        JSONObject json = JSON.parseObject(responseBody);
-        List<String> repos = json.getList("repositories", String.class);
-        return repos != null ? repos : new ArrayList<>();
+        List<String> allRepositories = new ArrayList<>();
+        String path = "/v2/_catalog";
+        while (path != null) {
+            String[] response = callRegistryApiWithLink(registryUrl, path, encodedAuth);
+            JSONObject json = JSON.parseObject(response[0]);
+            List<String> page = json.getList("repositories", String.class);
+            if (page != null) {
+                allRepositories.addAll(page);
+            }
+            path = extractNextPath(response[1]);
+        }
+        return allRepositories;
     }
 
     private List<String> fetchRepositoryTags(String registryUrl, String repository, String encodedAuth)
             throws IOException {
         try {
-            String responseBody = callRegistryApi(registryUrl, "/v2/" + repository + "/tags/list", encodedAuth);
-            JSONObject json = JSON.parseObject(responseBody);
-            List<String> tags = json.getList("tags", String.class);
-            return tags != null ? tags : new ArrayList<>();
+            List<String> allTags = new ArrayList<>();
+            String path = "/v2/" + repository + "/tags/list";
+            while (path != null) {
+                String[] response = callRegistryApiWithLink(registryUrl, path, encodedAuth);
+                JSONObject json = JSON.parseObject(response[0]);
+                List<String> page = json.getList("tags", String.class);
+                if (page != null) {
+                    allTags.addAll(page);
+                }
+                path = extractNextPath(response[1]);
+            }
+            return allTags;
         } catch (Exception e) {
             log.warn("Failed to fetch tags for repository {}: {}", repository, e.getMessage());
             return new ArrayList<>();
@@ -292,7 +308,16 @@ public class RegistryController {
     }
 
     private String callRegistryApi(String registryUrl, String path, String encodedAuth) throws IOException {
-        URI uri = URI.create(registryUrl + path);
+        return callRegistryApiWithLink(registryUrl, path, encodedAuth)[0];
+    }
+
+    /**
+     * Calls the Docker Registry V2 HTTP API and returns a two-element array:
+     * {@code [responseBody, linkHeader]} where {@code linkHeader} may be {@code null}.
+     * The registry URL is normalized (trailing slashes stripped) before use.
+     */
+    private String[] callRegistryApiWithLink(String registryUrl, String path, String encodedAuth) throws IOException {
+        URI uri = URI.create(normalizeRegistryUrl(registryUrl) + path);
         URL url = uri.toURL();
 
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -308,14 +333,43 @@ public class RegistryController {
 
             int code = connection.getResponseCode();
             if (code == 200) {
+                String body;
                 try (InputStream in = connection.getInputStream()) {
-                    return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                    body = new String(in.readAllBytes(), StandardCharsets.UTF_8);
                 }
+                return new String[]{body, connection.getHeaderField("Link")};
             } else {
                 throw new IOException("Registry API returned HTTP " + code + " for " + path);
             }
         } finally {
             connection.disconnect();
         }
+    }
+
+    /**
+     * Parses a {@code Link} response header (RFC 5988) and returns the path+query of the
+     * {@code rel="next"} URL, or {@code null} if there is no next page.
+     * <p>Example header value: {@code </v2/_catalog?last=repo100&n=100>; rel="next"}
+     * <p>Package-visible so that {@code RegistryControllerCatalogTest} can unit-test it directly.
+     */
+    static String extractNextPath(String linkHeader) {
+        if (linkHeader == null) return null;
+        int start = linkHeader.indexOf('<');
+        int end = linkHeader.indexOf('>');
+        if (start < 0 || end <= start) return null;
+        String url = linkHeader.substring(start + 1, end);
+        try {
+            URI uri = URI.create(url);
+            String p = uri.getPath();
+            String query = uri.getQuery();
+            return query != null ? p + "?" + query : p;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /** Strips any trailing slash from a registry URL before appending an API path. */
+    private static String normalizeRegistryUrl(String registryUrl) {
+        return registryUrl.endsWith("/") ? registryUrl.substring(0, registryUrl.length() - 1) : registryUrl;
     }
 }

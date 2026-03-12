@@ -18,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
@@ -142,5 +143,102 @@ class RegistryControllerCatalogTest {
         // The server doesn't validate auth, but the call should succeed
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(0, response.getBody().getCode());
+    }
+
+    @Test
+    void getRegistryCatalog_toleratesTrailingSlashInUrl() {
+        Registry registry = new Registry();
+        ReflectionTestUtils.setField(registry, "id", 4L);
+        registry.setName("local-trailing-slash");
+        // URL stored with a trailing slash – without normalization this would produce
+        // "//v2/_catalog" which causes 404 on many registry servers
+        registry.setUrl("http://127.0.0.1:" + serverPort + "/");
+        registry.setAuth(false);
+
+        when(registryMapper.selectById(4L)).thenReturn(registry);
+
+        ResponseEntity<Result> response = registryController.GetRegistryCatalog(4L);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(0, response.getBody().getCode());
+        assertTrue(response.getBody().getData().toString().contains("myapp"));
+    }
+
+    @Test
+    void getRegistryCatalog_followsPaginationLinkHeader() throws Exception {
+        // Stand up a separate mini-server that returns paginated catalog responses
+        HttpServer pagedServer = HttpServer.create(new InetSocketAddress(0), 0);
+        int pagedPort = pagedServer.getAddress().getPort();
+        AtomicInteger catalogCallCount = new AtomicInteger(0);
+
+        pagedServer.createContext("/v2/_catalog", exchange -> {
+            int call = catalogCallCount.incrementAndGet();
+            byte[] body;
+            if (call == 1) {
+                // First page – return one repo and advertise a next page via Link header
+                body = "{\"repositories\":[\"page1repo\"]}".getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.getResponseHeaders().set("Link",
+                        "</v2/_catalog?last=page1repo&n=1>; rel=\"next\"");
+                exchange.sendResponseHeaders(200, body.length);
+            } else {
+                // Second (last) page – return one more repo, no Link header
+                body = "{\"repositories\":[\"page2repo\"]}".getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, body.length);
+            }
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+
+        pagedServer.createContext("/v2/page1repo/tags/list", exchange -> {
+            byte[] body = "{\"name\":\"page1repo\",\"tags\":[\"v1\"]}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+
+        pagedServer.createContext("/v2/page2repo/tags/list", exchange -> {
+            byte[] body = "{\"name\":\"page2repo\",\"tags\":[\"v2\"]}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+
+        pagedServer.start();
+        try {
+            Registry registry = new Registry();
+            ReflectionTestUtils.setField(registry, "id", 5L);
+            registry.setName("paged-registry");
+            registry.setUrl("http://127.0.0.1:" + pagedPort);
+            registry.setAuth(false);
+
+            when(registryMapper.selectById(5L)).thenReturn(registry);
+
+            ResponseEntity<Result> response = registryController.GetRegistryCatalog(5L);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertNotNull(response.getBody());
+            assertEquals(0, response.getBody().getCode());
+            String data = response.getBody().getData().toString();
+            // Both pages should be present in the response
+            assertTrue(data.contains("page1repo"), "Should contain page1repo");
+            assertTrue(data.contains("page2repo"), "Should contain page2repo");
+        } finally {
+            pagedServer.stop(0);
+        }
+    }
+
+    @Test
+    void extractNextPath_parsesLinkHeader() {
+        assertNull(RegistryController.extractNextPath(null));
+        assertNull(RegistryController.extractNextPath("no angle brackets"));
+        assertEquals("/v2/_catalog?last=repo100&n=100",
+                RegistryController.extractNextPath("</v2/_catalog?last=repo100&n=100>; rel=\"next\""));
+        assertEquals("/v2/_catalog",
+                RegistryController.extractNextPath("</v2/_catalog>; rel=\"next\""));
     }
 }

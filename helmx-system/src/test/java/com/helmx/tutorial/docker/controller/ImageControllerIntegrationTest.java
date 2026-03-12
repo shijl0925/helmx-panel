@@ -511,4 +511,47 @@ class ImageControllerIntegrationTest {
         ReflectionTestUtils.setField(image, "created", created);
         return image;
     }
+
+    @Test
+    void searchDockerHubImages_returnsItemsFromDockerClient() throws Exception {
+        List<Map<String, Object>> hubItems = List.of(
+                Map.of("name", "nginx", "description", "Official nginx", "starCount", 1000,
+                        "isOfficial", true, "isTrusted", true),
+                Map.of("name", "nginx-unprivileged", "description", "Rootless nginx",
+                        "starCount", 200, "isOfficial", false, "isTrusted", false)
+        );
+        when(dockerClientUtil.searchImagesOnHub("nginx", 25)).thenReturn(hubItems);
+
+        mockMvc.perform(post("/api/v1/ops/images/hub/search")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "term": "nginx",
+                                  "limit": 25
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.items[0].name").value("nginx"))
+                .andExpect(jsonPath("$.data.items[0].isOfficial").value(true))
+                .andExpect(jsonPath("$.data.items[1].name").value("nginx-unprivileged"));
+    }
+
+    @Test
+    void searchDockerHubImages_usesDefaultLimitWhenNotSpecified() throws Exception {
+        when(dockerClientUtil.searchImagesOnHub("redis", 25)).thenReturn(List.of());
+
+        mockMvc.perform(post("/api/v1/ops/images/hub/search")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "host": "unix:///var/run/docker.sock",
+                                  "term": "redis"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(0));
+    }
 }
