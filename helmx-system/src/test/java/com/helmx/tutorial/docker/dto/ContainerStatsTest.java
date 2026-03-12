@@ -1,5 +1,6 @@
 package com.helmx.tutorial.docker.dto;
 
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.Test;
 
@@ -12,21 +13,31 @@ class ContainerStatsTest {
      * cpu_stats.cpu_usage.total_usage, cpu_stats.system_cpu_usage, cpu_stats.online_cpus
      * precpu_stats.cpu_usage.total_usage, precpu_stats.system_cpu_usage
      * memory_stats.usage, memory_stats.limit, memory_stats.stats.cache, memory_stats.stats.inactive_file
+     *
+     * Pass onlineCpus=0 to omit the field entirely (simulates older Docker daemons).
+     * Pass a non-null perCpuUsage to include the percpu_usage array in cpu_usage.
      */
     private JSONObject buildStatsJson(
             long totalUsage, long preTotalUsage,
             long systemUsage, long preSystemUsage,
-            int onlineCpus,
+            int onlineCpus, long[] perCpuUsage,
             long memUsage, long memLimit,
             long cache, long inactiveFile) {
 
         JSONObject cpuUsage = new JSONObject();
         cpuUsage.put("total_usage", totalUsage);
+        if (perCpuUsage != null) {
+            JSONArray arr = new JSONArray();
+            for (long v : perCpuUsage) arr.add(v);
+            cpuUsage.put("percpu_usage", arr);
+        }
 
         JSONObject cpuStats = new JSONObject();
         cpuStats.put("cpu_usage", cpuUsage);
         cpuStats.put("system_cpu_usage", systemUsage);
-        cpuStats.put("online_cpus", onlineCpus);
+        if (onlineCpus > 0) {
+            cpuStats.put("online_cpus", onlineCpus);
+        }
 
         JSONObject preCpuUsage = new JSONObject();
         preCpuUsage.put("total_usage", preTotalUsage);
@@ -54,6 +65,17 @@ class ContainerStatsTest {
         return stats;
     }
 
+    /** Overload: with online_cpus, no percpu_usage array, no inactive_file. */
+    private JSONObject buildStatsJson(
+            long totalUsage, long preTotalUsage,
+            long systemUsage, long preSystemUsage,
+            int onlineCpus,
+            long memUsage, long memLimit,
+            long cache, long inactiveFile) {
+        return buildStatsJson(totalUsage, preTotalUsage, systemUsage, preSystemUsage,
+                onlineCpus, null, memUsage, memLimit, cache, inactiveFile);
+    }
+
     /** Convenience overload with no cache/inactive_file (both zero). */
     private JSONObject buildStatsJson(
             long totalUsage, long preTotalUsage,
@@ -62,7 +84,7 @@ class ContainerStatsTest {
             long memUsage, long memLimit,
             long cache) {
         return buildStatsJson(totalUsage, preTotalUsage, systemUsage, preSystemUsage,
-                onlineCpus, memUsage, memLimit, cache, 0L);
+                onlineCpus, null, memUsage, memLimit, cache, 0L);
     }
 
     @Test
@@ -93,6 +115,40 @@ class ContainerStatsTest {
         ContainerStats stats = new ContainerStats(json);
 
         assertEquals(0.0f, stats.getCpuPercent(), 0.001f);
+    }
+
+    @Test
+    void cpuPercent_missingOnlineCpus_fallsBackToPercpuUsageLength() {
+        // online_cpus absent → must fall back to percpu_usage array length (4 entries)
+        // totalDelta=100_000_000, systemDelta=500_000_000, fallback CPUs=4 → 80%
+        JSONObject json = buildStatsJson(
+                200_000_000L, 100_000_000L,
+                1_000_000_000L, 500_000_000L,
+                0,   // 0 means online_cpus is omitted
+                new long[]{25_000_000L, 25_000_000L, 25_000_000L, 25_000_000L},
+                104_857_600L, 8_589_934_592L, 0L, 0L);
+
+        ContainerStats stats = new ContainerStats(json);
+
+        assertEquals(80.0f, stats.getCpuPercent(), 0.01f);
+        // onlineCPUs should be resolved to 4 (from percpu_usage)
+        assertEquals(4, stats.getOnlineCPUs());
+    }
+
+    @Test
+    void cpuPercent_missingOnlineCpusAndPercpuUsage_fallsBackToOne() {
+        // online_cpus absent and no percpu_usage → fall back to 1 CPU
+        // totalDelta=100_000_000, systemDelta=500_000_000, fallback CPUs=1 → 20%
+        JSONObject json = buildStatsJson(
+                200_000_000L, 100_000_000L,
+                1_000_000_000L, 500_000_000L,
+                0,   // online_cpus omitted
+                104_857_600L, 8_589_934_592L, 0L);
+
+        ContainerStats stats = new ContainerStats(json);
+
+        assertEquals(20.0f, stats.getCpuPercent(), 0.01f);
+        assertEquals(1, stats.getOnlineCPUs());
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.helmx.tutorial.docker.dto;
 
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.helmx.tutorial.docker.utils.ByteUtils;
 import com.helmx.tutorial.docker.utils.TimeUtils;
@@ -44,8 +45,15 @@ public class ContainerStats {
         this.cpuSystemUsage = TimeUtils.formatNanosecondsDetailed(systemCpuUsage);
 
         this.onlineCPUs = cpuStats.getInteger("online_cpus");
+        if (this.onlineCPUs == null || this.onlineCPUs == 0) {
+            // Older Docker daemons / some runtimes omit online_cpus.
+            // Fall back to the length of percpu_usage, mirroring Docker CLI behaviour.
+            JSONArray perCpuUsage = cpuUsage.getJSONArray("percpu_usage");
+            this.onlineCPUs = (perCpuUsage != null && !perCpuUsage.isEmpty())
+                    ? perCpuUsage.size() : 1;
+        }
         if (systemCpuUsage != 0) {
-            this.cpuPercent = ((float) totalUsage / systemCpuUsage) * onlineCPUs * 100.0f;
+            this.cpuPercent = ((float) totalUsage / systemCpuUsage) * this.onlineCPUs * 100.0f;
         } else {
             this.cpuPercent = 0.0f;
         }
@@ -59,8 +67,8 @@ public class ContainerStats {
         long cacheBytes = 0L;
         JSONObject memoryStatsDetail = memoryStats.getJSONObject("stats");
         if (memoryStatsDetail != null) {
-            // Prefer inactive_file (present in both cgroup v1 and v2) when the key exists;
-            // fall back to cache (cgroup v1 only).
+            // Prefer inactive_file (cgroup v2 primary metric, may also appear in v1) when
+            // the key is present; fall back to cache (cgroup v1 standard field).
             if (memoryStatsDetail.containsKey("inactive_file")) {
                 cacheBytes = memoryStatsDetail.getLongValue("inactive_file");
             } else if (memoryStatsDetail.containsKey("cache")) {
