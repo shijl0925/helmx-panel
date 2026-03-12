@@ -545,12 +545,12 @@ public class ContainerController {
     public ResponseEntity<Result> updateContainerNetworks(@Valid @RequestBody ContainerNetworkUpdateRequest request) {
         String containerId = request.getContainerId();
 
-        String host = request.getHost();
-        dockerClientUtil.setCurrentHost(host);
-
         if (request.getNetworks() == null) {
             return ResponseUtil.failed(400, null, "Networks cannot be null");
         }
+
+        String host = request.getHost();
+        dockerClientUtil.setCurrentHost(host);
 
         // 获取当前容器连接的网络
         Set<String> currentNetworks = dockerClientUtil.getContainerNetworks(containerId);

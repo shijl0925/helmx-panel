@@ -370,6 +370,7 @@ class ContainerControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("Networks cannot be null"));
 
+        verify(dockerClientUtil, never()).setCurrentHost(any());
         verify(dockerClientUtil, never()).getContainerNetworks(any());
         verify(dockerClientUtil, never()).disconnectNetwork(any(), any());
         verify(dockerClientUtil, never()).connectNetwork(any(), any());
