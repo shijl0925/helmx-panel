@@ -198,7 +198,12 @@ public class ContainerController {
             String host = criteria.getHost();
             dockerClientUtil.setCurrentHost(host);
 
-            JSONObject stats = dockerClientUtil.getContainerStats(containerId, false);
+            // noStream=true → stream=false: Docker collects two readings ~1 second apart and
+            // returns both as a single response; precpu_stats is always valid (~1s ago).
+            // Using stream=true (streaming) and taking only the first event would give
+            // precpu_stats=0 (Docker API spec: "first sample has all values as zero"),
+            // making the delta equal to the cumulative CPU time since container start.
+            JSONObject stats = dockerClientUtil.getContainerStats(containerId, true);
             if (criteria.isSimple()) {
                 ContainerStats containerStats = new ContainerStats(stats);
                 return ResponseUtil.success(containerStats);
@@ -835,10 +840,17 @@ public class ContainerController {
                     dockerClientUtil.getCurrentDockerClient().statsCmd(containerId).withNoStream(false);
 
             final AtomicBoolean emitterActive = new AtomicBoolean(true);
+            // The first streaming event always has precpu_stats=0 (Docker API spec:
+            // "first sample has all values as zero").  Skip it so that every event
+            // delivered to the frontend carries a valid ~1-second CPU delta.
+            final AtomicBoolean firstEventSkipped = new AtomicBoolean(false);
 
             statsCmd.exec(new com.github.dockerjava.api.async.ResultCallback.Adapter<com.github.dockerjava.api.model.Statistics>() {
                 @Override
                 public void onNext(com.github.dockerjava.api.model.Statistics stats) {
+                    if (!firstEventSkipped.getAndSet(true)) {
+                        return;
+                    }
                     if (!emitterActive.get()) {
                         try {
                             close();

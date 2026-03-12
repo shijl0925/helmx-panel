@@ -1,5 +1,6 @@
 package com.helmx.tutorial.docker.dto;
 
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.helmx.tutorial.docker.utils.ByteUtils;
 import com.helmx.tutorial.docker.utils.TimeUtils;
@@ -13,11 +14,10 @@ public class ContainerStats {
     private String cpuSystemUsage;
     private Integer onlineCPUs;
     private Float cpuPercent;
-    private Long perCpuUsage;
 
     private String memoryUsage;
     private String memoryLimit;
-    private Integer memoryCache;
+    private Long memoryCache;
     private Float memoryPercent;
 
     public ContainerStats(JSONObject stats) {
@@ -45,24 +45,44 @@ public class ContainerStats {
         this.cpuSystemUsage = TimeUtils.formatNanosecondsDetailed(systemCpuUsage);
 
         this.onlineCPUs = cpuStats.getInteger("online_cpus");
+        if (this.onlineCPUs == null || this.onlineCPUs == 0) {
+            // Older Docker daemons / some runtimes omit online_cpus.
+            // Fall back to the length of percpu_usage, mirroring Docker CLI behaviour.
+            JSONArray perCpuUsage = cpuUsage.getJSONArray("percpu_usage");
+            this.onlineCPUs = (perCpuUsage != null && !perCpuUsage.isEmpty())
+                    ? perCpuUsage.size() : 1;
+        }
         if (systemCpuUsage != 0) {
-            this.cpuPercent = ((float) totalUsage / systemCpuUsage) * onlineCPUs * 100.0f;
+            this.cpuPercent = ((float) totalUsage / systemCpuUsage) * this.onlineCPUs * 100.0f;
         } else {
             this.cpuPercent = 0.0f;
         }
 
-        long memoryUsage = memoryStats.getLongValue("usage");
-        this.memoryUsage = ByteUtils.formatBytes(memoryUsage);
-
+        long rawMemoryUsage = memoryStats.getLongValue("usage");
         long memoryLimit = memoryStats.getLongValue("limit");
-        this.memoryLimit = ByteUtils.formatBytes(memoryLimit);
 
+        // Subtract page cache from usage to get actual process memory consumption.
+        // Docker stats API: memory_stats.usage includes page cache.
+        // cgroup v2 reports inactive_file; cgroup v1 reports cache.
+        long cacheBytes = 0L;
         JSONObject memoryStatsDetail = memoryStats.getJSONObject("stats");
         if (memoryStatsDetail != null) {
-            this.memoryCache = memoryStatsDetail.getInteger("cache");
+            // Prefer inactive_file (cgroup v2 primary metric, may also appear in v1) when
+            // the key is present; fall back to cache (cgroup v1 standard field).
+            if (memoryStatsDetail.containsKey("inactive_file")) {
+                cacheBytes = memoryStatsDetail.getLongValue("inactive_file");
+            } else if (memoryStatsDetail.containsKey("cache")) {
+                cacheBytes = memoryStatsDetail.getLongValue("cache");
+            }
+            this.memoryCache = cacheBytes;
         }
+
+        long actualMemoryUsage = Math.max(0L, rawMemoryUsage - cacheBytes);
+        this.memoryUsage = ByteUtils.formatBytes(actualMemoryUsage);
+        this.memoryLimit = ByteUtils.formatBytes(memoryLimit);
+
         if (memoryLimit != 0) {
-            this.memoryPercent = (memoryUsage * 100.0f / memoryLimit);
+            this.memoryPercent = (actualMemoryUsage * 100.0f / memoryLimit);
         } else {
             this.memoryPercent = 0.0f;
         }
