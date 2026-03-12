@@ -63,6 +63,13 @@ public class DockerEnvController {
             @RequestParam(defaultValue = "1") @ApiParam(value = "当前页码") Integer page,
             @RequestParam(defaultValue = "10") @ApiParam(value = "每页数量") Integer pageSize
     ) {
+        if (page < 1) {
+            page = 1;
+        }
+        if (pageSize < 1 || pageSize > 100) {
+            pageSize = 10;
+        }
+
         Page<DockerEnv> pageInfo = new Page<>(page, pageSize);
 
         QueryWrapper<DockerEnv> queryWrapper = new QueryWrapper<>();

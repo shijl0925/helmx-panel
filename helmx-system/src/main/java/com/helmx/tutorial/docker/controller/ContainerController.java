@@ -543,8 +543,11 @@ public class ContainerController {
     @PostMapping("/networks")
     @PreAuthorize("@va.check('Ops:Container:Edit')")
     public ResponseEntity<Result> updateContainerNetworks(@Valid @RequestBody ContainerNetworkUpdateRequest request) {
-        String containerId = request.getContainerId();
+        if (request.getNetworks() == null) {
+            return ResponseUtil.failed(400, null, "Networks cannot be null");
+        }
 
+        String containerId = request.getContainerId();
         String host = request.getHost();
         dockerClientUtil.setCurrentHost(host);
 
