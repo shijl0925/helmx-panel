@@ -107,11 +107,11 @@ public class StackController {
         if (stack == null) {
             return ResponseUtil.failed(404, null, "Stack does not exist");
         }
-        if (stack.getName() != null) {
+        if (request.getName() != null && !request.getName().isBlank()) {
             stack.setName(request.getName());
         }
 
-        if (stack.getContent() != null) {
+        if (request.getContent() != null && !request.getContent().isBlank()) {
             stack.setContent(request.getContent());
         }
         stackMapper.updateById(stack);
