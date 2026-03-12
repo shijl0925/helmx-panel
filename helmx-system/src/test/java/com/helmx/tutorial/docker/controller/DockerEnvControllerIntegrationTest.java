@@ -100,10 +100,20 @@ class DockerEnvControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.current").value(1))
                 .andExpect(jsonPath("$.data.size").value(10));
 
-        ArgumentCaptor<Page<DockerEnv>> captor = ArgumentCaptor.forClass(Page.class);
-        verify(dockerEnvMapper).selectPage(captor.capture(), any());
-        assertEquals(1L, captor.getValue().getCurrent());
-        assertEquals(10L, captor.getValue().getSize());
+        mockMvc.perform(get("/api/v1/ops/envs")
+                        .param("page", "-2")
+                        .param("pageSize", "101"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.current").value(1))
+                .andExpect(jsonPath("$.data.size").value(10));
+
+        ArgumentCaptor<Page> captor = ArgumentCaptor.forClass(Page.class);
+        verify(dockerEnvMapper, org.mockito.Mockito.times(2)).selectPage(captor.capture(), any());
+        assertEquals(1L, captor.getAllValues().get(0).getCurrent());
+        assertEquals(10L, captor.getAllValues().get(0).getSize());
+        assertEquals(1L, captor.getAllValues().get(1).getCurrent());
+        assertEquals(10L, captor.getAllValues().get(1).getSize());
     }
 
     @Test
