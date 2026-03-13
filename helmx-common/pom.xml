@@ -11,4 +11,13 @@
 
     <artifactId>helmx-common</artifactId>
     <name>公共模块</name>
+
+    <dependencies>
+        <!-- Hutool工具库 (用于User-Agent解析) -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-http</artifactId>
+            <version>5.8.34</version>
+        </dependency>
+    </dependencies>
 </project>

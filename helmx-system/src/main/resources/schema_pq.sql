@@ -157,3 +157,19 @@ CREATE TRIGGER update_tb_stack_updated_at
     BEFORE UPDATE ON tb_stack
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_sys_log (
+    id BIGSERIAL PRIMARY KEY,
+    username VARCHAR(50),
+    description VARCHAR(255),
+    method VARCHAR(255),
+    params TEXT,
+    log_type VARCHAR(10) NOT NULL DEFAULT 'INFO',
+    request_ip VARCHAR(50),
+    address VARCHAR(255),
+    browser VARCHAR(255),
+    user_agent VARCHAR(255),
+    time BIGINT,
+    exception_detail TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
