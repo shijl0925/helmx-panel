@@ -193,4 +193,87 @@ class DockerEnvControllerIntegrationTest {
         env.setSshHostKeyFingerprint("SHA256:host");
         return env;
     }
+
+    @Test
+    void getAllDockerEnvs_filtersByEnvType() throws Exception {
+        DockerEnv prodEnv = createEnvWithType(10L, "prod-1", "tcp://prod1:2376", "prod", "cluster-prod");
+        when(dockerEnvMapper.selectList(any())).thenReturn(List.of(prodEnv));
+
+        mockMvc.perform(get("/api/v1/ops/envs/all").param("envType", "prod"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].envType").value("prod"))
+                .andExpect(jsonPath("$.data[0].clusterName").value("cluster-prod"));
+    }
+
+    @Test
+    void getDockerEnvsGrouped_returnsMapKeyedByEnvType() throws Exception {
+        DockerEnv devEnv  = createEnvWithType(20L, "dev-1",  "tcp://dev1:2376",  "dev",  "cluster-dev");
+        DockerEnv prodEnv = createEnvWithType(21L, "prod-1", "tcp://prod1:2376", "prod", "cluster-prod");
+        DockerEnv noType  = createEnvWithType(22L, "bare",   "tcp://bare:2376",  null,   null);
+        when(dockerEnvMapper.selectList(any())).thenReturn(List.of(devEnv, prodEnv, noType));
+
+        mockMvc.perform(get("/api/v1/ops/envs/grouped"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.dev[0].name").value("dev-1"))
+                .andExpect(jsonPath("$.data.prod[0].name").value("prod-1"))
+                .andExpect(jsonPath("$.data.default[0].name").value("bare"));
+    }
+
+    @Test
+    void createDockerEnv_persistsEnvTypeAndClusterName() throws Exception {
+        when(dockerEnvMapper.exists(any())).thenReturn(false);
+        doAnswer(invocation -> {
+            DockerEnv env = invocation.getArgument(0);
+            env.setId(30L);
+            return 1;
+        }).when(dockerEnvMapper).insert(any(DockerEnv.class));
+
+        mockMvc.perform(post("/api/v1/ops/envs")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "uat-host",
+                                  "host": "tcp://uat:2376",
+                                  "envType": "uat",
+                                  "clusterName": "cluster-uat"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.envType").value("uat"))
+                .andExpect(jsonPath("$.data.clusterName").value("cluster-uat"));
+
+        ArgumentCaptor<DockerEnv> captor = ArgumentCaptor.forClass(DockerEnv.class);
+        verify(dockerEnvMapper).insert(captor.capture());
+        assertEquals("uat", captor.getValue().getEnvType());
+        assertEquals("cluster-uat", captor.getValue().getClusterName());
+    }
+
+    @Test
+    void updateDockerEnv_updatesEnvTypeAndClusterName() throws Exception {
+        DockerEnv existing = createEnvWithType(40L, "test-host", "tcp://test:2376", "test", "cluster-old");
+        when(dockerEnvService.getById(40L)).thenReturn(existing);
+
+        mockMvc.perform(put("/api/v1/ops/envs/40")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "envType": "prod",
+                                  "clusterName": "cluster-new"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.envType").value("prod"))
+                .andExpect(jsonPath("$.data.clusterName").value("cluster-new"));
+    }
+
+    private DockerEnv createEnvWithType(Long id, String name, String host, String envType, String clusterName) {
+        DockerEnv env = createEnv(id, name, "", host, 1, false);
+        env.setEnvType(envType);
+        env.setClusterName(clusterName);
+        return env;
+    }
 }

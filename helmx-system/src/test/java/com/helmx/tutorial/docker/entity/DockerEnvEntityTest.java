@@ -20,6 +20,8 @@ class DockerEnvEntityTest {
         env.setSshUsername("root");
         env.setSshPassword("encrypted");
         env.setSshHostKeyFingerprint("SHA256:host");
+        env.setEnvType("dev");
+        env.setClusterName("cluster-1");
 
         assertEquals(1L, env.getId());
         assertEquals("local", env.getName());
@@ -32,6 +34,8 @@ class DockerEnvEntityTest {
         assertEquals("root", env.getSshUsername());
         assertEquals("encrypted", env.getSshPassword());
         assertEquals("SHA256:host", env.getSshHostKeyFingerprint());
+        assertEquals("dev", env.getEnvType());
+        assertEquals("cluster-1", env.getClusterName());
     }
 
     @Test
@@ -41,6 +45,8 @@ class DockerEnvEntityTest {
         assertFalse(env.getTlsVerify());
         assertFalse(env.getSshEnabled());
         assertEquals(22, env.getSshPort());
+        assertNull(env.getEnvType());
+        assertNull(env.getClusterName());
     }
 
     @Test

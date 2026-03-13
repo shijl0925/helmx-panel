@@ -21,6 +21,8 @@ class DockerEnvDTOTest {
         env.setSshUsername("root");
         env.setSshPassword("encrypted");
         env.setSshHostKeyFingerprint("SHA256:host");
+        env.setEnvType("prod");
+        env.setClusterName("cluster-a");
 
         DockerEnvDTO dto = new DockerEnvDTO(env);
 
@@ -35,6 +37,8 @@ class DockerEnvDTOTest {
         assertEquals("root", dto.getSshUsername());
         assertEquals("SHA256:host", dto.getSshHostKeyFingerprint());
         assertTrue(dto.getSshPasswordConfigured());
+        assertEquals("prod", dto.getEnvType());
+        assertEquals("cluster-a", dto.getClusterName());
     }
 
     @Test
@@ -80,5 +84,22 @@ class DockerEnvDTOTest {
         assertFalse(dto.getTlsVerify());
         assertFalse(dto.getSshEnabled());
         assertFalse(dto.getSshPasswordConfigured());
+        assertNull(dto.getEnvType());
+        assertNull(dto.getClusterName());
+    }
+
+    @Test
+    void constructor_envTypeAndClusterName_mappedCorrectly() {
+        DockerEnv env = new DockerEnv();
+        env.setId(5L);
+        env.setName("dev-host-1");
+        env.setHost("tcp://dev1:2376");
+        env.setEnvType("dev");
+        env.setClusterName("cluster-dev");
+
+        DockerEnvDTO dto = new DockerEnvDTO(env);
+
+        assertEquals("dev", dto.getEnvType());
+        assertEquals("cluster-dev", dto.getClusterName());
     }
 }

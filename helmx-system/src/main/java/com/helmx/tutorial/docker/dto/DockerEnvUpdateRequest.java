@@ -36,4 +36,10 @@ public class DockerEnvUpdateRequest {
 
     @ApiModelProperty(value = "SSH主机指纹")
     private String sshHostKeyFingerprint;
+
+    @ApiModelProperty(value = "环境类型，如 dev/test/uat/prod 等")
+    private String envType;
+
+    @ApiModelProperty(value = "集群名称，用于将多个主机归组到同一集群")
+    private String clusterName;
 }

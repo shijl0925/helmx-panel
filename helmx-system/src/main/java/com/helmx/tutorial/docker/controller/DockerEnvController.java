@@ -24,7 +24,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -45,9 +48,19 @@ public class DockerEnvController {
     @Operation(summary = "Get all envs")
     @GetMapping("/all")
 //    @PreAuthorize("@va.check('Ops:DockerEnv:List')")
-    public ResponseEntity<Result> GetAllDockerEnvs(@RequestParam(required = false) String name) {
+    public ResponseEntity<Result> GetAllDockerEnvs(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String envType,
+            @RequestParam(required = false) String clusterName
+    ) {
         QueryWrapper<DockerEnv> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", 1);
+        if (envType != null && !envType.isEmpty()) {
+            queryWrapper.eq("env_type", envType);
+        }
+        if (clusterName != null && !clusterName.isEmpty()) {
+            queryWrapper.eq("cluster_name", clusterName);
+        }
 
         List<DockerEnvDTO> envs = dockerEnvMapper.selectList(queryWrapper).stream()
                 .map(DockerEnvDTO::new)
@@ -55,11 +68,35 @@ public class DockerEnvController {
         return ResponseUtil.success(envs);
     }
 
+    @Operation(summary = "Get all envs grouped by environment type")
+    @GetMapping("/grouped")
+//    @PreAuthorize("@va.check('Ops:DockerEnv:List')")
+    public ResponseEntity<Result> GetDockerEnvsGrouped() {
+        QueryWrapper<DockerEnv> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("status", 1);
+        queryWrapper.orderByAsc("env_type", "cluster_name", "name");
+
+        Map<String, List<DockerEnvDTO>> grouped = dockerEnvMapper.selectList(queryWrapper).stream()
+                .map(DockerEnvDTO::new)
+                .collect(Collectors.groupingBy(
+                        this::groupingKey,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+        return ResponseUtil.success(grouped);
+    }
+
+    private String groupingKey(DockerEnvDTO dto) {
+        return dto.getEnvType() != null && !dto.getEnvType().isBlank() ? dto.getEnvType() : "default";
+    }
+
     @Operation(summary = "Search envs")
     @GetMapping("")
     @PreAuthorize("@va.check('Ops:DockerEnv:List')")
     public ResponseEntity<Result> SearchDockerEnvs(
             @RequestParam(required = false) String name,
+            @RequestParam(required = false) String envType,
+            @RequestParam(required = false) String clusterName,
             @RequestParam(defaultValue = "1") @ApiParam(value = "当前页码") Integer page,
             @RequestParam(defaultValue = "10") @ApiParam(value = "每页数量") Integer pageSize
     ) {
@@ -76,6 +113,12 @@ public class DockerEnvController {
         queryWrapper.eq("status", 1);
         if (name != null && !name.isEmpty()) {
             queryWrapper.like("name", name);
+        }
+        if (envType != null && !envType.isEmpty()) {
+            queryWrapper.eq("env_type", envType);
+        }
+        if (clusterName != null && !clusterName.isEmpty()) {
+            queryWrapper.eq("cluster_name", clusterName);
         }
 
         Page<DockerEnv> resultPage = dockerEnvMapper.selectPage(pageInfo, queryWrapper);
@@ -124,6 +167,8 @@ public class DockerEnvController {
         if (request.getSshPassword() != null && !request.getSshPassword().isBlank()) {
             env.setSshPassword(passwordUtil.encrypt(request.getSshPassword()));
         }
+        env.setEnvType(request.getEnvType());
+        env.setClusterName(request.getClusterName());
         dockerEnvMapper.insert(env);
 
         return ResponseUtil.success(new DockerEnvDTO(env));
@@ -166,6 +211,12 @@ public class DockerEnvController {
         }
         if (request.getSshPassword() != null) {
             env.setSshPassword(request.getSshPassword().isBlank() ? null : passwordUtil.encrypt(request.getSshPassword()));
+        }
+        if (request.getEnvType() != null) {
+            env.setEnvType(request.getEnvType().isBlank() ? null : request.getEnvType());
+        }
+        if (request.getClusterName() != null) {
+            env.setClusterName(request.getClusterName().isBlank() ? null : request.getClusterName());
         }
 
         dockerEnvMapper.updateById(env);
