@@ -50,16 +50,12 @@ public class DockerEnvController {
 //    @PreAuthorize("@va.check('Ops:DockerEnv:List')")
     public ResponseEntity<Result> GetAllDockerEnvs(
             @RequestParam(required = false) String name,
-            @RequestParam(required = false) String envType,
-            @RequestParam(required = false) String clusterName
+            @RequestParam(required = false) String envType
     ) {
         QueryWrapper<DockerEnv> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", 1);
         if (envType != null && !envType.isEmpty()) {
             queryWrapper.eq("env_type", envType);
-        }
-        if (clusterName != null && !clusterName.isEmpty()) {
-            queryWrapper.eq("cluster_name", clusterName);
         }
 
         List<DockerEnvDTO> envs = dockerEnvMapper.selectList(queryWrapper).stream()
@@ -74,7 +70,7 @@ public class DockerEnvController {
     public ResponseEntity<Result> GetDockerEnvsGrouped() {
         QueryWrapper<DockerEnv> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", 1);
-        queryWrapper.orderByAsc("env_type", "cluster_name", "name");
+        queryWrapper.orderByAsc("env_type", "name");
 
         Map<String, List<DockerEnvDTO>> grouped = dockerEnvMapper.selectList(queryWrapper).stream()
                 .map(DockerEnvDTO::new)
@@ -96,7 +92,6 @@ public class DockerEnvController {
     public ResponseEntity<Result> SearchDockerEnvs(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String envType,
-            @RequestParam(required = false) String clusterName,
             @RequestParam(defaultValue = "1") @ApiParam(value = "当前页码") Integer page,
             @RequestParam(defaultValue = "10") @ApiParam(value = "每页数量") Integer pageSize
     ) {
@@ -116,9 +111,6 @@ public class DockerEnvController {
         }
         if (envType != null && !envType.isEmpty()) {
             queryWrapper.eq("env_type", envType);
-        }
-        if (clusterName != null && !clusterName.isEmpty()) {
-            queryWrapper.eq("cluster_name", clusterName);
         }
 
         Page<DockerEnv> resultPage = dockerEnvMapper.selectPage(pageInfo, queryWrapper);
@@ -168,7 +160,6 @@ public class DockerEnvController {
             env.setSshPassword(passwordUtil.encrypt(request.getSshPassword()));
         }
         env.setEnvType(request.getEnvType());
-        env.setClusterName(request.getClusterName());
         dockerEnvMapper.insert(env);
 
         return ResponseUtil.success(new DockerEnvDTO(env));
@@ -214,9 +205,6 @@ public class DockerEnvController {
         }
         if (request.getEnvType() != null) {
             env.setEnvType(request.getEnvType().isBlank() ? null : request.getEnvType());
-        }
-        if (request.getClusterName() != null) {
-            env.setClusterName(request.getClusterName().isBlank() ? null : request.getClusterName());
         }
 
         dockerEnvMapper.updateById(env);

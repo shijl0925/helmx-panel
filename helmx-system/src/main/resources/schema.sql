@@ -67,7 +67,6 @@ CREATE TABLE IF NOT EXISTS tb_docker_env (
     ssh_password VARCHAR(1024),
     ssh_host_key_fingerprint VARCHAR(255),
     env_type VARCHAR(64),
-    cluster_name VARCHAR(64),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
