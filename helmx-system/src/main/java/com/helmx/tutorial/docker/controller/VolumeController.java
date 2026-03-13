@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
@@ -236,6 +237,35 @@ public class VolumeController {
         } else {
             log.error("Clone volume failed: {}", message);
             return ResponseUtil.failed(500, result, message);
+        }
+    }
+
+    @Operation(summary = "Restore Docker Volume from TAR archive")
+    @PostMapping("/restore")
+    @PreAuthorize("@va.check('Ops:Volume:Create')")
+    public ResponseEntity<Result> restoreDockerVolume(
+            @RequestParam() String host,
+            @RequestParam() String name,
+            @RequestParam(required = false, defaultValue = "local") String driver,
+            @RequestParam("file") MultipartFile file) {
+        dockerClientUtil.setCurrentHost(host);
+
+        try {
+            try (InputStream inputStream = file.getInputStream()) {
+                Map<String, Object> result = dockerClientUtil.restoreVolume(name, driver, inputStream);
+                String status = (String) result.get("status");
+                String message = (String) result.get("message");
+
+                if ("success".equals(status)) {
+                    return ResponseUtil.success(message, result);
+                } else {
+                    log.error("Restore volume failed: {}", message);
+                    return ResponseUtil.failed(500, result, message);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to restore volume: {}", name, e);
+            return ResponseUtil.failed(500, null, "Failed to restore volume: " + e.getMessage());
         }
     }
 }

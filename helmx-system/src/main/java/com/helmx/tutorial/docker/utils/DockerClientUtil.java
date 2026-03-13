@@ -3367,6 +3367,82 @@ public class DockerClientUtil {
     }
 
     /**
+     * Restores a Docker volume from a TAR archive stream produced by {@link #backupVolume}.
+     * <p>
+     * If the target volume does not already exist it is created with the specified {@code driver}.
+     * A temporary busybox container mounts the volume at {@code /backup-data}; the TAR stream is
+     * then extracted to the container root ({@code /}) so that the {@code backup-data/} top-level
+     * directory in the archive maps directly onto the volume mount point.  The temporary container
+     * is removed in a {@code finally} block regardless of success or failure.
+     *
+     * @param volumeName     name of the target volume; created automatically if absent
+     * @param driver         volume driver to use when creating the volume;
+     *                       {@code null} or blank defaults to {@code "local"}
+     * @param tarInputStream TAR stream produced by {@link #backupVolume}; the caller is
+     *                       responsible for closing this stream
+     * @return map with {@code "status"} ({@code "success"}/{@code "failed"}) and {@code "message"}
+     */
+    public Map<String, Object> restoreVolume(String volumeName, String driver, InputStream tarInputStream) {
+        Map<String, Object> result = new HashMap<>();
+        DockerClient client = getCurrentDockerClient();
+
+        // Create the volume only if it does not already exist
+        try {
+            client.inspectVolumeCmd(volumeName).exec();
+        } catch (NotFoundException e) {
+            try (CreateVolumeCmd createCmd = client.createVolumeCmd()
+                    .withName(volumeName)
+                    .withDriver(driver != null && !driver.isBlank() ? driver : "local")) {
+                createCmd.exec();
+            } catch (Exception ce) {
+                result.put("status", "failed");
+                result.put("message", "Failed to create target volume: " + ce.getMessage());
+                return result;
+            }
+        }
+
+        ensureVolumeHelperImage(client);
+
+        Volume vol = new Volume(VOLUME_BACKUP_MOUNT_PATH);
+        Bind bind = new Bind(volumeName, vol);
+        String containerName = VOLUME_BACKUP_CONTAINER_PREFIX + "restore-" + volumeName + "-" + System.currentTimeMillis();
+
+        String containerId = null;
+        try {
+            try (CreateContainerCmd cmd = client.createContainerCmd(VOLUME_HELPER_IMAGE)
+                    .withName(containerName)
+                    .withCmd("true")
+                    .withHostConfig(HostConfig.newHostConfig().withBinds(bind))) {
+                containerId = cmd.exec().getId();
+            }
+
+            // Upload the backup TAR to the container root so that the top-level
+            // "backup-data/" directory in the archive maps directly onto the volume mount point.
+            try (CopyArchiveToContainerCmd cmd = client.copyArchiveToContainerCmd(containerId)) {
+                cmd.withTarInputStream(tarInputStream)
+                        .withRemotePath("/")
+                        .exec();
+            }
+
+            result.put("status", "success");
+            result.put("message", "Volume restored successfully");
+        } catch (Exception e) {
+            result.put("status", "failed");
+            result.put("message", "Failed to restore volume: " + e.getMessage());
+        } finally {
+            if (containerId != null) {
+                try {
+                    client.removeContainerCmd(containerId).withForce(true).exec();
+                } catch (Exception ignored) {
+                    log.warn("Failed to remove temporary restore container: {}", containerId);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * 批量删除镜像，返回每个镜像的删除结果
      */
     public List<Map<String, Object>> bulkRemoveImages(List<String> imageIds, Boolean force) {

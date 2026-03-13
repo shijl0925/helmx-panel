@@ -251,6 +251,120 @@ class DockerClientUtilTest {
         assertEquals("failed", result.get("status"));
         assertTrue(((String) result.get("message")).contains("timed out"));
     }
+
+    // ─── restoreVolume ───────────────────────────────────────────────────────────
+
+    @Test
+    void restoreVolume_createsVolumeAndRestoresTarWhenVolumeAbsent() {
+        setupDockerHost();
+
+        // Volume does not exist yet
+        InspectVolumeCmd inspectVolumeCmd = mock(InspectVolumeCmd.class);
+        when(dockerClient.inspectVolumeCmd("mydata")).thenReturn(inspectVolumeCmd);
+        when(inspectVolumeCmd.exec()).thenThrow(new NotFoundException("No such volume: mydata"));
+
+        CreateVolumeCmd createVolumeCmd = mock(CreateVolumeCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createVolumeCmd()).thenReturn(createVolumeCmd);
+
+        // Image already exists
+        InspectImageCmd inspectImageCmd = mock(InspectImageCmd.class);
+        when(dockerClient.inspectImageCmd("busybox:latest")).thenReturn(inspectImageCmd);
+
+        // Container creation
+        CreateContainerCmd createContainerCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        CreateContainerResponse createContainerResponse = mock(CreateContainerResponse.class);
+        when(dockerClient.createContainerCmd("busybox:latest")).thenReturn(createContainerCmd);
+        when(createContainerCmd.exec()).thenReturn(createContainerResponse);
+        when(createContainerResponse.getId()).thenReturn("restore-ctr-id");
+
+        // Copy archive to container
+        CopyArchiveToContainerCmd copyCmd = mock(CopyArchiveToContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.copyArchiveToContainerCmd("restore-ctr-id")).thenReturn(copyCmd);
+
+        // Cleanup
+        RemoveContainerCmd removeCmd = mock(RemoveContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.removeContainerCmd("restore-ctr-id")).thenReturn(removeCmd);
+
+        InputStream tarStream = new ByteArrayInputStream(new byte[]{1, 2, 3});
+        Map<String, Object> result = dockerClientUtil.restoreVolume("mydata", "local", tarStream);
+
+        assertEquals("success", result.get("status"));
+        assertEquals("Volume restored successfully", result.get("message"));
+        verify(dockerClient).createVolumeCmd();
+        verify(copyCmd).withRemotePath("/");
+        verify(copyCmd).exec();
+    }
+
+    @Test
+    void restoreVolume_skipsCreationWhenVolumeAlreadyExists() {
+        setupDockerHost();
+
+        // Volume already exists
+        InspectVolumeCmd inspectVolumeCmd = mock(InspectVolumeCmd.class);
+        when(dockerClient.inspectVolumeCmd("mydata")).thenReturn(inspectVolumeCmd);
+
+        // Image already exists
+        InspectImageCmd inspectImageCmd = mock(InspectImageCmd.class);
+        when(dockerClient.inspectImageCmd("busybox:latest")).thenReturn(inspectImageCmd);
+
+        // Container creation
+        CreateContainerCmd createContainerCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        CreateContainerResponse createContainerResponse = mock(CreateContainerResponse.class);
+        when(dockerClient.createContainerCmd("busybox:latest")).thenReturn(createContainerCmd);
+        when(createContainerCmd.exec()).thenReturn(createContainerResponse);
+        when(createContainerResponse.getId()).thenReturn("restore-ctr-id");
+
+        // Copy archive to container
+        CopyArchiveToContainerCmd copyCmd = mock(CopyArchiveToContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.copyArchiveToContainerCmd("restore-ctr-id")).thenReturn(copyCmd);
+
+        // Cleanup
+        RemoveContainerCmd removeCmd = mock(RemoveContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.removeContainerCmd("restore-ctr-id")).thenReturn(removeCmd);
+
+        InputStream tarStream = new ByteArrayInputStream(new byte[]{1, 2, 3});
+        Map<String, Object> result = dockerClientUtil.restoreVolume("mydata", "local", tarStream);
+
+        assertEquals("success", result.get("status"));
+        verify(dockerClient, never()).createVolumeCmd();
+    }
+
+    @Test
+    void restoreVolume_returnsFailureWhenCopyFails() {
+        setupDockerHost();
+
+        // Volume already exists
+        InspectVolumeCmd inspectVolumeCmd = mock(InspectVolumeCmd.class);
+        when(dockerClient.inspectVolumeCmd("mydata")).thenReturn(inspectVolumeCmd);
+
+        // Image already exists
+        InspectImageCmd inspectImageCmd = mock(InspectImageCmd.class);
+        when(dockerClient.inspectImageCmd("busybox:latest")).thenReturn(inspectImageCmd);
+
+        // Container creation
+        CreateContainerCmd createContainerCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        CreateContainerResponse createContainerResponse = mock(CreateContainerResponse.class);
+        when(dockerClient.createContainerCmd("busybox:latest")).thenReturn(createContainerCmd);
+        when(createContainerCmd.exec()).thenReturn(createContainerResponse);
+        when(createContainerResponse.getId()).thenReturn("restore-ctr-id");
+
+        // Copy fails
+        CopyArchiveToContainerCmd copyCmd = mock(CopyArchiveToContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.copyArchiveToContainerCmd("restore-ctr-id")).thenReturn(copyCmd);
+        when(copyCmd.exec()).thenThrow(new RuntimeException("bad archive"));
+
+        // Cleanup
+        RemoveContainerCmd removeCmd = mock(RemoveContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.removeContainerCmd("restore-ctr-id")).thenReturn(removeCmd);
+
+        InputStream tarStream = new ByteArrayInputStream(new byte[]{1, 2, 3});
+        Map<String, Object> result = dockerClientUtil.restoreVolume("mydata", "local", tarStream);
+
+        assertEquals("failed", result.get("status"));
+        assertTrue(((String) result.get("message")).contains("bad archive"));
+        verify(dockerClient).removeContainerCmd("restore-ctr-id");
+    }
+
     @Test
     void loadHostResourceUsage_localDockerHost_returnsUsageMetrics() {
         dockerClientUtil.setCurrentHost("unix:///var/run/docker.sock");
