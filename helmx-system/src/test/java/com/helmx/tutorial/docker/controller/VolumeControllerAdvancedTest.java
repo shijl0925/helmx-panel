@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -24,6 +25,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -157,5 +159,74 @@ class VolumeControllerAdvancedTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ─── Volume Restore ─────────────────────────────────────────────────────────
+
+    @Test
+    void restoreDockerVolume_returnsSuccessWhenRestoreSucceeds() throws Exception {
+        Map<String, Object> restoreResult = new HashMap<>();
+        restoreResult.put("status", "success");
+        restoreResult.put("message", "Volume restored successfully");
+        when(dockerClientUtil.restoreVolume(eq("mydata"), eq("local"), any(InputStream.class)))
+                .thenReturn(restoreResult);
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "mydata-backup.tar", "application/octet-stream",
+                "fake-tar-content".getBytes());
+
+        mockMvc.perform(multipart("/api/v1/ops/volumes/restore")
+                        .file(file)
+                        .param("host", "unix:///var/run/docker.sock")
+                        .param("name", "mydata")
+                        .param("driver", "local"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("Volume restored successfully"));
+
+        verify(dockerClientUtil).setCurrentHost("unix:///var/run/docker.sock");
+        verify(dockerClientUtil).restoreVolume(eq("mydata"), eq("local"), any(InputStream.class));
+    }
+
+    @Test
+    void restoreDockerVolume_returnsServerErrorWhenRestoreFails() throws Exception {
+        Map<String, Object> restoreResult = new HashMap<>();
+        restoreResult.put("status", "failed");
+        restoreResult.put("message", "Failed to restore volume: bad archive");
+        when(dockerClientUtil.restoreVolume(eq("mydata"), any(), any(InputStream.class)))
+                .thenReturn(restoreResult);
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "mydata-backup.tar", "application/octet-stream",
+                new byte[]{1, 2, 3});
+
+        mockMvc.perform(multipart("/api/v1/ops/volumes/restore")
+                        .file(file)
+                        .param("host", "unix:///var/run/docker.sock")
+                        .param("name", "mydata"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.message").value("Failed to restore volume: bad archive"));
+    }
+
+    @Test
+    void restoreDockerVolume_usesDefaultDriverWhenNotProvided() throws Exception {
+        Map<String, Object> restoreResult = new HashMap<>();
+        restoreResult.put("status", "success");
+        restoreResult.put("message", "Volume restored successfully");
+        when(dockerClientUtil.restoreVolume(eq("mydata"), eq("local"), any(InputStream.class)))
+                .thenReturn(restoreResult);
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "mydata-backup.tar", "application/octet-stream",
+                new byte[]{1, 2, 3});
+
+        mockMvc.perform(multipart("/api/v1/ops/volumes/restore")
+                        .file(file)
+                        .param("host", "unix:///var/run/docker.sock")
+                        .param("name", "mydata"))
+                .andExpect(status().isOk());
+
+        verify(dockerClientUtil).restoreVolume(eq("mydata"), eq("local"), any(InputStream.class));
     }
 }
