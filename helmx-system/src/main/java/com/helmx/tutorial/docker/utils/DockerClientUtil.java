@@ -1235,16 +1235,16 @@ public class DockerClientUtil {
             } else if ("dead".equals(state)) {
                 dead++;
             }
-
-            result.put("created", created);
-            result.put("running", running);
-            result.put("paused", paused);
-            result.put("stopped", stopped);
-            result.put("exited", exited);
-            result.put("restarting", restarting);
-            result.put("removing", removing);
-            result.put("dead", dead);
         }
+
+        result.put("created", created);
+        result.put("running", running);
+        result.put("paused", paused);
+        result.put("stopped", stopped);
+        result.put("exited", exited);
+        result.put("restarting", restarting);
+        result.put("removing", removing);
+        result.put("dead", dead);
 
         result.putAll(loadHostResourceUsage());
         return result;
