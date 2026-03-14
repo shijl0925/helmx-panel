@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -18,7 +19,10 @@ import java.sql.Timestamp;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -80,5 +84,29 @@ class SysLogControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.total").value(0));
+    }
+
+    @Test
+    void deleteLogById_returnsSuccess() throws Exception {
+        when(sysLogService.removeById(1L)).thenReturn(true);
+
+        mockMvc.perform(delete("/api/v1/operation_logs/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        verify(sysLogService).removeById(1L);
+    }
+
+    @Test
+    void deleteLogsByIds_returnsSuccess() throws Exception {
+        when(sysLogService.removeByIds(anyList())).thenReturn(true);
+
+        mockMvc.perform(delete("/api/v1/operation_logs/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[1, 2, 3]"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        verify(sysLogService).removeByIds(List.of(1L, 2L, 3L));
     }
 }
