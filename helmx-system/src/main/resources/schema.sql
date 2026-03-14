@@ -98,3 +98,19 @@ CREATE TABLE IF NOT EXISTS tb_stack (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS tb_sys_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50),
+    description VARCHAR(255),
+    method VARCHAR(255),
+    params TEXT,
+    log_type VARCHAR(10) NOT NULL DEFAULT 'INFO',
+    request_ip VARCHAR(50),
+    address VARCHAR(255),
+    browser VARCHAR(255),
+    user_agent VARCHAR(255),
+    time BIGINT,
+    exception_detail TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

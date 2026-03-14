@@ -15,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.dto.Result;
+import com.helmx.tutorial.logging.annotation.Log;
 import com.helmx.tutorial.utils.ResponseUtil;
 
 import com.helmx.tutorial.system.entity.Role;
@@ -100,6 +101,7 @@ public class RoleController {
         return ResponseUtil.success(roles);
     }
 
+    @Log("新增角色")
     @Operation(summary = "Create a new role")
     @PostMapping("")
     @PreAuthorize("@va.check('System:Role:Create')")
@@ -138,6 +140,7 @@ public class RoleController {
         return ResponseUtil.success(role);
     }
 
+    @Log("修改角色")
     @Operation(summary = "Update role by ID")
     @PutMapping("/{id}")
     @PreAuthorize("@va.check('System:Role:Edit')")
@@ -178,6 +181,7 @@ public class RoleController {
         return ResponseUtil.success(role);
     }
 
+    @Log("删除角色")
     @Operation(summary = "Delete role by ID")
     @DeleteMapping("/{id}")
     @PreAuthorize("@va.check('System:Role:Delete')")
