@@ -112,5 +112,6 @@ CREATE TABLE IF NOT EXISTS tb_sys_log (
     user_agent VARCHAR(255),
     time BIGINT,
     exception_detail TEXT,
+    resource_name VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

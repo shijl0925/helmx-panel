@@ -27,6 +27,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
+import com.helmx.tutorial.logging.annotation.Log;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.context.request.async.WebAsyncTask;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -64,6 +65,7 @@ public class ContainerController {
     @Operation(summary = "Create Docker Container")
     @PostMapping("")
     @PreAuthorize("@va.check('Ops:Container:Create')")
+    @Log(value = "创建容器", resourceName = "#criteria.name")
     public ResponseEntity<Result> CreateDockerContainer(@Valid @RequestBody ContainerCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -286,6 +288,7 @@ public class ContainerController {
     @Operation(summary = "Operate Docker Container")
     @PostMapping("/operate")
     @PreAuthorize("@va.check('Ops:Container:Operate')")
+    @Log(value = "操作容器", resourceName = "#criteria.containerId")
     public ResponseEntity<Result> OperateDockerContainer(@Valid @RequestBody ContainerOperation criteria) {
         String operation = criteria.getOperation();
         String containerId = criteria.getContainerId();
@@ -473,6 +476,7 @@ public class ContainerController {
     @Operation(summary = "Rename Docker Container")
     @PostMapping("/rename")
     @PreAuthorize("@va.check('Ops:Container:Edit')")
+    @Log(value = "重命名容器", resourceName = "#criteria.containerId")
     public ResponseEntity<Result> RenameDockerContainer(@Valid @RequestBody ContainerRenameRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -505,6 +509,7 @@ public class ContainerController {
     @Operation(summary = "Update Docker Container")
     @PostMapping("/update")
     @PreAuthorize("@va.check('Ops:Container:Edit')")
+    @Log(value = "更新容器", resourceName = "#criteria.containerId")
     public ResponseEntity<Result> UpdateDockerContainer(@Valid @RequestBody ContainerCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -526,6 +531,7 @@ public class ContainerController {
     @Operation(summary = "Commit Docker Container")
     @PostMapping("/commit")
     @PreAuthorize("@va.check('Ops:Container:Commit')")
+    @Log(value = "提交容器", resourceName = "#criteria.containerId")
     public ResponseEntity<Result> CommitDockerContainer(@Valid @RequestBody ContainerCommitRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);

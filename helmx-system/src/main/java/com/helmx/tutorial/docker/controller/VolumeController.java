@@ -16,6 +16,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import com.helmx.tutorial.dto.Result;
+import com.helmx.tutorial.logging.annotation.Log;
 import com.helmx.tutorial.utils.ResponseUtil;
 
 import java.io.InputStream;
@@ -121,6 +122,7 @@ public class VolumeController {
     @Operation(summary = "Create new docker volume")
     @PostMapping("")
     @PreAuthorize("@va.check('Ops:Volume:Create')")
+    @Log(value = "创建存储卷", resourceName = "#criteria.name")
     public ResponseEntity<Result> CreateNewDockerVolume(@Valid @RequestBody VolumeCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -156,6 +158,7 @@ public class VolumeController {
     @Operation(summary = "Remove Docker Volume")
     @PostMapping("/remove")
     @PreAuthorize("@va.check('Ops:Volume:Delete')")
+    @Log(value = "删除存储卷", resourceName = "#criteria.names")
     public ResponseEntity<Result> removeDockerVolume(@Valid @RequestBody RemoveVolumeRequest criteria) {
         String[] names = criteria.getNames();
         Map<String, Object> result = new HashMap<>();
@@ -179,6 +182,7 @@ public class VolumeController {
     @Operation(summary = "Prune unused Docker Volumes")
     @PostMapping("/prune")
     @PreAuthorize("@va.check('Ops:Volume:Prune')")
+    @Log(value = "清理未使用存储卷")
     public ResponseEntity<Result> pruneDockerVolumes(@Valid @RequestBody StatusRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -221,6 +225,7 @@ public class VolumeController {
     @Operation(summary = "Clone Docker Volume to a new volume")
     @PostMapping("/clone")
     @PreAuthorize("@va.check('Ops:Volume:Create')")
+    @Log(value = "克隆存储卷", resourceName = "#criteria.sourceName")
     public ResponseEntity<Result> cloneDockerVolume(@Valid @RequestBody VolumeCloneRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
