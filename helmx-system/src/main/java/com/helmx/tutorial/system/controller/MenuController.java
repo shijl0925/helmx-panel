@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import com.helmx.tutorial.logging.annotation.Log;
 import com.helmx.tutorial.utils.ResponseUtil;
 
 import com.helmx.tutorial.dto.Result;
@@ -44,6 +45,7 @@ public class MenuController {
         return ResponseUtil.success(menuTree);
     }
 
+    @Log("新增菜单")
     @Operation(summary = "Create a new menu")
     @PostMapping("")
     @PreAuthorize("@va.check('System:Menu:Create')")
@@ -115,6 +117,7 @@ public class MenuController {
         return menu != null ? ResponseUtil.success(menu) : ResponseUtil.failed(404, null, "Menu not found");
     }
 
+    @Log("修改菜单")
     @Operation(summary = "Update menu by ID")
     @PutMapping("/{id}")
     @PreAuthorize("@va.check('System:Menu:Edit')")
@@ -166,6 +169,7 @@ public class MenuController {
         return ResponseUtil.success(menu);
     }
 
+    @Log("删除菜单")
     @Operation(summary = "Delete menu by ID")
     @DeleteMapping("/{id}")
     @PreAuthorize("@va.check('System:Menu:Delete')")

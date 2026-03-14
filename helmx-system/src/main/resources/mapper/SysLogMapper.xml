@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.helmx.tutorial.logging.mapper.SysLogMapper">
+
+    <resultMap id="SysLogResultMap" type="com.helmx.tutorial.logging.entity.SysLog">
+        <id property="id" column="id"/>
+        <result property="username" column="username"/>
+        <result property="description" column="description"/>
+        <result property="method" column="method"/>
+        <result property="params" column="params"/>
+        <result property="logType" column="log_type"/>
+        <result property="requestIp" column="request_ip"/>
+        <result property="address" column="address"/>
+        <result property="browser" column="browser"/>
+        <result property="userAgent" column="user_agent"/>
+        <result property="time" column="time"/>
+        <result property="exceptionDetail" column="exception_detail"/>
+        <result property="resourceName" column="resource_name"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="queryAll" parameterType="map" resultMap="SysLogResultMap">
+        SELECT * FROM tb_sys_log
+        <where>
+            <if test="criteria.username != null and criteria.username != ''">
+                AND username LIKE CONCAT('%', #{criteria.username}, '%')
+            </if>
+            <if test="criteria.logType != null and criteria.logType != ''">
+                AND log_type = #{criteria.logType}
+            </if>
+        </where>
+        ORDER BY created_at DESC
+    </select>
+
+</mapper>

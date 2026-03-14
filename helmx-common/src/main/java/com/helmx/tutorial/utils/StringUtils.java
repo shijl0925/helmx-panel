@@ -1,5 +1,7 @@
 package com.helmx.tutorial.utils;
 
+import cn.hutool.http.useragent.UserAgent;
+import cn.hutool.http.useragent.UserAgentUtil;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Component;
@@ -41,5 +43,21 @@ public class StringUtils {
             }
         }
         return ip;
+    }
+
+    /**
+     * 获取浏览器名称及版本
+     */
+    public static String getBrowser(HttpServletRequest request) {
+        UserAgent ua = UserAgentUtil.parse(request.getHeader("User-Agent"));
+        String browser = ua.getBrowser().toString() + " " + ua.getVersion();
+        return browser.replace(".0.0.0", "");
+    }
+
+    /**
+     * 获取User-Agent字符串
+     */
+    public static String getUserAgent(HttpServletRequest request) {
+        return request.getHeader("User-Agent");
     }
 }
