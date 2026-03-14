@@ -6,6 +6,7 @@ import com.helmx.tutorial.security.security.UserSessionManager;
 import com.helmx.tutorial.system.dto.UserCreateRequest;
 import com.helmx.tutorial.system.dto.UserUpdateRequest;
 import com.helmx.tutorial.system.dto.ResetPasswordRequest;
+import com.helmx.tutorial.logging.annotation.Log;
 import com.helmx.tutorial.utils.SecurityUtils;
 import io.swagger.annotations.ApiParam;
 import io.swagger.v3.oas.annotations.Operation;
@@ -123,6 +124,7 @@ public class UserController {
         return ResponseUtil.success(pageResult);
     }
 
+    @Log("新增用户")
     @Operation(summary = "Create a new user")
     @PostMapping("")
     @PreAuthorize("@va.check('System:User:Create')")
@@ -176,6 +178,7 @@ public class UserController {
         return ResponseUtil.success(userDTO);
     }
 
+    @Log("修改用户")
     @Operation(summary = "Update user by ID")
     @PutMapping("/{id}")
     @PreAuthorize("@va.check('System:User:Edit')")
@@ -208,6 +211,7 @@ public class UserController {
         return ResponseUtil.success(user);
     }
 
+    @Log("修改用户密码")
     @Operation(summary = "Update User Password")
     @PutMapping("/{id}/reset_password")
     // @PreAuthorize("@va.check('System:User:Edit')")
@@ -250,6 +254,7 @@ public class UserController {
         }
     }
 
+    @Log("删除用户")
     @Operation(summary = "Delete user by ID")
     @DeleteMapping("/{id}")
     @PreAuthorize("@va.check('System:User:Delete')")
