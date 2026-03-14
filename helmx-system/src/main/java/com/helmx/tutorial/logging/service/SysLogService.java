@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.helmx.tutorial.dto.PageResult;
 import com.helmx.tutorial.logging.dto.SysLogQueryCriteria;
 import com.helmx.tutorial.logging.entity.SysLog;
-import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.JoinPoint;
 
 import java.util.List;
@@ -32,10 +31,12 @@ public interface SysLogService extends IService<SysLog> {
     /**
      * 保存日志数据
      *
-     * @param username  操作用户名
-     * @param request   HTTP请求
-     * @param joinPoint 切入点
-     * @param sysLog    日志实体
+     * @param username   操作用户名
+     * @param requestIp  请求IP地址
+     * @param userAgent  请求UserAgent
+     * @param browser    浏览器信息
+     * @param joinPoint  切入点
+     * @param sysLog     日志实体
      */
-    void save(String username, HttpServletRequest request, JoinPoint joinPoint, SysLog sysLog);
+    void save(String username, String requestIp, String userAgent, String browser, JoinPoint joinPoint, SysLog sysLog);
 }

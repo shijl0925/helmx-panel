@@ -11,7 +11,6 @@ import com.helmx.tutorial.logging.dto.SysLogQueryCriteria;
 import com.helmx.tutorial.logging.entity.SysLog;
 import com.helmx.tutorial.logging.mapper.SysLogMapper;
 import com.helmx.tutorial.logging.service.SysLogService;
-import com.helmx.tutorial.utils.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -50,7 +49,7 @@ public class SysLogServiceImpl extends ServiceImpl<SysLogMapper, SysLog> impleme
     @Async
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void save(String username, HttpServletRequest request, JoinPoint joinPoint, SysLog sysLog) {
+    public void save(String username, String requestIp, String userAgent, String browser, JoinPoint joinPoint, SysLog sysLog) {
         if (sysLog == null) {
             throw new IllegalArgumentException("Log 不能为 null!");
         }
@@ -70,16 +69,16 @@ public class SysLogServiceImpl extends ServiceImpl<SysLogMapper, SysLog> impleme
         sysLog.setParams(JSON.toJSONString(params));
 
         // 请求IP
-        sysLog.setRequestIp(StringUtils.getIp(request));
+        sysLog.setRequestIp(requestIp);
 
         // 用户名
         sysLog.setUsername(username);
 
         // 请求UA
-        sysLog.setUserAgent(StringUtils.getUserAgent(request));
+        sysLog.setUserAgent(userAgent);
 
         // 浏览器
-        sysLog.setBrowser(StringUtils.getBrowser(request));
+        sysLog.setBrowser(browser);
 
         sysLog.setDescription(aopLog.value());
 

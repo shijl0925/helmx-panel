@@ -4,6 +4,7 @@ import com.helmx.tutorial.logging.entity.SysLog;
 import com.helmx.tutorial.logging.service.SysLogService;
 import com.helmx.tutorial.utils.RequestHolder;
 import com.helmx.tutorial.utils.SecurityUtils;
+import com.helmx.tutorial.utils.StringUtils;
 import com.helmx.tutorial.utils.ThrowableUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -51,12 +52,15 @@ public class LogAspect {
         SysLog sysLog = new SysLog("INFO", time);
         currentTime.remove();
 
-        // 获取request
+        // 在请求线程中同步提取请求数据，避免异步线程中 Servlet 容器回收请求对象导致的竞争问题
         HttpServletRequest request = RequestHolder.getHttpServletRequest();
+        String requestIp = StringUtils.getIp(request);
+        String userAgent = StringUtils.getUserAgent(request);
+        String browser = StringUtils.getBrowser(request);
 
         log.info("Request method: {}, path: {}", request.getMethod(), request.getRequestURI());
 
-        sysLogService.save(getUsername(), request, joinPoint, sysLog);
+        sysLogService.save(getUsername(), requestIp, userAgent, browser, joinPoint, sysLog);
         return result;
     }
 
@@ -75,12 +79,15 @@ public class LogAspect {
         SysLog sysLog = new SysLog("ERROR", elapsed);
         sysLog.setExceptionDetail(ThrowableUtil.getStackTrace(e));
 
-        // 获取request
+        // 在请求线程中同步提取请求数据，避免异步线程中 Servlet 容器回收请求对象导致的竞争问题
         HttpServletRequest request = RequestHolder.getHttpServletRequest();
+        String requestIp = StringUtils.getIp(request);
+        String userAgent = StringUtils.getUserAgent(request);
+        String browser = StringUtils.getBrowser(request);
 
         log.warn("Request method: {}, path: {}", request.getMethod(), request.getRequestURI());
 
-        sysLogService.save(getUsername(), request, joinPoint, sysLog);
+        sysLogService.save(getUsername(), requestIp, userAgent, browser, joinPoint, sysLog);
     }
 
     /**
