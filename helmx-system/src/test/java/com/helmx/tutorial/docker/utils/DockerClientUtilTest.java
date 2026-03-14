@@ -3430,4 +3430,135 @@ class DockerClientUtilTest {
         assertDoesNotThrow(() -> dockerClientUtil.copyFileToContainer("ctr1", "/upload", file));
         verify(copyCmd).withRemotePath("/upload");
     }
+
+    // ─── Bug regression tests ──────────────────────────────────────────────────
+
+    // Bug 1: tagImage() returned "Container renamed successfully" instead of "Image tagged successfully"
+    @Test
+    void tagImage_successMessage_mentionsImageNotContainer() {
+        setupDockerHost();
+        TagImageCmd mockCmd = mock(TagImageCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.tagImageCmd("img1", "myrepo", "2.0")).thenReturn(mockCmd);
+
+        Map<String, Object> result = dockerClientUtil.tagImage("img1", "myrepo:2.0");
+
+        assertEquals("success", result.get("status"));
+        String message = result.get("message").toString().toLowerCase();
+        assertTrue(message.contains("tag"), "Success message should mention 'tag', got: " + message);
+        assertFalse(message.contains("rename"), "Success message must not say 'renamed', got: " + message);
+    }
+
+    // Bug 2: pruneCmd() message contained a double comma: "prune successfully, , Prune X"
+    @Test
+    void pruneCmd_successMessage_noDoubleComma() {
+        setupDockerHost();
+        PruneCmd mockPruneCmd = mock(PruneCmd.class);
+        when(dockerClient.pruneCmd(PruneType.VOLUMES)).thenReturn(mockPruneCmd);
+        PruneResponse mockResp = mock(PruneResponse.class);
+        when(mockResp.getSpaceReclaimed()).thenReturn(512L);
+        when(mockPruneCmd.exec()).thenReturn(mockResp);
+
+        Map<String, Object> result = dockerClientUtil.pruneCmd("VOLUMES");
+
+        assertEquals("success", result.get("status"));
+        String message = result.get("message").toString();
+        assertFalse(message.contains(", ,"), "Message must not contain double comma: " + message);
+    }
+
+    // Bug 3: exportImage() used try-with-resources which closed SaveImageCmd before caller reads stream
+    @Test
+    void exportImage_returnedStreamIsReadableAfterCall() throws Exception {
+        setupDockerHost();
+        byte[] imageBytes = "fake-tar-content".getBytes();
+        SaveImageCmd mockCmd = mock(SaveImageCmd.class);
+        when(dockerClient.saveImageCmd("myimage:latest")).thenReturn(mockCmd);
+        when(mockCmd.exec()).thenReturn(new ByteArrayInputStream(imageBytes));
+
+        InputStream result = dockerClientUtil.exportImage("myimage:latest");
+
+        assertNotNull(result);
+        byte[] read = result.readAllBytes();
+        assertArrayEquals(imageBytes, read);
+    }
+
+    // Bug 4: createTarInputStream() threw NPE when getOriginalFilename() returned null
+    @Test
+    void copyFileToContainer_nullOriginalFilename_doesNotThrowNPE() throws Exception {
+        setupDockerHost();
+        CopyArchiveToContainerCmd copyCmd = mock(CopyArchiveToContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.copyArchiveToContainerCmd("ctr1")).thenReturn(copyCmd);
+
+        byte[] content = "data".getBytes();
+        org.springframework.web.multipart.MultipartFile file =
+                mock(org.springframework.web.multipart.MultipartFile.class);
+        when(file.getOriginalFilename()).thenReturn(null); // null filename
+        when(file.getSize()).thenReturn((long) content.length);
+        when(file.getInputStream()).thenReturn(new ByteArrayInputStream(content));
+
+        // Should not throw NPE — must fall back to a default entry name
+        assertDoesNotThrow(() -> dockerClientUtil.copyFileToContainer("ctr1", "/tmp", file));
+        verify(copyCmd).exec();
+    }
+
+    // Bug 5: extractBaseImageFromDockerfile() split on uppercase "AS" and missed lowercase "as"
+    @Test
+    void extractBaseImageFromDockerfile_lowercaseAs_parsedCorrectly() {
+        String content = "FROM alpine:3.18 as builder\nFROM node:20 AS runner";
+        @SuppressWarnings("unchecked")
+        List<String> result = (List<String>) ReflectionTestUtils.invokeMethod(
+                dockerClientUtil, "extractBaseImageFromDockerfile", content);
+
+        assertEquals(2, result.size(), "Both FROM lines must be parsed");
+        assertEquals("alpine:3.18", result.get(0));
+        assertEquals("node:20", result.get(1));
+    }
+
+    // Bug 6: getVolumeContainers() threw NPE/AIOOBE when container.getNames() was null or empty
+    @Test
+    void getVolumeContainers_containerWithNullNames_isSkippedGracefully() {
+        setupDockerHost();
+        ListContainersCmd mockCmd = mock(ListContainersCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.listContainersCmd()).thenReturn(mockCmd);
+
+        // Container with null names — must be skipped without NPE (no mounts stub needed)
+        Container namelessContainer = mock(Container.class);
+        when(namelessContainer.getNames()).thenReturn(null);
+
+        // Normal container with names
+        Container namedContainer = mock(Container.class);
+        when(namedContainer.getId()).thenReturn("ctr-named");
+        when(namedContainer.getNames()).thenReturn(new String[]{"/good-container"});
+        ContainerMount namedMount = mock(ContainerMount.class);
+        when(namedMount.getName()).thenReturn("myvol");
+        when(namedMount.getDestination()).thenReturn("/data");
+        when(namedMount.getRw()).thenReturn(true);
+        when(namedContainer.getMounts()).thenReturn(List.of(namedMount));
+
+        when(mockCmd.exec()).thenReturn(List.of(namelessContainer, namedContainer));
+
+        List<Map<String, String>> result = assertDoesNotThrow(
+                () -> dockerClientUtil.getVolumeContainers("myvol"));
+
+        // The nameless container is skipped; only the named one appears
+        assertEquals(1, result.size());
+        assertEquals("ctr-named", result.get(0).get("containerId"));
+    }
+
+    @Test
+    void getVolumeContainers_containerWithEmptyNames_isSkippedGracefully() {
+        setupDockerHost();
+        ListContainersCmd mockCmd = mock(ListContainersCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.listContainersCmd()).thenReturn(mockCmd);
+
+        // Container with empty names array — must be skipped without AIOOBE (no mounts stub needed)
+        Container emptyNamesContainer = mock(Container.class);
+        when(emptyNamesContainer.getNames()).thenReturn(new String[0]);
+
+        when(mockCmd.exec()).thenReturn(List.of(emptyNamesContainer));
+
+        List<Map<String, String>> result = assertDoesNotThrow(
+                () -> dockerClientUtil.getVolumeContainers("myvol"));
+
+        assertTrue(result.isEmpty(), "Container with empty names array must be skipped");
+    }
 }

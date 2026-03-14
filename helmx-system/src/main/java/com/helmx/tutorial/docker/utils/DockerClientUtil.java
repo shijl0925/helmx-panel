@@ -647,7 +647,7 @@ public class DockerClientUtil {
 
             // 成功响应
             result.put("status", "success");
-            result.put("message", "Container renamed successfully");
+            result.put("message", "Image tagged successfully");
             log.info("Image tagged successfully: imageId={}, imageNameWithRepository={}, tag={}",
                     imageId, imageNameWithRepository, tag);
         } catch (Exception e) {
@@ -1660,7 +1660,11 @@ public class DockerClientUtil {
 
             for (Container cr : containersList) {
                 String containerId = cr.getId();
-                String containerName = cr.getNames()[0].substring(1);
+                String[] names = cr.getNames();
+                if (names == null || names.length == 0) {
+                    continue;
+                }
+                String containerName = names[0].substring(1);
                 if (cr.getMounts() == null) continue;
 
                 for (ContainerMount mount : cr.getMounts()) {
@@ -2087,8 +2091,8 @@ public class DockerClientUtil {
 
             if (trimmedLine.toUpperCase().startsWith("FROM ")) {
                 String imagePart = trimmedLine.substring(5).trim();
-                // 提取基础镜像（处理多阶段构建的别名）
-                String[] parts = imagePart.split("\\s+AS\\s+", 2);
+                // 提取基础镜像（处理多阶段构建的别名，Dockerfile关键字AS不区分大小写）
+                String[] parts = imagePart.split("(?i)\\s+AS\\s+", 2);
                 String baseImage = parts[0].trim();
 
                 if (!baseImage.isEmpty()) {
@@ -2531,7 +2535,7 @@ public class DockerClientUtil {
 
             result.put("status", "success");
             String sizeStr = ByteUtils.formatBytes(size);
-            result.put("message", "prune successfully, " + ", Prune " + sizeStr);
+            result.put("message", "prune successfully, Prune " + sizeStr);
         } catch (Exception e) {
             String errorMsg = "Failed to prune " + pruneTypeStr + ": " + e.getMessage();
             result.put("status", "failed");
@@ -2709,7 +2713,21 @@ public class DockerClientUtil {
             tarOutputStream.setBigNumberMode(TarArchiveOutputStream.BIGNUMBER_POSIX);
             tarOutputStream.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
 
-            TarArchiveEntry entry = new TarArchiveEntry(file.getOriginalFilename());
+            String originalFilename = file.getOriginalFilename();
+            String entryName;
+            if (originalFilename != null && !originalFilename.isBlank()) {
+                // Extract only the final filename component to prevent path traversal in the
+                // resulting TAR entry (e.g. "../../etc/passwd" -> "passwd").
+                // Also strip any remaining path separators as a belt-and-suspenders measure.
+                String baseName = Paths.get(originalFilename).getFileName().toString();
+                entryName = baseName.replaceAll("[/\\\\]", "_");
+                if (entryName.isBlank()) {
+                    entryName = "uploaded-file";
+                }
+            } else {
+                entryName = "uploaded-file";
+            }
+            TarArchiveEntry entry = new TarArchiveEntry(entryName);
             entry.setSize(file.getSize());
             tarOutputStream.putArchiveEntry(entry);
 
@@ -2771,8 +2789,11 @@ public class DockerClientUtil {
      * @return 镜像tar文件的字节数组
      */
     public InputStream exportImage(String imageName) {
-        try (SaveImageCmd cmd = getCurrentDockerClient().saveImageCmd(imageName)) {
-
+        // Do NOT use try-with-resources here: SaveImageCmd.exec() returns a live HTTP-response
+        // stream and closing the command object closes the underlying connection, producing an
+        // empty or broken stream for the caller (same concern as in backupVolume).
+        try {
+            SaveImageCmd cmd = getCurrentDockerClient().saveImageCmd(imageName);
             return cmd.exec();
         } catch (Exception e) {
             log.error("Failed to export image: {}", imageName, e);
