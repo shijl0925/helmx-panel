@@ -202,6 +202,7 @@ public class VolumeController {
     @Operation(summary = "Backup Docker Volume as TAR archive")
     @PostMapping("/backup")
     @PreAuthorize("@va.check('Ops:Volume:List')")
+    @Log(value = "备份存储卷", resourceName = "#criteria.name")
     public ResponseEntity<StreamingResponseBody> backupDockerVolume(@Valid @RequestBody VolumeBackupRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);

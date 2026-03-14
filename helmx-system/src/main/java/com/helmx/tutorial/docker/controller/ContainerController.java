@@ -269,6 +269,7 @@ public class ContainerController {
     @Operation(summary = "Copy file to container")
     @PostMapping("/copy/to")
     @PreAuthorize("@va.check('Ops:Container:Upload')")
+    @Log(value = "上传文件到容器", resourceName = "#containerId")
     public ResponseEntity<Result> copyFileToContainer(
             @RequestParam("file") MultipartFile file,
             @RequestParam() String host,
@@ -553,6 +554,7 @@ public class ContainerController {
     @Operation(summary = "Update container networks")
     @PostMapping("/networks")
     @PreAuthorize("@va.check('Ops:Container:Edit')")
+    @Log(value = "更新容器网络", resourceName = "#request.containerId")
     public ResponseEntity<Result> updateContainerNetworks(@Valid @RequestBody ContainerNetworkUpdateRequest request) {
         if (request.getNetworks() == null) {
             return ResponseUtil.failed(400, null, "Networks cannot be null");
@@ -591,6 +593,7 @@ public class ContainerController {
     @Operation(summary = "Disconnect container network")
     @PostMapping("/disconnect")
     @PreAuthorize("@va.check('Ops:Network:Disconnect')")
+    @Log(value = "断开容器网络连接", resourceName = "#request.containerId")
     public ResponseEntity<Result> disconnectContainerNetwork(@Valid @RequestBody ContainerNetworkDisconnectRequest request) {
         String containerId = request.getContainerId();
         String networkName = request.getNetwork();
@@ -608,6 +611,7 @@ public class ContainerController {
     @Operation(summary = "Execute command in Docker Container")
     @PostMapping("/exec")
     @PreAuthorize("@va.check('Ops:Container:Exec')")
+    @Log(value = "在容器中执行命令", resourceName = "#request.containerId")
     public ResponseEntity<Result> ExecuteCommandInContainer(@RequestBody ContainerExecRequest request) {
         try {
             ContainerExecResponse response = dockerClientUtil.execCommand(request);
@@ -650,6 +654,7 @@ public class ContainerController {
     @Operation(summary = "Bulk operate Docker Containers (start/stop/restart/remove/pause/unpause/kill)")
     @PostMapping("/bulk")
     @PreAuthorize("@va.check('Ops:Container:Edit')")
+    @Log(value = "批量操作容器", resourceName = "#request.containerIds")
     public ResponseEntity<Result> bulkOperateContainers(@Valid @RequestBody BulkContainerOperationRequest request) {
         String host = request.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -677,6 +682,7 @@ public class ContainerController {
     @Operation(summary = "Update Docker Container resource limits (CPU/Memory) without recreation")
     @PostMapping("/resources")
     @PreAuthorize("@va.check('Ops:Container:Edit')")
+    @Log(value = "更新容器资源限制", resourceName = "#request.containerId")
     public ResponseEntity<Result> updateContainerResources(@Valid @RequestBody ContainerResourceUpdateRequest request) {
         String host = request.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -741,6 +747,7 @@ public class ContainerController {
     @Operation(summary = "Write text file content into a Docker Container (create or overwrite)")
     @PostMapping("/file/write")
     @PreAuthorize("@va.check('Ops:Container:Upload')")
+    @Log(value = "写入容器文件", resourceName = "#request.containerId")
     public ResponseEntity<Result> writeContainerFile(@Valid @RequestBody ContainerFileWriteRequest request) {
         String host = request.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -761,6 +768,7 @@ public class ContainerController {
     @Operation(summary = "Export Docker Container filesystem as a TAR archive")
     @PostMapping("/export")
     @PreAuthorize("@va.check('Ops:Container:Export')")
+    @Log(value = "导出容器文件系统", resourceName = "#request.containerId")
     public ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> exportContainer(
             @Valid @RequestBody ContainerExportRequest request) {
         String containerId = request.getContainerId();
@@ -798,6 +806,7 @@ public class ContainerController {
     @Operation(summary = "Prune stopped Docker Containers to reclaim disk space")
     @PostMapping("/prune")
     @PreAuthorize("@va.check('Ops:Container:Prune')")
+    @Log(value = "清理已停止容器")
     public ResponseEntity<Result> pruneContainers(@Valid @RequestBody StatusRequest request) {
         String host = request.getHost();
         dockerClientUtil.setCurrentHost(host);

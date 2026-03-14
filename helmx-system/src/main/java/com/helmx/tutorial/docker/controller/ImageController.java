@@ -360,6 +360,7 @@ public class ImageController {
     @Operation(summary = "Export Docker Image to tar file")
     @PostMapping("/export")
     @PreAuthorize("@va.check('Ops:Image:Export')")
+    @Log(value = "导出镜像", resourceName = "#criteria.imageName")
     public ResponseEntity<StreamingResponseBody> exportDockerImage(@Valid @RequestBody ExportImageRequest criteria) {
         String host = criteria.getHost();
         String imageName = criteria.getImageName();

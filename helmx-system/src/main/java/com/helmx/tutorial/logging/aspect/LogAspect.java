@@ -161,7 +161,11 @@ public class LogAspect {
             }
             return String.valueOf(value);
         } catch (Exception e) {
-            log.warn("Failed to evaluate resourceName SpEL expression '{}': {}", aopLog.resourceName(), e.getMessage());
+            log.warn("Failed to evaluate resourceName SpEL expression '{}' on {}.{}: {}",
+                    aopLog.resourceName(),
+                    joinPoint.getTarget().getClass().getSimpleName(),
+                    method.getName(),
+                    e.getMessage());
             return null;
         }
     }
