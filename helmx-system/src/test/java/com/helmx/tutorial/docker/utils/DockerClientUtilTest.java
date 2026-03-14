@@ -2351,4 +2351,794 @@ class DockerClientUtilTest {
 
         assertEquals("success", result.get("status"));
     }
+
+    // ─── createContainer – configureContainer branch coverage ──────────────────
+
+    @Test
+    void createContainer_withFullConfiguration_success() {
+        setupDockerHost();
+
+        PortHelper port = new PortHelper();
+        port.setContainerPort("8080");
+        port.setHostPort("8080");
+        port.setProtocol("tcp");
+
+        VolumeHelper vol = new VolumeHelper();
+        vol.setHostPath("/tmp");
+        vol.setContainerPath("/data");
+        vol.setMode("rw");
+
+        RestartPolicyRequest rp = new RestartPolicyRequest();
+        rp.setName("always");
+
+        ContainerCreateRequest req = new ContainerCreateRequest();
+        req.setImage("nginx:latest");
+        req.setName("mycontainer");
+        req.setCmd(new String[]{"nginx", "-g", "daemon off;"});
+        req.setEntrypoint(new String[]{"/bin/sh"});
+        req.setEnv(new String[]{"KEY=VALUE"});
+        req.setExposedPorts(new PortHelper[]{port});
+        req.setVolumes(new VolumeHelper[]{vol});
+        req.setLabels(new String[]{"app=test", "badlabel"});
+        req.setPrivileged(true);
+        req.setAutoRemove(false);
+        req.setCpuShares(512);
+        req.setCpuNano(0.5f);
+        req.setMemory(512f);
+        req.setNetworkMode("bridge");
+        req.setDns(new String[]{"8.8.8.8"});
+        req.setRestartPolicy(rp);
+        req.setWorkingDir("/app");
+        req.setUser("root");
+        req.setHostName("myhost");
+        req.setDomainName("example.com");
+        req.setStdinOpen(true);
+        req.setTty(true);
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("nginx:latest")).thenReturn(createCmd);
+        CreateContainerResponse createResp = mock(CreateContainerResponse.class);
+        when(createCmd.exec()).thenReturn(createResp);
+        when(createResp.getId()).thenReturn("new-ctr");
+
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("new-ctr")).thenReturn(startCmd);
+
+        Map<String, Object> result = dockerClientUtil.createContainer(req);
+        assertEquals("success", result.get("status"));
+        assertEquals("new-ctr", result.get("containerId"));
+        verify(dockerClient).createContainerCmd("nginx:latest");
+    }
+
+    @Test
+    void createContainer_withHealthCheckAndDevices_success() {
+        setupDockerHost();
+
+        Map<String, Object> healthCheck = new HashMap<>();
+        healthCheck.put("test", List.of("CMD", "curl", "-f", "http://localhost/"));
+        healthCheck.put("interval", 30_000_000_000L);
+        healthCheck.put("timeout", 5_000_000_000L);
+        healthCheck.put("retries", 3);
+        healthCheck.put("startPeriod", 0L);
+        healthCheck.put("startInterval", 5_000_000_000L);
+
+        Map<String, String> devices = new HashMap<>();
+        devices.put("/dev/sda", "/dev/sda:rwm");
+
+        ContainerCreateRequest req = new ContainerCreateRequest();
+        req.setImage("nginx:latest");
+        req.setHealthCheck(healthCheck);
+        req.setDevices(devices);
+        req.setMacAddress("02:42:ac:11:00:02");
+        req.setIpv4Address("172.17.0.2");
+        req.setIpv6Address("::1");
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("nginx:latest")).thenReturn(createCmd);
+        CreateContainerResponse createResp = mock(CreateContainerResponse.class);
+        when(createCmd.exec()).thenReturn(createResp);
+        when(createResp.getId()).thenReturn("ctr-2");
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("ctr-2")).thenReturn(startCmd);
+
+        Map<String, Object> result = dockerClientUtil.createContainer(req);
+        assertEquals("success", result.get("status"));
+    }
+
+    @Test
+    void createContainer_withOnFailureRestartPolicy_success() {
+        setupDockerHost();
+        RestartPolicyRequest rp = new RestartPolicyRequest();
+        rp.setName("on-failure");
+        rp.setMaximumRetryCount(3);
+
+        ContainerCreateRequest req = new ContainerCreateRequest();
+        req.setImage("nginx:latest");
+        req.setRestartPolicy(rp);
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("nginx:latest")).thenReturn(createCmd);
+        CreateContainerResponse createResp = mock(CreateContainerResponse.class);
+        when(createCmd.exec()).thenReturn(createResp);
+        when(createResp.getId()).thenReturn("ctr-3");
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("ctr-3")).thenReturn(startCmd);
+
+        Map<String, Object> result = dockerClientUtil.createContainer(req);
+        assertEquals("success", result.get("status"));
+    }
+
+    @Test
+    void createContainer_withUdpAndSctpPorts_success() {
+        setupDockerHost();
+        PortHelper udpPort = new PortHelper();
+        udpPort.setContainerPort("53");
+        udpPort.setProtocol("udp");
+
+        PortHelper sctpPort = new PortHelper();
+        sctpPort.setContainerPort("9000");
+        sctpPort.setProtocol("sctp");
+
+        ContainerCreateRequest req = new ContainerCreateRequest();
+        req.setImage("nginx:latest");
+        req.setExposedPorts(new PortHelper[]{udpPort, sctpPort});
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("nginx:latest")).thenReturn(createCmd);
+        CreateContainerResponse createResp = mock(CreateContainerResponse.class);
+        when(createCmd.exec()).thenReturn(createResp);
+        when(createResp.getId()).thenReturn("ctr-4");
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("ctr-4")).thenReturn(startCmd);
+
+        Map<String, Object> result = dockerClientUtil.createContainer(req);
+        assertEquals("success", result.get("status"));
+    }
+
+    @Test
+    void createContainer_startFails_returnsFailedStatus() {
+        setupDockerHost();
+        ContainerCreateRequest req = new ContainerCreateRequest();
+        req.setImage("nginx:latest");
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("nginx:latest")).thenReturn(createCmd);
+        CreateContainerResponse createResp = mock(CreateContainerResponse.class);
+        when(createCmd.exec()).thenReturn(createResp);
+        when(createResp.getId()).thenReturn("new-ctr");
+
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("new-ctr")).thenReturn(startCmd);
+        doThrow(new RuntimeException("start failed")).when(startCmd).exec();
+
+        Map<String, Object> result = dockerClientUtil.createContainer(req);
+        assertEquals("failed", result.get("status"));
+        assertTrue(result.get("message").toString().contains("Failed to create container"));
+    }
+
+    // ─── updateContainer – additional branch coverage ──────────────────────────
+
+    @Test
+    void updateContainer_runningContainer_stopsBeforeRecreating() throws InterruptedException {
+        setupDockerHost();
+
+        InspectContainerCmd inspectCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd("old-ctr")).thenReturn(inspectCmd);
+        InspectContainerResponse containerInfo = mock(InspectContainerResponse.class);
+        when(inspectCmd.exec()).thenReturn(containerInfo);
+        when(containerInfo.getName()).thenReturn("/mycontainer");
+        InspectContainerResponse.ContainerState state = mock(InspectContainerResponse.ContainerState.class);
+        when(containerInfo.getState()).thenReturn(state);
+        when(state.getRunning()).thenReturn(true);
+        ContainerConfig config = mock(ContainerConfig.class);
+        when(containerInfo.getConfig()).thenReturn(config);
+        when(config.getImage()).thenReturn("nginx:latest");
+
+        StopContainerCmd stopCmd = mock(StopContainerCmd.class);
+        when(dockerClient.stopContainerCmd("old-ctr")).thenReturn(stopCmd);
+        WaitContainerCmd waitCmd = mock(WaitContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.waitContainerCmd("old-ctr")).thenReturn(waitCmd);
+        WaitContainerResultCallback waitCallback = mock(WaitContainerResultCallback.class);
+        when(waitCmd.start()).thenReturn(waitCallback);
+        when(waitCallback.awaitCompletion(anyLong(), any())).thenReturn(true);
+
+        RenameContainerCmd renameCmd = mock(RenameContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.renameContainerCmd("old-ctr")).thenReturn(renameCmd);
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("nginx:latest")).thenReturn(createCmd);
+        CreateContainerResponse createResp = mock(CreateContainerResponse.class);
+        when(createCmd.exec()).thenReturn(createResp);
+        when(createResp.getId()).thenReturn("new-ctr");
+
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("new-ctr")).thenReturn(startCmd);
+
+        RemoveContainerCmd removeCmd = mock(RemoveContainerCmd.class);
+        when(dockerClient.removeContainerCmd("old-ctr")).thenReturn(removeCmd);
+
+        ContainerCreateRequest req = new ContainerCreateRequest();
+        req.setContainerId("old-ctr");
+
+        Map<String, Object> result = dockerClientUtil.updateContainer(req);
+        assertEquals("success", result.get("status"));
+        verify(dockerClient).stopContainerCmd("old-ctr");
+    }
+
+    @Test
+    void updateContainer_createFails_rollsBack() {
+        setupDockerHost();
+
+        InspectContainerCmd inspectCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd("old-ctr")).thenReturn(inspectCmd);
+        InspectContainerResponse containerInfo = mock(InspectContainerResponse.class);
+        when(inspectCmd.exec()).thenReturn(containerInfo);
+        when(containerInfo.getName()).thenReturn("/mycontainer");
+        InspectContainerResponse.ContainerState state = mock(InspectContainerResponse.ContainerState.class);
+        when(containerInfo.getState()).thenReturn(state);
+        when(state.getRunning()).thenReturn(false);
+        ContainerConfig config = mock(ContainerConfig.class);
+        when(containerInfo.getConfig()).thenReturn(config);
+        when(config.getImage()).thenReturn("nginx:latest");
+
+        RenameContainerCmd renameCmd = mock(RenameContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.renameContainerCmd("old-ctr")).thenReturn(renameCmd);
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("nginx:latest")).thenReturn(createCmd);
+        when(createCmd.exec()).thenThrow(new RuntimeException("Docker create failed"));
+
+        // Rollback: inspect new container name to remove it – not found
+        InspectContainerCmd inspectNewCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd("mycontainer")).thenReturn(inspectNewCmd);
+        when(inspectNewCmd.exec()).thenThrow(new NotFoundException("not found"));
+
+        // Rollback: start old container
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("old-ctr")).thenReturn(startCmd);
+
+        ContainerCreateRequest req = new ContainerCreateRequest();
+        req.setContainerId("old-ctr");
+
+        Map<String, Object> result = dockerClientUtil.updateContainer(req);
+        assertEquals("failed", result.get("status"));
+        assertTrue(result.get("message").toString().contains("Rolling back"));
+    }
+
+    @Test
+    void updateContainer_invalidNewName_throwsIllegalArgumentException() {
+        setupDockerHost();
+
+        InspectContainerCmd inspectCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd("old-ctr")).thenReturn(inspectCmd);
+        InspectContainerResponse containerInfo = mock(InspectContainerResponse.class);
+        when(inspectCmd.exec()).thenReturn(containerInfo);
+        when(containerInfo.getName()).thenReturn("/mycontainer");
+
+        ContainerCreateRequest req = new ContainerCreateRequest();
+        req.setContainerId("old-ctr");
+        req.setName("@invalid-name");
+
+        assertThrows(IllegalArgumentException.class, () -> dockerClientUtil.updateContainer(req));
+    }
+
+    // ─── getContainerLogs – exception path ─────────────────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getContainerLogs_exceptionInCmd_throwsRuntimeException() {
+        setupDockerHost();
+
+        LogContainerCmd logCmd = mock(LogContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.logContainerCmd("ctr1")).thenReturn(logCmd);
+        when(logCmd.exec(any(ResultCallback.class))).thenThrow(new RuntimeException("log error"));
+
+        assertThrows(RuntimeException.class, () -> dockerClientUtil.getContainerLogs("ctr1", 100));
+    }
+
+    // ─── extractRegistryUrl – uncovered 3-part host branches ───────────────────
+
+    @Test
+    void extractRegistryUrl_127_0_0_1_threePartPath_returnsHttp() {
+        String result = ReflectionTestUtils.invokeMethod(dockerClientUtil, "extractRegistryUrl",
+                "127.0.0.1/namespace/image");
+        assertEquals("http://127.0.0.1", result);
+    }
+
+    @Test
+    void extractRegistryUrl_ipv4AddressThreeParts_returnsHttp() {
+        String result = ReflectionTestUtils.invokeMethod(dockerClientUtil, "extractRegistryUrl",
+                "192.168.1.10/namespace/image");
+        assertEquals("http://192.168.1.10", result);
+    }
+
+    // ─── isLocalDockerHost via loadHostResourceUsage ────────────────────────────
+
+    @Test
+    void loadHostResourceUsage_npipeScheme_treatedAsLocal() {
+        dockerClientUtil.setCurrentHost("npipe:////./pipe/docker_engine");
+        Map<String, Object> metrics = dockerClientUtil.loadHostResourceUsage();
+        assertNotNull(metrics);
+        // npipe → isLocal = true → loadLocalHostResourceUsage is called (no docker client needed)
+        assertTrue(metrics.containsKey("hostMetricsAvailable"));
+    }
+
+    @Test
+    void loadHostResourceUsage_invalidUriScheme_fallsBackToRemotePath() {
+        // URI.create() throws for a host containing a space → isLocalDockerHost returns false
+        dockerClientUtil.setCurrentHost("tcp://invalid host:2375");
+        when(dockerEnvMapper.selectOne(any())).thenReturn(null);
+        Map<String, Object> metrics = dockerClientUtil.loadHostResourceUsage();
+        assertFalse((Boolean) metrics.get("hostMetricsAvailable"));
+    }
+
+    // ─── loadStatus – all eight container states ────────────────────────────────
+
+    @Test
+    void loadStatus_allEightContainerStates_countsCorrectly() {
+        setupDockerHost();
+
+        Container c1 = mock(Container.class); when(c1.getState()).thenReturn("paused");
+        Container c2 = mock(Container.class); when(c2.getState()).thenReturn("stopped");
+        Container c3 = mock(Container.class); when(c3.getState()).thenReturn("restarting");
+        Container c4 = mock(Container.class); when(c4.getState()).thenReturn("removing");
+        Container c5 = mock(Container.class); when(c5.getState()).thenReturn("created");
+        Container c6 = mock(Container.class); when(c6.getState()).thenReturn("running");
+        Container c7 = mock(Container.class); when(c7.getState()).thenReturn("exited");
+        Container c8 = mock(Container.class); when(c8.getState()).thenReturn("dead");
+
+        setupLoadStatusMocks(List.of(c1, c2, c3, c4, c5, c6, c7, c8));
+
+        Map<String, Object> result = dockerClientUtil.loadStatus();
+
+        assertEquals(1L, result.get("paused"));
+        assertEquals(1L, result.get("stopped"));
+        assertEquals(1L, result.get("restarting"));
+        assertEquals(1L, result.get("removing"));
+        assertEquals(1L, result.get("created"));
+        assertEquals(1L, result.get("running"));
+        assertEquals(1L, result.get("exited"));
+        assertEquals(1L, result.get("dead"));
+    }
+
+    // ─── loadStatus – image filter lambda ─────────────────────────────────────
+
+    @Test
+    void loadStatus_imagesWithMixedTags_countsOnlyTaggedImages() {
+        setupDockerHost();
+
+        // Image with real tag – counted
+        Image taggedImg = mock(Image.class);
+        when(taggedImg.getRepoTags()).thenReturn(new String[]{"nginx:latest"});
+        when(taggedImg.getSize()).thenReturn(1024L);
+
+        // Image with null repoTags – filtered out by the lambda
+        Image nullTagImg = mock(Image.class);
+        when(nullTagImg.getRepoTags()).thenReturn(null);
+
+        // Image with <none>:<none> tag – filtered out by the lambda
+        Image noneTagImg = mock(Image.class);
+        when(noneTagImg.getRepoTags()).thenReturn(new String[]{"<none>:<none>"});
+
+        ListImagesCmd mockImagesCmd = mock(ListImagesCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.listImagesCmd()).thenReturn(mockImagesCmd);
+        when(mockImagesCmd.exec()).thenReturn(List.of(taggedImg, nullTagImg, noneTagImg));
+
+        ListNetworksCmd mockNetworksCmd = mock(ListNetworksCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.listNetworksCmd()).thenReturn(mockNetworksCmd);
+        when(mockNetworksCmd.exec()).thenReturn(Collections.emptyList());
+
+        ListVolumesCmd mockVolumesCmd = mock(ListVolumesCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.listVolumesCmd()).thenReturn(mockVolumesCmd);
+        ListVolumesResponse mockVolumesResp = mock(ListVolumesResponse.class);
+        when(mockVolumesResp.getVolumes()).thenReturn(Collections.emptyList());
+        when(mockVolumesCmd.exec()).thenReturn(mockVolumesResp);
+
+        ListContainersCmd mockContainersCmd = mock(ListContainersCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.listContainersCmd()).thenReturn(mockContainersCmd);
+        when(mockContainersCmd.exec()).thenReturn(Collections.emptyList());
+
+        Map<String, Object> result = dockerClientUtil.loadStatus();
+        // Only the tagged image is counted
+        assertEquals(1, result.get("imageCount"));
+    }
+
+    // ─── listContainerFiles ────────────────────────────────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void listContainerFiles_validPath_parsesLsOutput() throws InterruptedException {
+        setupDockerHost();
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.execCreateCmd("ctr1")).thenReturn(execCreateCmd);
+        ExecCreateCmdResponse execResp = mock(ExecCreateCmdResponse.class);
+        when(execCreateCmd.exec()).thenReturn(execResp);
+        when(execResp.getId()).thenReturn("exec-id");
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.execStartCmd("exec-id")).thenReturn(execStartCmd);
+
+        String lsOutput = "total 8\n"
+                + "-rw-r--r-- 1 root root 1024 Jan  1 12:00 file.txt\n"
+                + "drwxr-xr-x 2 root root 4096 Jan  1 12:00 mydir\n"
+                + "lrwxrwxrwx 1 root root 7 Jan  1 12:00 link -> /target\n";
+        doAnswer(inv -> {
+            ResultCallback<Frame> cb = inv.getArgument(0);
+            Frame frame = mock(Frame.class);
+            when(frame.getPayload()).thenReturn(lsOutput.getBytes());
+            cb.onNext(frame);
+            cb.onComplete();
+            return cb;
+        }).when(execStartCmd).exec(any(ResultCallback.class));
+
+        List<Map<String, Object>> result = dockerClientUtil.listContainerFiles("ctr1", "/");
+
+        assertEquals(3, result.size());
+        assertEquals("file.txt", result.get(0).get("name"));
+        assertEquals("file", result.get(0).get("type"));
+        assertEquals("mydir", result.get(1).get("name"));
+        assertEquals("directory", result.get(1).get("type"));
+        assertEquals("link", result.get(2).get("name"));
+        assertEquals("symlink", result.get(2).get("type"));
+        assertEquals("/target", result.get(2).get("linkTarget"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void listContainerFiles_emptyOutput_returnsEmptyList() throws InterruptedException {
+        setupDockerHost();
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.execCreateCmd("ctr1")).thenReturn(execCreateCmd);
+        ExecCreateCmdResponse execResp = mock(ExecCreateCmdResponse.class);
+        when(execCreateCmd.exec()).thenReturn(execResp);
+        when(execResp.getId()).thenReturn("exec-id");
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.execStartCmd("exec-id")).thenReturn(execStartCmd);
+
+        doAnswer(inv -> {
+            ResultCallback<Frame> cb = inv.getArgument(0);
+            cb.onComplete();
+            return cb;
+        }).when(execStartCmd).exec(any(ResultCallback.class));
+
+        List<Map<String, Object>> result = dockerClientUtil.listContainerFiles("ctr1", "/tmp");
+        assertTrue(result.isEmpty());
+    }
+
+    // ─── pruneCmd – cleanupDanglingImages branch ───────────────────────────────
+
+    @Test
+    void pruneCmd_imagesType_withDanglingImages_removesAndCounts() {
+        setupDockerHost();
+
+        PruneCmd mockPruneCmd = mock(PruneCmd.class);
+        when(dockerClient.pruneCmd(PruneType.IMAGES)).thenReturn(mockPruneCmd);
+        PruneResponse mockResp = mock(PruneResponse.class);
+        when(mockResp.getSpaceReclaimed()).thenReturn(0L);
+        when(mockPruneCmd.exec()).thenReturn(mockResp);
+
+        ListImagesCmd mockListCmd = mock(ListImagesCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.listImagesCmd()).thenReturn(mockListCmd);
+
+        Image danglingImg = mock(Image.class);
+        when(danglingImg.getId()).thenReturn("sha256:dangling123");
+        when(danglingImg.getSize()).thenReturn(2048L);
+        when(mockListCmd.exec()).thenReturn(List.of(danglingImg));
+
+        RemoveImageCmd removeCmd = mock(RemoveImageCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.removeImageCmd("sha256:dangling123")).thenReturn(removeCmd);
+
+        assertEquals("success", dockerClientUtil.pruneCmd("IMAGES").get("status"));
+        verify(dockerClient).removeImageCmd("sha256:dangling123");
+    }
+
+    @Test
+    void pruneCmd_imagesType_withDanglingImageRemovalFailure_stillReturnsSuccess() {
+        setupDockerHost();
+
+        PruneCmd mockPruneCmd = mock(PruneCmd.class);
+        when(dockerClient.pruneCmd(PruneType.IMAGES)).thenReturn(mockPruneCmd);
+        PruneResponse mockResp = mock(PruneResponse.class);
+        when(mockResp.getSpaceReclaimed()).thenReturn(0L);
+        when(mockPruneCmd.exec()).thenReturn(mockResp);
+
+        ListImagesCmd mockListCmd = mock(ListImagesCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.listImagesCmd()).thenReturn(mockListCmd);
+
+        Image danglingImg = mock(Image.class);
+        when(danglingImg.getId()).thenReturn("sha256:locked123");
+        when(mockListCmd.exec()).thenReturn(List.of(danglingImg));
+
+        RemoveImageCmd removeCmd = mock(RemoveImageCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.removeImageCmd("sha256:locked123")).thenReturn(removeCmd);
+        when(removeCmd.exec()).thenThrow(new RuntimeException("image in use"));
+
+        // Removal failure is swallowed; pruneCmd still reports success
+        assertEquals("success", dockerClientUtil.pruneCmd("IMAGES").get("status"));
+    }
+
+    // ─── exportImage ───────────────────────────────────────────────────────────
+
+    @Test
+    void exportImage_success_returnsInputStream() {
+        setupDockerHost();
+        SaveImageCmd mockCmd = mock(SaveImageCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.saveImageCmd("myimage:latest")).thenReturn(mockCmd);
+        InputStream mockStream = new ByteArrayInputStream("tar-data".getBytes());
+        when(mockCmd.exec()).thenReturn(mockStream);
+
+        InputStream result = dockerClientUtil.exportImage("myimage:latest");
+        assertNotNull(result);
+    }
+
+    @Test
+    void exportImage_dockerException_throwsRuntimeException() {
+        setupDockerHost();
+        SaveImageCmd mockCmd = mock(SaveImageCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.saveImageCmd("bad-image")).thenReturn(mockCmd);
+        when(mockCmd.exec()).thenThrow(new RuntimeException("export failed"));
+
+        assertThrows(RuntimeException.class, () -> dockerClientUtil.exportImage("bad-image"));
+    }
+
+    // ─── createVolume – labels and driverOpts branches ─────────────────────────
+
+    @Test
+    void createVolume_withLabelsAndDriverOpts_success() {
+        setupDockerHost();
+        CreateVolumeCmd mockCmd = mock(CreateVolumeCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createVolumeCmd()).thenReturn(mockCmd);
+        VolumeCreateRequest req = new VolumeCreateRequest();
+        req.setName("myvol");
+        req.setDriver("local");
+        req.setLabels(new String[]{"env=prod", "app=web"});
+        req.setDriverOpts(new String[]{"type=nfs", "o=addr=1.2.3.4"});
+        assertEquals("success", dockerClientUtil.createVolume(req).get("status"));
+        verify(mockCmd).withLabels(any(Map.class));
+        verify(mockCmd).withDriverOpts(any(Map.class));
+    }
+
+    // ─── isVolumeInUse – exception catch path ──────────────────────────────────
+
+    @Test
+    void isVolumeInUse_exceptionDuringCheck_returnsFalse() {
+        setupDockerHost();
+        ListContainersCmd mockCmd = mock(ListContainersCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.listContainersCmd()).thenReturn(mockCmd);
+        when(mockCmd.exec()).thenThrow(new RuntimeException("docker error"));
+        assertFalse(dockerClientUtil.isVolumeInUse("myvol"));
+    }
+
+    // ─── getVolumeContainers – null mounts case ────────────────────────────────
+
+    @Test
+    void getVolumeContainers_containerWithNullMounts_skipped() {
+        setupDockerHost();
+        ListContainersCmd mockCmd = mock(ListContainersCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.listContainersCmd()).thenReturn(mockCmd);
+        Container container = mock(Container.class);
+        when(container.getId()).thenReturn("ctr1");
+        when(container.getNames()).thenReturn(new String[]{"/mycontainer"});
+        // getMounts() returns null by default → triggers the null-check continue
+        when(mockCmd.exec()).thenReturn(List.of(container));
+        List<Map<String, String>> result = dockerClientUtil.getVolumeContainers("myvol");
+        assertTrue(result.isEmpty());
+    }
+
+    // ─── writeContainerFileContent – additional paths ──────────────────────────
+
+    @Test
+    void writeContainerFileContent_rootLevelFile_success() {
+        setupDockerHost();
+        CopyArchiveToContainerCmd copyCmd = mock(CopyArchiveToContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.copyArchiveToContainerCmd("ctr1")).thenReturn(copyCmd);
+
+        // File at root level: lastSlash == 0 → dirPath = "/"
+        Map<String, Object> result = dockerClientUtil.writeContainerFileContent(
+                "ctr1", "/rootfile.txt", "hello root", "UTF-8");
+        assertEquals("success", result.get("status"));
+    }
+
+    @Test
+    void writeContainerFileContent_invalidEncoding_fallsBackToUtf8() {
+        setupDockerHost();
+        CopyArchiveToContainerCmd copyCmd = mock(CopyArchiveToContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.copyArchiveToContainerCmd("ctr1")).thenReturn(copyCmd);
+
+        Map<String, Object> result = dockerClientUtil.writeContainerFileContent(
+                "ctr1", "/etc/config.txt", "hello", "NOT-A-REAL-ENCODING-XYZ");
+        assertEquals("success", result.get("status"));
+    }
+
+    @Test
+    void writeContainerFileContent_dockerException_returnsFailed() {
+        setupDockerHost();
+        CopyArchiveToContainerCmd copyCmd = mock(CopyArchiveToContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.copyArchiveToContainerCmd("ctr1")).thenReturn(copyCmd);
+        when(copyCmd.exec()).thenThrow(new RuntimeException("docker copy failed"));
+
+        Map<String, Object> result = dockerClientUtil.writeContainerFileContent(
+                "ctr1", "/etc/config.txt", "content", "UTF-8");
+        assertEquals("failed", result.get("status"));
+        assertTrue(result.get("message").toString().contains("docker copy failed"));
+    }
+
+    // ─── readContainerFileContent – invalid encoding fallback ──────────────────
+
+    @Test
+    void readContainerFileContent_invalidEncoding_fallsBackToUtf8() throws Exception {
+        setupDockerHost();
+
+        ByteArrayOutputStream tarOutput = new ByteArrayOutputStream();
+        try (org.apache.commons.compress.archivers.tar.TarArchiveOutputStream tarOs =
+                new org.apache.commons.compress.archivers.tar.TarArchiveOutputStream(tarOutput)) {
+            byte[] content = "test content".getBytes();
+            org.apache.commons.compress.archivers.tar.TarArchiveEntry entry =
+                    new org.apache.commons.compress.archivers.tar.TarArchiveEntry("config.txt");
+            entry.setSize(content.length);
+            tarOs.putArchiveEntry(entry);
+            tarOs.write(content);
+            tarOs.closeArchiveEntry();
+            tarOs.finish();
+        }
+
+        CopyArchiveFromContainerCmd copyCmd = mock(CopyArchiveFromContainerCmd.class);
+        when(dockerClient.copyArchiveFromContainerCmd("ctr1", "/etc/config.txt")).thenReturn(copyCmd);
+        when(copyCmd.exec()).thenReturn(new ByteArrayInputStream(tarOutput.toByteArray()));
+
+        String result = dockerClientUtil.readContainerFileContent(
+                "ctr1", "/etc/config.txt", "NOT-VALID-ENCODING-XYZ");
+        assertEquals("test content", result);
+    }
+
+    // ─── parseSizeLong via parseLsLine – invalid size string ──────────────────
+
+    @Test
+    void parseLsLine_withNonNumericSize_returnsZeroSize() {
+        // 'abc' as size field → parseSizeLong catches NumberFormatException and returns 0
+        Map<String, Object> entry = ReflectionTestUtils.invokeMethod(dockerClientUtil, "parseLsLine",
+                "-rw-r--r-- 1 root root abc Jan  1 12:00 file.txt");
+        assertNotNull(entry);
+        assertEquals(0L, entry.get("size"));
+    }
+
+    // ─── updateContainer – with new image specified ────────────────────────────
+
+    @Test
+    void updateContainer_withNewImage_usesSpecifiedImage() {
+        setupDockerHost();
+
+        InspectContainerCmd inspectCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd("old-ctr")).thenReturn(inspectCmd);
+        InspectContainerResponse containerInfo = mock(InspectContainerResponse.class);
+        when(inspectCmd.exec()).thenReturn(containerInfo);
+        when(containerInfo.getName()).thenReturn("/mycontainer");
+        InspectContainerResponse.ContainerState state = mock(InspectContainerResponse.ContainerState.class);
+        when(containerInfo.getState()).thenReturn(state);
+        when(state.getRunning()).thenReturn(false);
+        // No need to mock containerInfo.getConfig() since image is explicitly provided
+
+        RenameContainerCmd renameCmd = mock(RenameContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.renameContainerCmd("old-ctr")).thenReturn(renameCmd);
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("alpine:latest")).thenReturn(createCmd);
+        CreateContainerResponse createResp = mock(CreateContainerResponse.class);
+        when(createCmd.exec()).thenReturn(createResp);
+        when(createResp.getId()).thenReturn("new-ctr");
+
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("new-ctr")).thenReturn(startCmd);
+
+        RemoveContainerCmd removeCmd = mock(RemoveContainerCmd.class);
+        when(dockerClient.removeContainerCmd("old-ctr")).thenReturn(removeCmd);
+
+        ContainerCreateRequest req = new ContainerCreateRequest();
+        req.setContainerId("old-ctr");
+        req.setImage("alpine:latest");
+
+        Map<String, Object> result = dockerClientUtil.updateContainer(req);
+        assertEquals("success", result.get("status"));
+        verify(dockerClient).createContainerCmd("alpine:latest");
+    }
+
+    // ─── updateContainer – rollback with new container found and removed ───────
+
+    @Test
+    void updateContainer_createFails_rollbackRemovesNewContainer() {
+        setupDockerHost();
+
+        InspectContainerCmd inspectCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd("old-ctr")).thenReturn(inspectCmd);
+        InspectContainerResponse containerInfo = mock(InspectContainerResponse.class);
+        when(inspectCmd.exec()).thenReturn(containerInfo);
+        when(containerInfo.getName()).thenReturn("/mycontainer");
+        InspectContainerResponse.ContainerState state = mock(InspectContainerResponse.ContainerState.class);
+        when(containerInfo.getState()).thenReturn(state);
+        when(state.getRunning()).thenReturn(false);
+        ContainerConfig config = mock(ContainerConfig.class);
+        when(containerInfo.getConfig()).thenReturn(config);
+        when(config.getImage()).thenReturn("nginx:latest");
+
+        RenameContainerCmd renameCmd = mock(RenameContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.renameContainerCmd("old-ctr")).thenReturn(renameCmd);
+
+        // Create call fails
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("nginx:latest")).thenReturn(createCmd);
+        when(createCmd.exec()).thenThrow(new RuntimeException("create failed"));
+
+        // Rollback: inspect new container name → found
+        InspectContainerCmd inspectNewCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd("mycontainer")).thenReturn(inspectNewCmd);
+        InspectContainerResponse newContainerInfo = mock(InspectContainerResponse.class);
+        when(inspectNewCmd.exec()).thenReturn(newContainerInfo);
+        when(newContainerInfo.getId()).thenReturn("failed-ctr");
+
+        RemoveContainerCmd removeFailedCmd = mock(RemoveContainerCmd.class);
+        when(dockerClient.removeContainerCmd("failed-ctr")).thenReturn(removeFailedCmd);
+
+        // Rollback: start old container
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("old-ctr")).thenReturn(startCmd);
+
+        ContainerCreateRequest req = new ContainerCreateRequest();
+        req.setContainerId("old-ctr");
+
+        Map<String, Object> result = dockerClientUtil.updateContainer(req);
+        assertEquals("failed", result.get("status"));
+        verify(dockerClient).removeContainerCmd("failed-ctr");
+    }
+
+    // ─── extractFileFromTar – directory entry and no entry found ─────────────
+
+    @Test
+    void copyFileFromContainer_withDirectoryEntryInTar_extractsFileAfterDirectory() throws Exception {
+        setupDockerHost();
+
+        // Build a tar with a directory entry followed by a file entry
+        ByteArrayOutputStream tarOutput = new ByteArrayOutputStream();
+        try (org.apache.commons.compress.archivers.tar.TarArchiveOutputStream tarOs =
+                new org.apache.commons.compress.archivers.tar.TarArchiveOutputStream(tarOutput)) {
+            // Directory entry
+            org.apache.commons.compress.archivers.tar.TarArchiveEntry dirEntry =
+                    new org.apache.commons.compress.archivers.tar.TarArchiveEntry("somedir/");
+            tarOs.putArchiveEntry(dirEntry);
+            tarOs.closeArchiveEntry();
+            // File entry
+            byte[] content = "actual content".getBytes();
+            org.apache.commons.compress.archivers.tar.TarArchiveEntry fileEntry =
+                    new org.apache.commons.compress.archivers.tar.TarArchiveEntry("somedir/file.txt");
+            fileEntry.setSize(content.length);
+            tarOs.putArchiveEntry(fileEntry);
+            tarOs.write(content);
+            tarOs.closeArchiveEntry();
+            tarOs.finish();
+        }
+
+        CopyArchiveFromContainerCmd copyCmd = mock(CopyArchiveFromContainerCmd.class);
+        when(dockerClient.copyArchiveFromContainerCmd("ctr1", "/somedir/file.txt")).thenReturn(copyCmd);
+        when(copyCmd.exec()).thenReturn(new ByteArrayInputStream(tarOutput.toByteArray()));
+
+        byte[] result = dockerClientUtil.copyFileFromContainer("ctr1", "/somedir/file.txt");
+        assertEquals("actual content", new String(result));
+    }
+
+    // ─── cloneVolume – target volume creation failure ─────────────────────────
+
+    @Test
+    void cloneVolume_targetVolumeCreationFails_returnsFailedStatus() {
+        setupDockerHost();
+
+        CreateVolumeCmd mockVolumeCmd = mock(CreateVolumeCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createVolumeCmd()).thenReturn(mockVolumeCmd);
+        when(mockVolumeCmd.exec()).thenThrow(new RuntimeException("volume create failed"));
+
+        Map<String, Object> result = dockerClientUtil.cloneVolume("src", "dst", "local");
+        assertEquals("failed", result.get("status"));
+        assertTrue(result.get("message").toString().contains("Failed to create target volume"));
+    }
 }
