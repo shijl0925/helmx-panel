@@ -6,9 +6,19 @@ import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.*;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.*;
+import com.github.dockerjava.core.InvocationBuilder;
+import com.github.dockerjava.core.command.PullImageResultCallback;
+import com.github.dockerjava.core.command.PushImageResultCallback;
 import com.helmx.tutorial.docker.dto.*;
 import com.helmx.tutorial.docker.entity.DockerEnv;
+import com.helmx.tutorial.docker.entity.Registry;
 import com.helmx.tutorial.docker.mapper.DockerEnvMapper;
+import com.helmx.tutorial.docker.mapper.RegistryMapper;
+import com.helmx.tutorial.docker.utils.ImageBuildTask;
+import com.helmx.tutorial.docker.utils.ImageBuildTaskManager;
+import com.helmx.tutorial.docker.utils.ImagePullTaskManager;
+import com.helmx.tutorial.docker.utils.ImagePushTaskManager;
+import com.helmx.tutorial.docker.utils.PasswordUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,6 +61,24 @@ class DockerClientUtilTest {
     @Mock
     private RemoteHostMetricsCollector remoteHostMetricsCollector;
 
+    @Mock
+    private RegistryMapper registryMapper;
+
+    @Mock
+    private PasswordUtil passwordUtil;
+
+    @Mock
+    private ImagePullTaskManager imagePullTaskManager;
+
+    @Mock
+    private ImagePushTaskManager imagePushTaskManager;
+
+    @Mock
+    private ImageBuildTaskManager imageBuildTaskManager;
+
+    @Mock
+    private com.github.dockerjava.transport.DockerHttpClient dockerHttpClient;
+
     private DockerClientUtil dockerClientUtil;
 
     @BeforeEach
@@ -59,6 +88,11 @@ class DockerClientUtilTest {
         ReflectionTestUtils.setField(dockerClientUtil, "dockerHostValidator", dockerHostValidator);
         ReflectionTestUtils.setField(dockerClientUtil, "dockerEnvMapper", dockerEnvMapper);
         ReflectionTestUtils.setField(dockerClientUtil, "remoteHostMetricsCollector", remoteHostMetricsCollector);
+        ReflectionTestUtils.setField(dockerClientUtil, "registryMapper", registryMapper);
+        ReflectionTestUtils.setField(dockerClientUtil, "passwordUtil", passwordUtil);
+        ReflectionTestUtils.setField(dockerClientUtil, "imagePullTaskManager", imagePullTaskManager);
+        ReflectionTestUtils.setField(dockerClientUtil, "imagePushTaskManager", imagePushTaskManager);
+        ReflectionTestUtils.setField(dockerClientUtil, "imageBuildTaskManager", imageBuildTaskManager);
     }
 
     @Test
@@ -1895,5 +1929,430 @@ class DockerClientUtilTest {
         ExposedPort result = ReflectionTestUtils.invokeMethod(dockerClientUtil,
                 "createExposedPort", 8080, (String) null);
         assertEquals(ExposedPort.tcp(8080), result);
+    }
+
+    // ─── getCurrentDockerHttpClient ────────────────────────────────────────────
+
+    @Test
+    void getCurrentDockerHttpClient_withoutHost_throwsIllegalStateException() {
+        assertThrows(IllegalStateException.class, dockerClientUtil::getCurrentDockerHttpClient);
+    }
+
+    // ─── getContainerStats ─────────────────────────────────────────────────────
+
+    @Test
+    void getContainerStats_callsStatsCmdAndReturnJson() {
+        setupDockerHost();
+        StatsCmd statsCmd = mock(StatsCmd.class);
+        when(dockerClient.statsCmd("ctr1")).thenReturn(statsCmd);
+        when(statsCmd.withNoStream(true)).thenReturn(statsCmd);
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            InvocationBuilder.AsyncResultCallback<Statistics> cb = invocation.getArgument(0);
+            cb.onNext(new Statistics());
+            return cb;
+        }).when(statsCmd).exec(any());
+
+        JSONObject result = dockerClientUtil.getContainerStats("ctr1", true);
+        assertNotNull(result);
+        verify(dockerClient).statsCmd("ctr1");
+    }
+
+    // ─── getAuthConfigForImage (private, via reflection) ──────────────────────
+
+    @Test
+    void getAuthConfigForImage_noRegistry_returnsNull() {
+        when(registryMapper.selectList(any())).thenReturn(Collections.emptyList());
+
+        AuthConfig result = ReflectionTestUtils.invokeMethod(
+                dockerClientUtil, "getAuthConfigForImage", "ubuntu:latest");
+        assertNull(result);
+    }
+
+    @Test
+    void getAuthConfigForImage_registryAuthFalse_returnsNull() {
+        Registry registry = new Registry();
+        registry.setUrl("https://docker.io");
+        registry.setAuth(false);
+        when(registryMapper.selectList(any())).thenReturn(List.of(registry));
+
+        AuthConfig result = ReflectionTestUtils.invokeMethod(
+                dockerClientUtil, "getAuthConfigForImage", "ubuntu:latest");
+        assertNull(result);
+    }
+
+    @Test
+    void getAuthConfigForImage_withAuthRegistry_returnsAuthConfig() {
+        Registry registry = new Registry();
+        registry.setUrl("https://myregistry.com");
+        registry.setUsername("user");
+        registry.setPassword("encrypted");
+        registry.setAuth(true);
+        when(registryMapper.selectList(any())).thenReturn(List.of(registry));
+        when(passwordUtil.decrypt("encrypted")).thenReturn("plaintext");
+
+        AuthConfig result = ReflectionTestUtils.invokeMethod(
+                dockerClientUtil, "getAuthConfigForImage", "myregistry.com/myimage:tag");
+        assertNotNull(result);
+        assertEquals("user", result.getUsername());
+        assertEquals("plaintext", result.getPassword());
+    }
+
+    @Test
+    void getAuthConfigForImage_mapperThrows_returnsNull() {
+        when(registryMapper.selectList(any())).thenThrow(new RuntimeException("DB error"));
+
+        AuthConfig result = ReflectionTestUtils.invokeMethod(
+                dockerClientUtil, "getAuthConfigForImage", "ubuntu:latest");
+        assertNull(result);
+    }
+
+    // ─── pullImageIfNotExists ──────────────────────────────────────────────────
+
+    @Test
+    void pullImageIfNotExists_imageExists_setsTaskSuccessWithoutPull() throws InterruptedException {
+        setupDockerHost();
+        InspectImageCmd inspectCmd = mock(InspectImageCmd.class);
+        when(dockerClient.inspectImageCmd("ubuntu:latest")).thenReturn(inspectCmd);
+        // exec() doesn't throw → image exists
+
+        Map<String, String> result = dockerClientUtil.pullImageIfNotExists("ubuntu:latest", true);
+
+        assertNotNull(result.get("taskId"));
+        assertEquals("ubuntu:latest", result.get("imageName"));
+        verify(dockerClient, never()).pullImageCmd(anyString());
+        verify(imagePullTaskManager).addTask(anyString(), any());
+    }
+
+    @Test
+    void pullImageIfNotExists_checkExistsFalse_startsPullAsync() throws InterruptedException {
+        setupDockerHost();
+
+        Map<String, String> result = dockerClientUtil.pullImageIfNotExists("ubuntu:latest", false);
+
+        assertNotNull(result.get("taskId"));
+        assertEquals("ubuntu:latest", result.get("imageName"));
+        verify(imagePullTaskManager).addTask(anyString(), any());
+    }
+
+    // ─── pushImage ─────────────────────────────────────────────────────────────
+
+    @Test
+    void pushImage_returnsTaskIdAndStartsAsyncPush() {
+        setupDockerHost();
+
+        Map<String, String> result = dockerClientUtil.pushImage("myrepo/image:tag");
+
+        assertNotNull(result.get("taskId"));
+        assertEquals("myrepo/image:tag", result.get("imageName"));
+        verify(imagePushTaskManager).addTask(anyString(), any());
+    }
+
+    // ─── doPullImage ───────────────────────────────────────────────────────────
+
+    @Test
+    void doPullImage_imageExists_skipsPull() {
+        InspectImageCmd inspectCmd = mock(InspectImageCmd.class);
+        when(dockerClient.inspectImageCmd("ubuntu:latest")).thenReturn(inspectCmd);
+        // exec() doesn't throw → image exists
+
+        ImageBuildTask task = new ImageBuildTask();
+        dockerClientUtil.doPullImage(dockerClient, task, "ubuntu:latest");
+
+        verify(dockerClient, never()).pullImageCmd(anyString());
+    }
+
+    @Test
+    void doPullImage_imageNotExists_pullsImage() throws InterruptedException {
+        when(registryMapper.selectList(any())).thenReturn(Collections.emptyList());
+        InspectImageCmd inspectCmd = mock(InspectImageCmd.class);
+        when(dockerClient.inspectImageCmd("ubuntu:latest")).thenReturn(inspectCmd);
+        when(inspectCmd.exec()).thenThrow(new NotFoundException("not found"));
+
+        PullImageCmd pullCmd = mock(PullImageCmd.class);
+        when(dockerClient.pullImageCmd("ubuntu:latest")).thenReturn(pullCmd);
+        doAnswer(inv -> {
+            @SuppressWarnings("unchecked")
+            com.github.dockerjava.api.async.ResultCallback<PullResponseItem> cb = inv.getArgument(0);
+            cb.onComplete();
+            return cb;
+        }).when(pullCmd).exec(any());
+
+        ImageBuildTask task = new ImageBuildTask();
+        assertDoesNotThrow(() -> dockerClientUtil.doPullImage(dockerClient, task, "ubuntu:latest"));
+        verify(dockerClient).pullImageCmd("ubuntu:latest");
+    }
+
+    // ─── execCommand ───────────────────────────────────────────────────────────
+
+    @Test
+    void execCommand_success() throws InterruptedException {
+        ContainerExecRequest request = new ContainerExecRequest();
+        request.setHost("tcp://docker");
+        request.setContainerId("ctr1");
+        request.setCommand(new String[]{"ls", "-la"});
+
+        when(connectionManager.checkConnectionHealth("tcp://docker")).thenReturn(true);
+        when(connectionManager.getDockerClient("tcp://docker")).thenReturn(dockerClient);
+
+        ExecCreateCmd execCreateCmd = mock(ExecCreateCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.execCreateCmd("ctr1")).thenReturn(execCreateCmd);
+        ExecCreateCmdResponse execCreateResponse = mock(ExecCreateCmdResponse.class);
+        when(execCreateCmd.exec()).thenReturn(execCreateResponse);
+        when(execCreateResponse.getId()).thenReturn("exec-123");
+
+        ExecStartCmd execStartCmd = mock(ExecStartCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.execStartCmd("exec-123")).thenReturn(execStartCmd);
+        doAnswer(inv -> {
+            ResultCallback.Adapter<Frame> cb = inv.getArgument(0);
+            cb.onComplete();
+            return cb;
+        }).when(execStartCmd).exec(any());
+
+        ContainerExecResponse response = dockerClientUtil.execCommand(request);
+        assertEquals("success", response.getStatus());
+    }
+
+    // ─── inspectExecCmd ────────────────────────────────────────────────────────
+
+    @Test
+    void inspectExecCmd_returnsRunningStatus() {
+        setupDockerHost();
+        InspectExecCmd inspectCmd = mock(InspectExecCmd.class);
+        when(dockerClient.inspectExecCmd("exec-1")).thenReturn(inspectCmd);
+        InspectExecResponse response = mock(InspectExecResponse.class);
+        when(inspectCmd.exec()).thenReturn(response);
+        when(response.isRunning()).thenReturn(true);
+
+        assertTrue(dockerClientUtil.inspectExecCmd("exec-1"));
+    }
+
+    // ─── resizeTerminal ────────────────────────────────────────────────────────
+
+    @Test
+    void resizeTerminal_callsResizeExecCmd() {
+        setupDockerHost();
+        ResizeExecCmd resizeCmd = mock(ResizeExecCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.resizeExecCmd("exec-1")).thenReturn(resizeCmd);
+
+        dockerClientUtil.resizeTerminal("exec-1", 24, 80);
+
+        verify(resizeCmd).withSize(24, 80);
+        verify(resizeCmd).exec();
+    }
+
+    // ─── getImageHistory ───────────────────────────────────────────────────────
+
+    @Test
+    void getImageHistory_success_returnsHistoryItems() throws Exception {
+        dockerClientUtil.setCurrentHost("tcp://docker");
+        when(connectionManager.getDockerHttpClient("tcp://docker")).thenReturn(dockerHttpClient);
+
+        com.github.dockerjava.transport.DockerHttpClient.Response httpResponse =
+                mock(com.github.dockerjava.transport.DockerHttpClient.Response.class);
+        when(dockerHttpClient.execute(any())).thenReturn(httpResponse);
+        when(httpResponse.getStatusCode()).thenReturn(200);
+
+        String json = "[{\"Id\":\"sha256:abc\",\"Created\":1700000000,\"CreatedBy\":\"/bin/sh\",\"Size\":1024,\"Comment\":\"test\",\"Tags\":[\"ubuntu:latest\"]}]";
+        when(httpResponse.getBody()).thenReturn(new ByteArrayInputStream(json.getBytes()));
+
+        List<ImageHistoryItem> items = dockerClientUtil.getImageHistory("abc123");
+
+        assertEquals(1, items.size());
+        assertEquals("/bin/sh", items.get(0).getLayer());
+    }
+
+    @Test
+    void getImageHistory_nonOkStatus_returnsEmptyList() throws Exception {
+        dockerClientUtil.setCurrentHost("tcp://docker");
+        when(connectionManager.getDockerHttpClient("tcp://docker")).thenReturn(dockerHttpClient);
+
+        com.github.dockerjava.transport.DockerHttpClient.Response httpResponse =
+                mock(com.github.dockerjava.transport.DockerHttpClient.Response.class);
+        when(dockerHttpClient.execute(any())).thenReturn(httpResponse);
+        when(httpResponse.getStatusCode()).thenReturn(404);
+
+        List<ImageHistoryItem> items = dockerClientUtil.getImageHistory("badimage");
+        assertTrue(items.isEmpty());
+    }
+
+    // ─── exportContainer ───────────────────────────────────────────────────────
+
+    @Test
+    void exportContainer_success_returnsInputStream() throws Exception {
+        dockerClientUtil.setCurrentHost("tcp://docker");
+        when(connectionManager.getDockerHttpClient("tcp://docker")).thenReturn(dockerHttpClient);
+
+        com.github.dockerjava.transport.DockerHttpClient.Response httpResponse =
+                mock(com.github.dockerjava.transport.DockerHttpClient.Response.class);
+        when(dockerHttpClient.execute(any())).thenReturn(httpResponse);
+        when(httpResponse.getStatusCode()).thenReturn(200);
+        when(httpResponse.getBody()).thenReturn(new ByteArrayInputStream("tar-data".getBytes()));
+
+        InputStream result = dockerClientUtil.exportContainer("ctr1");
+        assertNotNull(result);
+        result.close();
+    }
+
+    @Test
+    void exportContainer_nonOkStatus_throwsRuntimeException() throws Exception {
+        dockerClientUtil.setCurrentHost("tcp://docker");
+        when(connectionManager.getDockerHttpClient("tcp://docker")).thenReturn(dockerHttpClient);
+
+        com.github.dockerjava.transport.DockerHttpClient.Response httpResponse =
+                mock(com.github.dockerjava.transport.DockerHttpClient.Response.class);
+        when(dockerHttpClient.execute(any())).thenReturn(httpResponse);
+        when(httpResponse.getStatusCode()).thenReturn(500);
+
+        assertThrows(RuntimeException.class, () -> dockerClientUtil.exportContainer("ctr1"));
+    }
+
+    // ─── updateContainer ───────────────────────────────────────────────────────
+
+    @Test
+    void updateContainer_success_recreatesContainer() {
+        setupDockerHost();
+
+        InspectContainerCmd inspectCmd = mock(InspectContainerCmd.class);
+        when(dockerClient.inspectContainerCmd("old-ctr")).thenReturn(inspectCmd);
+        InspectContainerResponse containerInfo = mock(InspectContainerResponse.class);
+        when(inspectCmd.exec()).thenReturn(containerInfo);
+        when(containerInfo.getName()).thenReturn("/mycontainer");
+        InspectContainerResponse.ContainerState state = mock(InspectContainerResponse.ContainerState.class);
+        when(containerInfo.getState()).thenReturn(state);
+        when(state.getRunning()).thenReturn(false);
+        ContainerConfig config = mock(ContainerConfig.class);
+        when(containerInfo.getConfig()).thenReturn(config);
+        when(config.getImage()).thenReturn("nginx:latest");
+
+        RenameContainerCmd renameCmd = mock(RenameContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.renameContainerCmd("old-ctr")).thenReturn(renameCmd);
+
+        CreateContainerCmd createCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("nginx:latest")).thenReturn(createCmd);
+        CreateContainerResponse createResponse = mock(CreateContainerResponse.class);
+        when(createCmd.exec()).thenReturn(createResponse);
+        when(createResponse.getId()).thenReturn("new-ctr");
+
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("new-ctr")).thenReturn(startCmd);
+
+        RemoveContainerCmd removeCmd = mock(RemoveContainerCmd.class);
+        when(dockerClient.removeContainerCmd("old-ctr")).thenReturn(removeCmd);
+
+        ContainerCreateRequest request = new ContainerCreateRequest();
+        request.setContainerId("old-ctr");
+
+        Map<String, Object> result = dockerClientUtil.updateContainer(request);
+
+        assertEquals("success", result.get("status"));
+        assertEquals("old-ctr", result.get("containerId"));
+        assertEquals("new-ctr", result.get("newContainerId"));
+    }
+
+    // ─── copyFileFromContainer ─────────────────────────────────────────────────
+
+    @Test
+    void copyFileFromContainer_returnsFileBytes() throws Exception {
+        setupDockerHost();
+
+        ByteArrayOutputStream tarOutput = new ByteArrayOutputStream();
+        try (org.apache.commons.compress.archivers.tar.TarArchiveOutputStream tarOs =
+                new org.apache.commons.compress.archivers.tar.TarArchiveOutputStream(tarOutput)) {
+            byte[] content = "hello world".getBytes();
+            org.apache.commons.compress.archivers.tar.TarArchiveEntry entry =
+                    new org.apache.commons.compress.archivers.tar.TarArchiveEntry("file.txt");
+            entry.setSize(content.length);
+            tarOs.putArchiveEntry(entry);
+            tarOs.write(content);
+            tarOs.closeArchiveEntry();
+            tarOs.finish();
+        }
+
+        CopyArchiveFromContainerCmd copyCmd = mock(CopyArchiveFromContainerCmd.class);
+        when(dockerClient.copyArchiveFromContainerCmd("ctr1", "/file.txt")).thenReturn(copyCmd);
+        when(copyCmd.exec()).thenReturn(new ByteArrayInputStream(tarOutput.toByteArray()));
+
+        byte[] result = dockerClientUtil.copyFileFromContainer("ctr1", "/file.txt");
+
+        assertEquals("hello world", new String(result));
+    }
+
+    // ─── readContainerFileContent ──────────────────────────────────────────────
+
+    @Test
+    void readContainerFileContent_validPath_returnsContent() throws Exception {
+        setupDockerHost();
+
+        ByteArrayOutputStream tarOutput = new ByteArrayOutputStream();
+        try (org.apache.commons.compress.archivers.tar.TarArchiveOutputStream tarOs =
+                new org.apache.commons.compress.archivers.tar.TarArchiveOutputStream(tarOutput)) {
+            byte[] content = "file content".getBytes();
+            org.apache.commons.compress.archivers.tar.TarArchiveEntry entry =
+                    new org.apache.commons.compress.archivers.tar.TarArchiveEntry("config.txt");
+            entry.setSize(content.length);
+            tarOs.putArchiveEntry(entry);
+            tarOs.write(content);
+            tarOs.closeArchiveEntry();
+            tarOs.finish();
+        }
+
+        CopyArchiveFromContainerCmd copyCmd = mock(CopyArchiveFromContainerCmd.class);
+        when(dockerClient.copyArchiveFromContainerCmd("ctr1", "/etc/config.txt")).thenReturn(copyCmd);
+        when(copyCmd.exec()).thenReturn(new ByteArrayInputStream(tarOutput.toByteArray()));
+
+        String result = dockerClientUtil.readContainerFileContent("ctr1", "/etc/config.txt", "UTF-8");
+        assertEquals("file content", result);
+    }
+
+    // ─── writeContainerFileContent ─────────────────────────────────────────────
+
+    @Test
+    void writeContainerFileContent_validPath_success() {
+        setupDockerHost();
+
+        CopyArchiveToContainerCmd copyCmd = mock(CopyArchiveToContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.copyArchiveToContainerCmd("ctr1")).thenReturn(copyCmd);
+
+        Map<String, Object> result = dockerClientUtil.writeContainerFileContent(
+                "ctr1", "/etc/config.txt", "hello", "UTF-8");
+
+        assertEquals("success", result.get("status"));
+    }
+
+    // ─── cloneVolume ───────────────────────────────────────────────────────────
+
+    @Test
+    void cloneVolume_success() throws InterruptedException {
+        setupDockerHost();
+
+        CreateVolumeCmd createVolumeCmd = mock(CreateVolumeCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createVolumeCmd()).thenReturn(createVolumeCmd);
+
+        InspectImageCmd inspectCmd = mock(InspectImageCmd.class);
+        when(dockerClient.inspectImageCmd("busybox:latest")).thenReturn(inspectCmd);
+        // exec() doesn't throw → image exists
+
+        CreateContainerCmd createContainerCmd = mock(CreateContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.createContainerCmd("busybox:latest")).thenReturn(createContainerCmd);
+        CreateContainerResponse createResponse = mock(CreateContainerResponse.class);
+        when(createContainerCmd.exec()).thenReturn(createResponse);
+        when(createResponse.getId()).thenReturn("clone-ctr");
+
+        StartContainerCmd startCmd = mock(StartContainerCmd.class);
+        when(dockerClient.startContainerCmd("clone-ctr")).thenReturn(startCmd);
+
+        WaitContainerCmd waitCmd = mock(WaitContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.waitContainerCmd("clone-ctr")).thenReturn(waitCmd);
+        WaitContainerResultCallback waitCallback = mock(WaitContainerResultCallback.class);
+        when(waitCmd.start()).thenReturn(waitCallback);
+        when(waitCallback.awaitCompletion(anyLong(), any())).thenReturn(true);
+
+        RemoveContainerCmd removeCmd = mock(RemoveContainerCmd.class, Answers.RETURNS_SELF);
+        when(dockerClient.removeContainerCmd("clone-ctr")).thenReturn(removeCmd);
+
+        Map<String, Object> result = dockerClientUtil.cloneVolume("src", "dst", "local");
+
+        assertEquals("success", result.get("status"));
     }
 }
