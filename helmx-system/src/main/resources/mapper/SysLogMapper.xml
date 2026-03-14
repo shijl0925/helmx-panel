@@ -16,6 +16,7 @@
         <result property="userAgent" column="user_agent"/>
         <result property="time" column="time"/>
         <result property="exceptionDetail" column="exception_detail"/>
+        <result property="resourceName" column="resource_name"/>
         <result property="createdAt" column="created_at"/>
     </resultMap>
 

@@ -3,6 +3,7 @@ package com.helmx.tutorial.docker.controller;
 import com.helmx.tutorial.docker.dto.*;
 import com.helmx.tutorial.docker.utils.*;
 import com.helmx.tutorial.dto.Result;
+import com.helmx.tutorial.logging.annotation.Log;
 import com.helmx.tutorial.utils.ResponseUtil;
 import com.github.dockerjava.api.command.InspectImageResponse;
 import com.github.dockerjava.api.model.Container;
@@ -144,6 +145,7 @@ public class ImageController {
     @Operation(summary = "Pull Docker Image")
     @PostMapping("/pull")
     @PreAuthorize("@va.check('Ops:Image:Pull')")
+    @Log(value = "拉取镜像", resourceName = "#criteria.imageName")
     public ResponseEntity<Result> PullDockerImage(@Valid @RequestBody ImagePullRequest criteria) throws InterruptedException {
         String host = criteria.getHost();
         try {
@@ -177,6 +179,7 @@ public class ImageController {
     @Operation(summary = "Push Docker Image")
     @PostMapping("/push")
     @PreAuthorize("@va.check('Ops:Image:Push')")
+    @Log(value = "推送镜像", resourceName = "#criteria.imageName")
     public ResponseEntity<Result> PushDockerImage(@Valid @RequestBody ImagePushRequest criteria) {
         String host = criteria.getHost();
         try {
@@ -211,6 +214,7 @@ public class ImageController {
     @Operation(summary = "Add tag for image")
     @PostMapping("/add_tag")
     @PreAuthorize("@va.check('Ops:Image:Tag')")
+    @Log(value = "添加镜像标签", resourceName = "#criteria.imageId")
     public ResponseEntity<Result> tagImage(@Valid @RequestBody ImageTagRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -222,6 +226,7 @@ public class ImageController {
     @Operation(summary = "Remove Docker Image")
     @PostMapping("/remove")
     @PreAuthorize("@va.check('Ops:Image:Delete')")
+    @Log(value = "删除镜像", resourceName = "#criteria.imageId")
     public ResponseEntity<Result> removeDockerImage(@Valid @RequestBody RemoveImageRequest criteria) {
         String imageId = criteria.getImageId();
         Boolean force = criteria.getForce();
@@ -245,6 +250,7 @@ public class ImageController {
     @Operation(summary = "Prune stopped Docker Images to reclaim disk space")
     @PostMapping("/prune")
     @PreAuthorize("@va.check('Ops:Image:Prune')")
+    @Log(value = "清理未使用镜像")
     public ResponseEntity<Result> pruneImages(@Valid @RequestBody StatusRequest request) {
         String host = request.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -264,6 +270,7 @@ public class ImageController {
     @Operation(summary = "Build Docker Image")
     @PostMapping(value = "/build")
     @PreAuthorize("@va.check('Ops:Image:Build')")
+    @Log(value = "构建镜像", resourceName = "#tags")
     public ResponseEntity<Result> buildDockerImage(
             @RequestParam() String host,
             @RequestParam(required = false) String dockerfile,
@@ -327,6 +334,7 @@ public class ImageController {
     @Operation(summary = "Import Docker Image from tar file")
     @PostMapping("/import")
     @PreAuthorize("@va.check('Ops:Image:Import')")
+    @Log(value = "导入镜像", resourceName = "#imageTarFile.originalFilename")
     public ResponseEntity<Result> importDockerImage(
             @RequestParam String host,
             @RequestParam("file") MultipartFile imageTarFile) {
@@ -352,6 +360,7 @@ public class ImageController {
     @Operation(summary = "Export Docker Image to tar file")
     @PostMapping("/export")
     @PreAuthorize("@va.check('Ops:Image:Export')")
+    @Log(value = "导出镜像", resourceName = "#criteria.imageName")
     public ResponseEntity<StreamingResponseBody> exportDockerImage(@Valid @RequestBody ExportImageRequest criteria) {
         String host = criteria.getHost();
         String imageName = criteria.getImageName();
@@ -404,6 +413,7 @@ public class ImageController {
     @Operation(summary = "Bulk remove Docker images")
     @PostMapping("/bulk/remove")
     @PreAuthorize("@va.check('Ops:Image:Delete')")
+    @Log(value = "批量删除镜像", resourceName = "#criteria.imageIds")
     public ResponseEntity<Result> bulkRemoveDockerImages(@Valid @RequestBody BulkImageRemoveRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);

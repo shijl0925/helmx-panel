@@ -64,6 +64,10 @@ public class SysLog implements Serializable {
     @JSONField(serialize = false)
     private String exceptionDetail;
 
+    @TableField("resource_name")
+    @ApiModelProperty(value = "资源名称（容器/镜像/存储卷/网络名称）")
+    private String resourceName;
+
     @TableField(value = "created_at", fill = FieldFill.INSERT)
     @ApiModelProperty(value = "创建时间")
     @JsonProperty(value = "createTime")

@@ -3,6 +3,7 @@ package com.helmx.tutorial.docker.controller;
 import com.helmx.tutorial.docker.dto.*;
 import com.helmx.tutorial.docker.utils.DockerClientUtil;
 import com.helmx.tutorial.dto.Result;
+import com.helmx.tutorial.logging.annotation.Log;
 import com.helmx.tutorial.utils.ResponseUtil;
 import com.github.dockerjava.api.model.Network;
 import io.swagger.v3.oas.annotations.Operation;
@@ -110,6 +111,7 @@ public class NetworkController {
     @Operation(summary = "Create new docker network")
     @PostMapping("")
     @PreAuthorize("@va.check('Ops:Network:Create')")
+    @Log(value = "创建网络", resourceName = "#criteria.name")
     public ResponseEntity<Result> CreateNewDockerNetwork(@Valid @RequestBody NetworkCreateRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -142,6 +144,7 @@ public class NetworkController {
     @Operation(summary = "Remove Docker Network")
     @PostMapping("/remove")
     @PreAuthorize("@va.check('Ops:Network:Delete')")
+    @Log(value = "删除网络", resourceName = "#criteria.names")
     public ResponseEntity<Result> removeDockerNetwork(@Valid @RequestBody RemoveNetworkRequest criteria) {
         String[] names = criteria.getNames();
         Map<String, Object> result = new HashMap<>();
@@ -165,6 +168,7 @@ public class NetworkController {
     @Operation(summary = "Connect a container to a Docker Network")
     @PostMapping("/connect")
     @PreAuthorize("@va.check('Ops:Network:Connect')")
+    @Log(value = "连接容器到网络", resourceName = "#criteria.networkId")
     public ResponseEntity<Result> connectContainerToNetwork(@Valid @RequestBody NetworkConnectRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -184,6 +188,7 @@ public class NetworkController {
     @Operation(summary = "Disconnect a container from a Docker Network")
     @PostMapping("/disconnect")
     @PreAuthorize("@va.check('Ops:Network:Disconnect')")
+    @Log(value = "断开容器与网络的连接", resourceName = "#criteria.networkId")
     public ResponseEntity<Result> disconnectContainerFromNetwork(@Valid @RequestBody NetworkDisconnectRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
@@ -203,6 +208,7 @@ public class NetworkController {
     @Operation(summary = "Prune unused Docker Networks")
     @PostMapping("/prune")
     @PreAuthorize("@va.check('Ops:Network:Prune')")
+    @Log(value = "清理未使用网络")
     public ResponseEntity<Result> pruneDockerNetworks(@Valid @RequestBody StatusRequest criteria) {
         String host = criteria.getHost();
         dockerClientUtil.setCurrentHost(host);
