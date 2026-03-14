@@ -42,6 +42,9 @@ public class DockerEnvDTO {
     @ApiModelProperty(value = "是否已配置SSH密码")
     private Boolean sshPasswordConfigured;
 
+    @ApiModelProperty(value = "环境类型，如 dev/test/uat/prod 等")
+    private String envType;
+
     public DockerEnvDTO(DockerEnv dockerEnv) {
         this.id = dockerEnv.getId();
         this.name = dockerEnv.getName();
@@ -54,5 +57,6 @@ public class DockerEnvDTO {
         this.sshUsername = dockerEnv.getSshUsername();
         this.sshHostKeyFingerprint = dockerEnv.getSshHostKeyFingerprint();
         this.sshPasswordConfigured = dockerEnv.getSshPassword() != null && !dockerEnv.getSshPassword().isBlank();
+        this.envType = dockerEnv.getEnvType();
     }
 }

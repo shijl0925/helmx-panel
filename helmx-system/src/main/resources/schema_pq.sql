@@ -158,6 +158,22 @@ CREATE TRIGGER update_tb_stack_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TABLE IF NOT EXISTS tb_env_type (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    remark VARCHAR(255),
+    sort INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_env_type 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_env_type_updated_at ON tb_env_type;
+CREATE TRIGGER update_tb_env_type_updated_at
+    BEFORE UPDATE ON tb_env_type
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TABLE IF NOT EXISTS tb_sys_log (
     id BIGSERIAL PRIMARY KEY,
     username VARCHAR(50),

@@ -18,6 +18,7 @@ class DockerEnvCreateRequestTest {
         req.setSshUsername("root");
         req.setSshPassword("secret");
         req.setSshHostKeyFingerprint("SHA256:host");
+        req.setEnvType("prod");
 
         assertEquals("remote-server", req.getName());
         assertEquals("Production Docker", req.getRemark());
@@ -28,6 +29,7 @@ class DockerEnvCreateRequestTest {
         assertEquals("root", req.getSshUsername());
         assertEquals("secret", req.getSshPassword());
         assertEquals("SHA256:host", req.getSshHostKeyFingerprint());
+        assertEquals("prod", req.getEnvType());
     }
 
     @Test
@@ -36,6 +38,7 @@ class DockerEnvCreateRequestTest {
         assertFalse(req.getTlsVerify());
         assertFalse(req.getSshEnabled());
         assertEquals(22, req.getSshPort());
+        assertNull(req.getEnvType());
     }
 
     @Test

@@ -114,3 +114,11 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO tb_docker_registry (id, name, url, username, password, auth, created_at, updated_at) VALUES
     (1, 'DockerHub', 'https://registry.hub.docker.com', NULL, NULL, FALSE, NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
+
+-- 插入默认环境类型数据
+INSERT INTO tb_env_type (id, code, remark, sort, created_at, updated_at) VALUES
+  (1, 'dev',  '开发环境', 1, NOW(), NOW()),
+  (2, 'test', '测试环境', 2, NOW(), NOW()),
+  (3, 'uat',  '验收环境', 3, NOW(), NOW()),
+  (4, 'prod', '生产环境', 4, NOW(), NOW())
+ON CONFLICT (id) DO NOTHING;

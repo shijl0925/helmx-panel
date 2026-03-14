@@ -193,4 +193,80 @@ class DockerEnvControllerIntegrationTest {
         env.setSshHostKeyFingerprint("SHA256:host");
         return env;
     }
+
+    @Test
+    void getAllDockerEnvs_filtersByEnvType() throws Exception {
+        DockerEnv prodEnv = createEnvWithType(10L, "prod-1", "tcp://prod1:2376", "prod");
+        when(dockerEnvMapper.selectList(any())).thenReturn(List.of(prodEnv));
+
+        mockMvc.perform(get("/api/v1/ops/envs/all").param("envType", "prod"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].envType").value("prod"));
+    }
+
+    @Test
+    void getDockerEnvsGrouped_returnsMapKeyedByEnvType() throws Exception {
+        DockerEnv devEnv  = createEnvWithType(20L, "dev-1",  "tcp://dev1:2376",  "dev");
+        DockerEnv prodEnv = createEnvWithType(21L, "prod-1", "tcp://prod1:2376", "prod");
+        DockerEnv noType  = createEnvWithType(22L, "bare",   "tcp://bare:2376",  null);
+        when(dockerEnvMapper.selectList(any())).thenReturn(List.of(devEnv, prodEnv, noType));
+
+        mockMvc.perform(get("/api/v1/ops/envs/grouped"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.dev[0].name").value("dev-1"))
+                .andExpect(jsonPath("$.data.prod[0].name").value("prod-1"))
+                .andExpect(jsonPath("$.data.default[0].name").value("bare"));
+    }
+
+    @Test
+    void createDockerEnv_persistsEnvType() throws Exception {
+        when(dockerEnvMapper.exists(any())).thenReturn(false);
+        doAnswer(invocation -> {
+            DockerEnv env = invocation.getArgument(0);
+            env.setId(30L);
+            return 1;
+        }).when(dockerEnvMapper).insert(any(DockerEnv.class));
+
+        mockMvc.perform(post("/api/v1/ops/envs")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "uat-host",
+                                  "host": "tcp://uat:2376",
+                                  "envType": "uat"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.envType").value("uat"));
+
+        ArgumentCaptor<DockerEnv> captor = ArgumentCaptor.forClass(DockerEnv.class);
+        verify(dockerEnvMapper).insert(captor.capture());
+        assertEquals("uat", captor.getValue().getEnvType());
+    }
+
+    @Test
+    void updateDockerEnv_updatesEnvType() throws Exception {
+        DockerEnv existing = createEnvWithType(40L, "test-host", "tcp://test:2376", "test");
+        when(dockerEnvService.getById(40L)).thenReturn(existing);
+
+        mockMvc.perform(put("/api/v1/ops/envs/40")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "envType": "prod"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.envType").value("prod"));
+    }
+
+    private DockerEnv createEnvWithType(Long id, String name, String host, String envType) {
+        DockerEnv env = createEnv(id, name, "", host, 1, false);
+        env.setEnvType(envType);
+        return env;
+    }
 }
