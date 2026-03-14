@@ -2,7 +2,6 @@ package com.helmx.tutorial.logging.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.helmx.tutorial.dto.Result;
-import com.helmx.tutorial.logging.annotation.Log;
 import com.helmx.tutorial.logging.dto.SysLogQueryCriteria;
 import com.helmx.tutorial.logging.entity.SysLog;
 import com.helmx.tutorial.logging.service.SysLogService;
@@ -32,7 +31,6 @@ public class SysLogController {
         return ResponseUtil.success(sysLogService.queryAll(criteria, page));
     }
 
-    @Log("删除单条日志")
     @Operation(summary = "删除单条日志")
     @DeleteMapping("/{id}")
     @PreAuthorize("@va.check('System:Log:Delete')")
@@ -41,7 +39,6 @@ public class SysLogController {
         return ResponseUtil.success(null);
     }
 
-    @Log("批量删除日志")
     @Operation(summary = "批量删除日志")
     @DeleteMapping("/batch")
     @PreAuthorize("@va.check('System:Log:Delete')")
