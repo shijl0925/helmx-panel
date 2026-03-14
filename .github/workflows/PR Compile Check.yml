@@ -37,5 +37,25 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Run Maven tests
+      - name: Run Maven tests with coverage
         run: ./mvnw --no-transfer-progress --batch-mode --show-version --errors test
+
+      - name: Upload coverage reports as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-coverage-reports
+          path: '**/target/site/jacoco/'
+          if-no-files-found: warn
+
+      - name: Add coverage comment to PR
+        uses: madrapps/jacoco-report@v1.7.2
+        with:
+          paths: |
+            ${{ github.workspace }}/helmx-common/target/site/jacoco/jacoco.xml,
+            ${{ github.workspace }}/helmx-system/target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: '📊 Java Test Coverage Report'
+          update-comment: true
+          min-coverage-overall: 0
+          min-coverage-changed-files: 0
