@@ -1,0 +1,193 @@
+-- PostgreSQL 兼容的表结构
+CREATE TABLE IF NOT EXISTS tb_users (
+    id BIGSERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    nickname VARCHAR(50),
+    phone VARCHAR(20),
+    email VARCHAR(100) NOT NULL,
+    status INTEGER DEFAULT 1,
+    is_super_admin BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 创建更新时间触发器函数
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS '
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+' LANGUAGE 'plpgsql';
+
+-- 为 tb_users 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_users_updated_at ON tb_users;
+CREATE TRIGGER update_tb_users_updated_at 
+    BEFORE UPDATE ON tb_users 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_rbac_roles (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    remark VARCHAR(255),
+    status INTEGER DEFAULT 1,
+    code VARCHAR(50) UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_rbac_roles 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_rbac_roles_updated_at ON tb_rbac_roles;
+CREATE TRIGGER update_tb_rbac_roles_updated_at 
+    BEFORE UPDATE ON tb_rbac_roles 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_rbac_user_roles (
+    user_id BIGINT,
+    role_id BIGINT,
+    PRIMARY KEY (user_id, role_id),
+    FOREIGN KEY (user_id) REFERENCES tb_users(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES tb_rbac_roles(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS tb_rbac_menus (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(64) NOT NULL,
+    parent_id BIGINT,
+    type VARCHAR(32) NOT NULL,
+    auth_code VARCHAR(64),
+    path VARCHAR(64),
+    component VARCHAR(64),
+    status INTEGER DEFAULT 1,
+    active_path VARCHAR(64),
+    icon VARCHAR(64),
+    sort INTEGER,
+    title VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_rbac_menus 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_rbac_menus_updated_at ON tb_rbac_menus;
+CREATE TRIGGER update_tb_rbac_menus_updated_at 
+    BEFORE UPDATE ON tb_rbac_menus 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_rbac_role_menus (
+    role_id BIGINT,
+    menu_id BIGINT,
+    PRIMARY KEY (role_id, menu_id),
+    FOREIGN KEY (role_id) REFERENCES tb_rbac_roles(id) ON DELETE CASCADE,
+    FOREIGN KEY (menu_id) REFERENCES tb_rbac_menus(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS tb_docker_env (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    remark VARCHAR(255),
+    status INTEGER DEFAULT 1,
+    host VARCHAR(255) UNIQUE,
+    tls_verify BOOLEAN DEFAULT FALSE,
+    ssh_enabled BOOLEAN DEFAULT FALSE,
+    ssh_port INTEGER DEFAULT 22,
+    ssh_username VARCHAR(128),
+    ssh_password VARCHAR(1024),
+    ssh_host_key_fingerprint VARCHAR(255),
+    env_type VARCHAR(64),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_docker_env 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_docker_env_updated_at ON tb_docker_env;
+CREATE TRIGGER update_tb_docker_env_updated_at
+    BEFORE UPDATE ON tb_docker_env
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_docker_registry (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    url VARCHAR(255) NOT NULL,
+    username VARCHAR(50),
+    password VARCHAR(50),
+    auth BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_docker_registry 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_docker_registry_updated_at ON tb_docker_registry;
+CREATE TRIGGER update_tb_docker_registry_updated_at
+    BEFORE UPDATE ON tb_docker_registry
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_template (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(64) NOT NULL,
+    remark VARCHAR(255),
+    content TEXT,
+    type VARCHAR(64) DEFAULT 'Dockerfile',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_template 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_template_updated_at ON tb_template;
+CREATE TRIGGER update_tb_template_updated_at
+    BEFORE UPDATE ON tb_template
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_stack (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(64) NOT NULL,
+    content TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_stack 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_stack_updated_at ON tb_stack;
+CREATE TRIGGER update_tb_stack_updated_at
+    BEFORE UPDATE ON tb_stack
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_env_type (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    remark VARCHAR(255),
+    sort INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 为 tb_env_type 表创建更新时间触发器
+DROP TRIGGER IF EXISTS update_tb_env_type_updated_at ON tb_env_type;
+CREATE TRIGGER update_tb_env_type_updated_at
+    BEFORE UPDATE ON tb_env_type
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS tb_sys_log (
+    id BIGSERIAL PRIMARY KEY,
+    username VARCHAR(50),
+    description VARCHAR(255),
+    method VARCHAR(255),
+    params TEXT,
+    log_type VARCHAR(10) NOT NULL DEFAULT 'INFO',
+    request_ip VARCHAR(50),
+    address VARCHAR(255),
+    browser VARCHAR(255),
+    user_agent VARCHAR(255),
+    time BIGINT,
+    exception_detail TEXT,
+    resource_name VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
