@@ -104,7 +104,7 @@ FROM (
   UNION ALL SELECT 68, 'menu', 'ops.stack.title', '/ops/stacks', NULL, 24, '/ops/stack/list', 'DockerStack', 1, NULL, 'Ops:Stack:List'
   UNION ALL SELECT 69, 'button', 'ops.stack.create', '', NULL, 68, NULL, 'DockerStackCreate', 1, NULL, 'Ops:Stack:Create'
   UNION ALL SELECT 70, 'button', 'ops.stack.edit', '', NULL, 68, NULL, 'DockerStackEdit', 1, NULL, 'Ops:Stack:Edit'
-  UNION ALL SELECT 71, 'button', 'ops.stack.delete', '', NULL, 68, NULL, 'DockerStackDelete', 1, NULL, 'Ops:Stack:Delete'
+  UNION ALL SELECT 71, 'button', 'ops.stack.deleteStack', '', NULL, 68, NULL, 'DockerStackDelete', 1, NULL, 'Ops:Stack:Delete'
   UNION ALL SELECT 72, 'button', 'ops.stack.deploy', '', NULL, 68, NULL, 'DockerStackDeploy', 1, NULL, 'Ops:Stack:Deploy'
   -- 补充容器操作按钮
   UNION ALL SELECT 73, 'button', 'ops.docker.bulkOperate', '', NULL, 25, NULL, 'DockerContainerBulkOperate', 1, NULL, 'Ops:Container:BulkOperate'
@@ -119,7 +119,7 @@ FROM (
   UNION ALL SELECT 80, 'menu', 'system.log.title', '/system/log', NULL, 1, 'system/log/list', 'SystemLog', 1, NULL, 'System:Log:List'
   UNION ALL SELECT 81, 'button', 'common.delete', '', NULL, 80, NULL, 'SystemLogDelete', 1, NULL, 'System:Log:Delete'
   -- 环境类型管理菜单及按钮
-  UNION ALL SELECT 82, 'menu', 'ops.envType.title', '/ops/env-types', NULL, 31, '/ops/env-type/index', 'OpsEnvType', 1, NULL, 'Ops:EnvType:List'
+  UNION ALL SELECT 82, 'menu', 'ops.management.envType', '/ops/env-types', NULL, 31, '/ops/env-type/index', 'OpsEnvType', 1, NULL, 'Ops:EnvType:List'
   UNION ALL SELECT 83, 'button', 'common.create', '', NULL, 82, NULL, 'OpsEnvTypeCreate', 1, NULL, 'Ops:EnvType:Create'
   UNION ALL SELECT 84, 'button', 'common.edit', '', NULL, 82, NULL, 'OpsEnvTypeEdit', 1, NULL, 'Ops:EnvType:Edit'
   UNION ALL SELECT 85, 'button', 'common.delete', '', NULL, 82, NULL, 'OpsEnvTypeDelete', 1, NULL, 'Ops:EnvType:Delete'
