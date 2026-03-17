@@ -95,42 +95,14 @@ INSERT INTO tb_rbac_menus (id, created_at, updated_at, type, title, path, icon, 
   -- Docker 环境操作按钮
   (62,NOW(), NOW(),'button','ops.host.add','',NULL,23,NULL,'DockerEnvCreate',1,NULL,'Ops:DockerEnv:Create'),
   (63,NOW(), NOW(),'button','ops.host.edit','',NULL,23,NULL,'DockerEnvEdit',1,NULL,'Ops:DockerEnv:Edit'),
-  (64,NOW(), NOW(),'button','ops.host.delete','',NULL,23,NULL,'DockerEnvDelete',1,NULL,'Ops:DockerEnv:Delete'),
-
-  -- Docker Stack（编排管理）菜单及按钮
-  (68,NOW(), NOW(),'menu','ops.stack.title','/ops/stacks',NULL,24,'/ops/stack/list','DockerStack',1,NULL,'Ops:Stack:List'),
-  (69,NOW(), NOW(),'button','ops.stack.create','',NULL,68,NULL,'DockerStackCreate',1,NULL,'Ops:Stack:Create'),
-  (70,NOW(), NOW(),'button','ops.stack.edit','',NULL,68,NULL,'DockerStackEdit',1,NULL,'Ops:Stack:Edit'),
-  (71,NOW(), NOW(),'button','ops.stack.delete','',NULL,68,NULL,'DockerStackDelete',1,NULL,'Ops:Stack:Delete'),
-  (72,NOW(), NOW(),'button','ops.stack.deploy','',NULL,68,NULL,'DockerStackDeploy',1,NULL,'Ops:Stack:Deploy'),
-
-  -- 补充容器操作按钮
-  (73,NOW(), NOW(),'button','ops.docker.bulkOperate','',NULL,25,NULL,'DockerContainerBulkOperate',1,NULL,'Ops:Container:BulkOperate'),
-  (74,NOW(), NOW(),'button','ops.docker.diff','',NULL,25,NULL,'DockerContainerDiff',1,NULL,'Ops:Container:Diff'),
-  (75,NOW(), NOW(),'button','ops.docker.exportContainer','',NULL,25,NULL,'DockerContainerExport',1,NULL,'Ops:Container:Export'),
-  (76,NOW(), NOW(),'button','ops.docker.fileBrowse','',NULL,25,NULL,'DockerContainerFileBrowse',1,NULL,'Ops:Container:FileBrowse'),
-  (77,NOW(), NOW(),'button','ops.docker.fileEdit','',NULL,25,NULL,'DockerContainerFileEdit',1,NULL,'Ops:Container:FileEdit'),
-  (78,NOW(), NOW(),'button','ops.docker.updateResources','',NULL,25,NULL,'DockerContainerUpdateResources',1,NULL,'Ops:Container:UpdateResources'),
-
-  -- 补充网络操作按钮
-  (79,NOW(), NOW(),'button','ops.network.connect','',NULL,28,NULL,'DockerNetworkConnect',1,NULL,'Ops:Network:Connect'),
-
-  -- 系统日志（操作日志）菜单及按钮
-  (80,NOW(), NOW(),'menu','system.log.title','/system/log',NULL,1,'system/log/list','SystemLog',1,NULL,'System:Log:List'),
-  (81,NOW(), NOW(),'button','common.delete','',NULL,80,NULL,'SystemLogDelete',1,NULL,'System:Log:Delete'),
-
-  -- 环境类型管理菜单及按钮
-  (82,NOW(), NOW(),'menu','ops.envType.title','/ops/env-types',NULL,31,'/ops/env-type/index','OpsEnvType',1,NULL,'Ops:EnvType:List'),
-  (83,NOW(), NOW(),'button','common.create','',NULL,82,NULL,'OpsEnvTypeCreate',1,NULL,'Ops:EnvType:Create'),
-  (84,NOW(), NOW(),'button','common.edit','',NULL,82,NULL,'OpsEnvTypeEdit',1,NULL,'Ops:EnvType:Edit'),
-  (85,NOW(), NOW(),'button','common.delete','',NULL,82,NULL,'OpsEnvTypeDelete',1,NULL,'Ops:EnvType:Delete')
+  (64,NOW(), NOW(),'button','ops.host.delete','',NULL,23,NULL,'DockerEnvDelete',1,NULL,'Ops:DockerEnv:Delete')
 ON CONFLICT (id) DO NOTHING;
 
 -- 插入角色菜单关联数据
 INSERT INTO tb_rbac_role_menus (role_id, menu_id) VALUES
- (1, 1), (1, 2), (1, 3), (1, 4), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 23), (1, 24), (1, 25), (1, 26), (1, 27), (1, 28), (1, 29), (1, 30), (1, 31), (1, 32), (1, 33), (1, 34), (1, 36), (1, 37), (1, 38), (1, 39), (1, 40), (1, 41), (1, 42), (1, 43), (1, 44), (1, 45), (1, 46), (1, 47), (1, 48), (1, 49), (1, 50), (1, 51), (1, 52), (1, 53), (1, 54), (1, 55), (1, 56), (1, 57), (1, 58), (1, 59), (1, 60), (1, 61), (1, 62), (1, 63), (1, 64), (1, 65), (1, 66), (1, 67), (1, 68), (1, 69), (1, 70), (1, 71), (1, 72), (1, 73), (1, 74), (1, 75), (1, 76), (1, 77), (1, 78), (1, 79), (1, 80), (1, 81), (1, 82), (1, 83), (1, 84), (1, 85), -- 超级管理员拥有所有菜单权限
- (2, 1), (2, 2), (2, 3), (2, 4), (2, 6), (2, 7), (2, 9), (2, 10), (2, 12), (2, 13), (2, 23), (2, 24), (2, 25), (2, 26), (2, 27), (2, 28), (2, 32), (2, 33), (2, 34), (2, 36), (2, 37), (2, 38), (2, 39), (2, 40), (2, 41), (2, 42), (2, 43), (2, 44), (2, 45), (2, 46), (2, 47), (2, 48), (2, 49), (2, 50), (2, 51), (2, 52), (2, 53), (2, 54), (2, 55), (2, 65), (2, 66), (2, 67), (2, 68), (2, 69), (2, 70), (2, 71), (2, 72), (2, 73), (2, 74), (2, 75), (2, 76), (2, 77), (2, 78), (2, 79), (2, 80), (2, 81), (2, 82), (2, 83), (2, 84), (2, 85), -- 管理员
- (3, 1), (3, 2), (3, 3), (3, 4),  (3, 23), (3, 24), (3, 25), (3, 26), (3, 27), (3, 28), (3, 68) -- 普通用户
+ (1, 1), (1, 2), (1, 3), (1, 4), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 23), (1, 24), (1, 25), (1, 26), (1, 27), (1, 28), (1, 29), (1, 30), (1, 31), (1, 32), (1, 33), (1, 34), (1, 36), (1, 37), (1, 38), (1, 39), (1, 40), (1, 41), (1, 42), (1, 43), (1, 44), (1, 45), (1, 46), (1, 47), (1, 48), (1, 49), (1, 50), (1, 51), (1, 52), (1, 53), (1, 54), (1, 55), (1, 56), (1, 57), (1, 58), (1, 59), (1, 60), (1, 61), (1, 62), (1, 63), (1, 64), (1, 65), (1, 66), (1, 67), -- 超级管理员拥有所有菜单权限
+ (2, 1), (2, 2), (2, 3), (2, 4), (2, 6), (2, 7), (2, 9), (2, 10), (2, 12), (2, 13), (2, 23), (2, 24), (2, 25), (2, 26), (2, 27), (2, 28), (2, 32), (2, 33), (2, 34), (2, 36), (2, 37), (2, 38), (2, 39), (2, 40), (2, 41), (2, 42), (2, 43), (2, 44), (2, 45), (2, 46), (2, 47), (2, 48), (2, 49), (2, 50), (2, 51), (2, 52), (2, 53), (2, 54), (2, 55), (2, 65), (2, 66), (2, 67), -- 管理员
+ (3, 1), (3, 2), (3, 3), (3, 4),  (3, 23), (3, 24), (3, 25), (3, 26), (3, 27), (3, 28) -- 普通用户
 ON CONFLICT (role_id, menu_id) DO NOTHING;
 
 -- 插入容器环境数据
