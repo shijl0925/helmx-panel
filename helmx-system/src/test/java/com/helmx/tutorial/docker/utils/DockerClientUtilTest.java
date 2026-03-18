@@ -89,6 +89,8 @@ class DockerClientUtilTest {
         ReflectionTestUtils.setField(dockerClientUtil, "imagePullTaskManager", imagePullTaskManager);
         ReflectionTestUtils.setField(dockerClientUtil, "imagePushTaskManager", imagePushTaskManager);
         ReflectionTestUtils.setField(dockerClientUtil, "imageBuildTaskManager", imageBuildTaskManager);
+        ReflectionTestUtils.setField(dockerClientUtil, "dockerTaskExecutor",
+                java.util.concurrent.Executors.newCachedThreadPool());
     }
 
     @Test

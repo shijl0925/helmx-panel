@@ -40,6 +40,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
@@ -73,6 +74,8 @@ class ImageControllerIntegrationTest {
         ReflectionTestUtils.setField(controller, "imagePullTaskManager", imagePullTaskManager);
         ReflectionTestUtils.setField(controller, "imagePushTaskManager", imagePushTaskManager);
         ReflectionTestUtils.setField(controller, "imageBuildTaskManager", imageBuildTaskManager);
+        // 使用同步执行器保证 SSE 流处理在测试线程中完成
+        ReflectionTestUtils.setField(controller, "dockerTaskExecutor", (java.util.concurrent.Executor) Runnable::run);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
@@ -582,5 +585,65 @@ class ImageControllerIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total").value(0));
+    }
+
+    // ---- SSE streaming endpoint tests ----
+
+    @Test
+    void streamDockerImageBuildStatus_whenTaskNotFound_sendsErrorEventAndCompletes() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/ops/images/build/stream/non-existent-task-id"))
+                .andExpect(status().isOk())
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertTrue(body.contains("event:error"), "Should contain error event");
+                    assertTrue(body.contains("Task not found"), "Should report task not found");
+                });
+    }
+
+    @Test
+    void streamDockerImageBuildStatus_whenTaskAlreadyComplete_sendsStreamAndCompleteEvents() throws Exception {
+        ImageBuildTask task = new ImageBuildTask();
+        task.setTaskId("sse-task-1");
+        task.setStatus("SUCCESS");
+        task.setMessage("镜像构建成功");
+        task.setStartTime(LocalDateTime.of(2026, 3, 18, 10, 0, 0));
+        task.setEndTime(LocalDateTime.of(2026, 3, 18, 10, 5, 0));
+        task.appendToLog("Step 1/2 : FROM ubuntu\n");
+        task.appendToLog("Step 2/2 : RUN echo hello\n");
+        imageBuildTaskManager.addTask("sse-task-1", task);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/ops/images/build/stream/sse-task-1"))
+                .andExpect(status().isOk())
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertTrue(body.contains("event:stream"), "Should contain stream events");
+                    assertTrue(body.contains("Step 1/2"), "Should contain first log line");
+                    assertTrue(body.contains("Step 2/2"), "Should contain second log line");
+                    assertTrue(body.contains("event:status"), "Should contain status events");
+                    assertTrue(body.contains("SUCCESS"), "Should report SUCCESS status");
+                    assertTrue(body.contains("event:complete"), "Should contain complete event");
+                });
+    }
+
+    @Test
+    void streamDockerImageBuildStatus_whenTaskAlreadyComplete_noNewLogs_sendsStatusAndCompleteEvents() throws Exception {
+        ImageBuildTask task = new ImageBuildTask();
+        task.setTaskId("sse-task-2");
+        task.setStatus("FAILED");
+        task.setMessage("镜像构建失败：base image not found");
+        task.setStartTime(LocalDateTime.of(2026, 3, 18, 10, 0, 0));
+        task.setEndTime(LocalDateTime.of(2026, 3, 18, 10, 1, 0));
+        imageBuildTaskManager.addTask("sse-task-2", task);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/ops/images/build/stream/sse-task-2"))
+                .andExpect(status().isOk())
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertTrue(body.contains("FAILED"), "Should report FAILED status");
+                    assertTrue(body.contains("event:complete"), "Should contain complete event");
+                });
     }
 }
