@@ -69,7 +69,7 @@ FROM (
   UNION ALL SELECT 40, 'button', 'ops.docker.pruneContainers', '', NULL, 25, NULL, 'DockerContainerPrune', 1, NULL, 'Ops:Container:Prune'
   UNION ALL SELECT 41, 'button', 'ops.docker.containerStats', '', NULL, 25, NULL, 'DockerContainerStats', 1, NULL, 'Ops:Container:Stats'
   UNION ALL SELECT 42, 'button', 'ops.docker.uploadFile', '', NULL, 25, NULL, 'DockerContainerUpload', 1, NULL, 'Ops:Container:Upload'
-  UNION ALL SELECT 65, 'button', 'ops.docker.inspect', '', NULL, 25, NULL, 'DockerContainerInspect', 1, NULL, 'Ops:Container:Inspect'
+  UNION ALL SELECT 65, 'button', 'ops.docker.containerInspect', '', NULL, 25, NULL, 'DockerContainerInspect', 1, NULL, 'Ops:Container:Inspect'
   -- Docker 镜像操作按钮
   UNION ALL SELECT 43, 'button', 'ops.image.buildImage', '', NULL, 26, NULL, 'DockerImageBuild', 1, NULL, 'Ops:Image:Build'
   UNION ALL SELECT 44, 'button', 'ops.image.pullImage', '', NULL, 26, NULL, 'DockerImagePull', 1, NULL, 'Ops:Image:Pull'
@@ -104,22 +104,22 @@ FROM (
   UNION ALL SELECT 68, 'menu', 'ops.stack.title', '/ops/stacks', NULL, 24, '/ops/stack/list', 'DockerStack', 1, NULL, 'Ops:Stack:List'
   UNION ALL SELECT 69, 'button', 'ops.stack.create', '', NULL, 68, NULL, 'DockerStackCreate', 1, NULL, 'Ops:Stack:Create'
   UNION ALL SELECT 70, 'button', 'ops.stack.edit', '', NULL, 68, NULL, 'DockerStackEdit', 1, NULL, 'Ops:Stack:Edit'
-  UNION ALL SELECT 71, 'button', 'ops.stack.deleteStack', '', NULL, 68, NULL, 'DockerStackDelete', 1, NULL, 'Ops:Stack:Delete'
+  UNION ALL SELECT 71, 'button', 'ops.stack.title', '', NULL, 68, NULL, 'DockerStackDelete', 1, NULL, 'Ops:Stack:Delete'
   UNION ALL SELECT 72, 'button', 'ops.stack.deploy', '', NULL, 68, NULL, 'DockerStackDeploy', 1, NULL, 'Ops:Stack:Deploy'
   -- 补充容器操作按钮
-  UNION ALL SELECT 73, 'button', 'ops.docker.bulkOperate', '', NULL, 25, NULL, 'DockerContainerBulkOperate', 1, NULL, 'Ops:Container:BulkOperate'
-  UNION ALL SELECT 74, 'button', 'ops.docker.diff', '', NULL, 25, NULL, 'DockerContainerDiff', 1, NULL, 'Ops:Container:Diff'
+  UNION ALL SELECT 73, 'button', 'ops.docker.bulkOps.title', '', NULL, 25, NULL, 'DockerContainerBulkOperate', 1, NULL, 'Ops:Container:BulkOperate'
+  UNION ALL SELECT 74, 'button', 'ops.docker.diff.title', '', NULL, 25, NULL, 'DockerContainerDiff', 1, NULL, 'Ops:Container:Diff'
   UNION ALL SELECT 75, 'button', 'ops.docker.exportContainer', '', NULL, 25, NULL, 'DockerContainerExport', 1, NULL, 'Ops:Container:Export'
-  UNION ALL SELECT 76, 'button', 'ops.docker.fileBrowse', '', NULL, 25, NULL, 'DockerContainerFileBrowse', 1, NULL, 'Ops:Container:FileBrowse'
+  UNION ALL SELECT 76, 'button', 'ops.docker.fileBrowser.title', '', NULL, 25, NULL, 'DockerContainerFileBrowse', 1, NULL, 'Ops:Container:FileBrowse'
   UNION ALL SELECT 77, 'button', 'ops.docker.fileEdit', '', NULL, 25, NULL, 'DockerContainerFileEdit', 1, NULL, 'Ops:Container:FileEdit'
-  UNION ALL SELECT 78, 'button', 'ops.docker.updateResources', '', NULL, 25, NULL, 'DockerContainerUpdateResources', 1, NULL, 'Ops:Container:UpdateResources'
+  UNION ALL SELECT 78, 'button', 'ops.docker.resourceUpdate.title', '', NULL, 25, NULL, 'DockerContainerUpdateResources', 1, NULL, 'Ops:Container:UpdateResources'
   -- 补充网络操作按钮
-  UNION ALL SELECT 79, 'button', 'ops.network.connect', '', NULL, 28, NULL, 'DockerNetworkConnect', 1, NULL, 'Ops:Network:Connect'
+  UNION ALL SELECT 79, 'button', 'ops.network.connectContainer', '', NULL, 28, NULL, 'DockerNetworkConnect', 1, NULL, 'Ops:Network:Connect'
   -- 系统日志（操作日志）菜单及按钮
   UNION ALL SELECT 80, 'menu', 'system.log.title', '/system/log', NULL, 1, 'system/log/list', 'SystemLog', 1, NULL, 'System:Log:List'
   UNION ALL SELECT 81, 'button', 'common.delete', '', NULL, 80, NULL, 'SystemLogDelete', 1, NULL, 'System:Log:Delete'
   -- 环境类型管理菜单及按钮
-  UNION ALL SELECT 82, 'menu', 'ops.management.envType', '/ops/env-types', NULL, 31, '/ops/env-type/index', 'OpsEnvType', 1, NULL, 'Ops:EnvType:List'
+  UNION ALL SELECT 82, 'menu', 'ops.management.envTypes', '/ops/env-types', NULL, 31, '/ops/env-type/index', 'OpsEnvType', 1, NULL, 'Ops:EnvType:List'
   UNION ALL SELECT 83, 'button', 'common.create', '', NULL, 82, NULL, 'OpsEnvTypeCreate', 1, NULL, 'Ops:EnvType:Create'
   UNION ALL SELECT 84, 'button', 'common.edit', '', NULL, 82, NULL, 'OpsEnvTypeEdit', 1, NULL, 'Ops:EnvType:Edit'
   UNION ALL SELECT 85, 'button', 'common.delete', '', NULL, 82, NULL, 'OpsEnvTypeDelete', 1, NULL, 'Ops:EnvType:Delete'
