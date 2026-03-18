@@ -99,4 +99,53 @@ class ImageBuildTaskTest {
         // status is null by default
         assertFalse(task.isCompleted());
     }
+
+    // ---- appendToLog / logQueue ----
+
+    @Test
+    void appendToLog_addsLineToStreamBuilderAndQueue() {
+        ImageBuildTask task = new ImageBuildTask();
+        task.appendToLog("Step 1/3\n");
+
+        assertEquals("Step 1/3\n", task.getStream());
+        assertEquals("Step 1/3\n", task.getLogQueue().poll());
+        assertNull(task.getLogQueue().poll(), "Queue should be empty after polling");
+    }
+
+    @Test
+    void appendToLog_multipleLines_preservesOrder() {
+        ImageBuildTask task = new ImageBuildTask();
+        task.appendToLog("line 1\n");
+        task.appendToLog("line 2\n");
+        task.appendToLog("line 3\n");
+
+        assertEquals("line 1\n", task.getLogQueue().poll());
+        assertEquals("line 2\n", task.getLogQueue().poll());
+        assertEquals("line 3\n", task.getLogQueue().poll());
+        assertNull(task.getLogQueue().poll());
+    }
+
+    @Test
+    void appendToLog_accumulatesInStreamBuilder() {
+        ImageBuildTask task = new ImageBuildTask();
+        task.appendToLog("part 1 ");
+        task.appendToLog("part 2");
+
+        assertEquals("part 1 part 2", task.getStream());
+    }
+
+    @Test
+    void appendToLog_doesNotClearExistingStream() {
+        ImageBuildTask task = new ImageBuildTask();
+        task.setStream("initial content\n");
+        task.appendToLog("appended line\n");
+
+        assertEquals("initial content\nappended line\n", task.getStream());
+    }
+
+    @Test
+    void logQueue_initiallyEmpty() {
+        ImageBuildTask task = new ImageBuildTask();
+        assertNull(task.getLogQueue().poll());
+    }
 }

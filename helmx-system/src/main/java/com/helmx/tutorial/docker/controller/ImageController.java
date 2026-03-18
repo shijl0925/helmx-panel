@@ -28,6 +28,8 @@ import java.util.*;
 public class ImageController {
 
     private static final Logger log = LoggerFactory.getLogger(ImageController.class);
+    private static final long SSE_TIMEOUT_MS = 1800000L; // 30-minute SSE timeout
+    private static final long SSE_POLL_INTERVAL_MS = 200L; // SSE polling interval (ms)
 
     @Autowired
     private DockerClientUtil dockerClientUtil;
@@ -40,6 +42,10 @@ public class ImageController {
 
     @Autowired
     private ImageBuildTaskManager imageBuildTaskManager;
+
+    @Autowired
+    @org.springframework.beans.factory.annotation.Qualifier("dockerTaskExecutor")
+    private java.util.concurrent.Executor dockerTaskExecutor;
 
     @Operation(summary = "Get all Docker images")
     @PostMapping("/all")
@@ -331,7 +337,92 @@ public class ImageController {
         return ResponseUtil.success(result);
     }
 
-    @Operation(summary = "Import Docker Image from tar file")
+    /**
+     * 通过 SSE（Server-Sent Events）实时推送镜像构建日志与状态，无需客户端轮询。
+     * <p>
+     * 客户端订阅后会依次收到以下类型的事件：
+     * <ul>
+     *   <li>{@code stream} — 构建过程中的每一行日志输出</li>
+     *   <li>{@code status} — 任务状态变化（PENDING → RUNNING → SUCCESS/FAILED）</li>
+     *   <li>{@code complete} — 构建结束后的最终摘要（含状态、消息和时间戳），之后连接关闭</li>
+     * </ul>
+     */
+    @Operation(summary = "Stream Docker Image build output via SSE")
+    @GetMapping(value = "/build/stream/{taskId}", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
+    public org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamDockerImageBuildStatus(
+            @PathVariable String taskId) {
+        org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter =
+                new org.springframework.web.servlet.mvc.method.annotation.SseEmitter(SSE_TIMEOUT_MS);
+
+        ImageBuildTask task = imageBuildTaskManager.getTask(taskId);
+        if (task == null) {
+            try {
+                emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                        .name("error")
+                        .data("Task not found: " + taskId));
+            } catch (java.io.IOException e) {
+                log.error("Error sending SSE error event for taskId: {}", taskId, e);
+            }
+            emitter.complete();
+            return emitter;
+        }
+
+        emitter.onTimeout(emitter::complete);
+        emitter.onError(t -> emitter.complete());
+
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                String lastStatus = null;
+                while (true) {
+                    // 推送新增日志行
+                    String line;
+                    while ((line = task.getLogQueue().poll()) != null) {
+                        emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                                .name("stream")
+                                .data(line));
+                    }
+
+                    // 推送状态变化
+                    String currentStatus = task.getStatus();
+                    if (!java.util.Objects.equals(currentStatus, lastStatus)) {
+                        lastStatus = currentStatus;
+                        emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                                .name("status")
+                                .data(currentStatus));
+                    }
+
+                    // 任务已完成且队列已排空，发送终止事件并关闭连接
+                    if (task.isCompleted() && task.getLogQueue().isEmpty()) {
+                        Map<String, Object> summary = new HashMap<>();
+                        summary.put("status", task.getStatus());
+                        summary.put("message", task.getMessage());
+                        summary.put("startTime", task.getStartTime());
+                        summary.put("endTime", task.getEndTime());
+                        emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                                .name("complete")
+                                .data(summary));
+                        emitter.complete();
+                        return;
+                    }
+
+                    Thread.sleep(SSE_POLL_INTERVAL_MS);
+                }
+            } catch (IllegalStateException e) {
+                // 客户端断开连接时 SseEmitter 已经关闭
+                log.debug("SSE emitter closed for taskId: {}", taskId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                emitter.completeWithError(e);
+            } catch (java.io.IOException e) {
+                log.error("Error sending SSE event for taskId: {}", taskId, e);
+                emitter.completeWithError(e);
+            }
+        }, dockerTaskExecutor);
+
+        return emitter;
+    }
+
+
     @PostMapping("/import")
     @PreAuthorize("@va.check('Ops:Image:Import')")
     @Log(value = "导入镜像", resourceName = "#imageTarFile.originalFilename")

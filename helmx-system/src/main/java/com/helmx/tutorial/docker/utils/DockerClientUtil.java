@@ -84,6 +84,10 @@ public class DockerClientUtil {
     @Autowired
     private RemoteHostMetricsCollector remoteHostMetricsCollector;
 
+    @Autowired
+    @org.springframework.beans.factory.annotation.Qualifier("dockerTaskExecutor")
+    private java.util.concurrent.Executor dockerTaskExecutor;
+
     private volatile long diskMetricsLoadedAt;
     private volatile long cachedTotalDisk;
     private volatile long cachedUsableDisk;
@@ -2280,6 +2284,7 @@ public class DockerClientUtil {
                         log.error("Failed to clone or read from Git repository", e);
                         task.setStatus("FAILED");
                         task.setMessage("Git仓库克隆失败：" + e.getMessage());
+                        task.setEndTime(LocalDateTime.now());
                         return;
                     }
                 }
@@ -2378,19 +2383,8 @@ public class DockerClientUtil {
                             public void onNext(BuildResponseItem item) {
                                 String stream = item.getStream();
                                 if (stream != null) {
-                                    // 使用同步块确保线程安全
-                                    synchronized (task) {
-                                        StringBuilder streamBuilder = task.getStreamBuilder();
-                                        if (streamBuilder == null) {
-                                            streamBuilder = new StringBuilder();
-                                            task.setStreamBuilder(streamBuilder);
-                                        }
-                                        streamBuilder.append(stream);
-                                        // 可选：限制最大长度防止内存溢出
-                                        if (streamBuilder.length() > 100000) { // 限制100KB
-                                            streamBuilder.delete(0, streamBuilder.length() - 80000); // 保留后80KB
-                                        }
-                                    }
+                                    // 同时写入全量历史和实时队列，支持轮询与 SSE 两种消费方式
+                                    task.appendToLog(stream);
                                     log.info("Building image: {}", stream);
                                 }
                                 super.onNext(item);
@@ -2410,12 +2404,14 @@ public class DockerClientUtil {
                 } catch (InterruptedException e) {
                     task.setStatus("FAILED");
                     task.setMessage("镜像构建失败：线程被中断");
+                    task.setEndTime(LocalDateTime.now());
 
                     log.error("Interrupted while building image: {}", e.getMessage());
                     Thread.currentThread().interrupt(); // 恢复中断状态
                 } catch (Exception e) {
                     task.setStatus("FAILED");
                     task.setMessage("镜像构建失败：" + e.getMessage());
+                    task.setEndTime(LocalDateTime.now());
 
                     log.error("Error building image: {}", e.getMessage());
                 } finally {
@@ -2438,7 +2434,7 @@ public class DockerClientUtil {
                     }
                 }
             }
-        });
+        }, dockerTaskExecutor);
 
         return result;
     }
