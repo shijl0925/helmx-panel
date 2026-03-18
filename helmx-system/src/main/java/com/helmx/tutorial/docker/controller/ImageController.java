@@ -28,6 +28,8 @@ import java.util.*;
 public class ImageController {
 
     private static final Logger log = LoggerFactory.getLogger(ImageController.class);
+    private static final long SSE_TIMEOUT_MS = 1800000L; // 30-minute SSE timeout
+    private static final long SSE_POLL_INTERVAL_MS = 200L; // SSE polling interval (ms)
 
     @Autowired
     private DockerClientUtil dockerClientUtil;
@@ -350,7 +352,7 @@ public class ImageController {
     public org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamDockerImageBuildStatus(
             @PathVariable String taskId) {
         org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter =
-                new org.springframework.web.servlet.mvc.method.annotation.SseEmitter(30 * 60 * 1000L);
+                new org.springframework.web.servlet.mvc.method.annotation.SseEmitter(SSE_TIMEOUT_MS);
 
         ImageBuildTask task = imageBuildTaskManager.getTask(taskId);
         if (task == null) {
@@ -403,7 +405,7 @@ public class ImageController {
                         return;
                     }
 
-                    Thread.sleep(200);
+                    Thread.sleep(SSE_POLL_INTERVAL_MS);
                 }
             } catch (IllegalStateException e) {
                 // 客户端断开连接时 SseEmitter 已经关闭
